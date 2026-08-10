@@ -1,3 +1,25 @@
+# Syncoria Frontend
+
+## Configuration de l'API
+
+Le dashboard lit l'URL de base de FastAPI depuis la variable Vite
+`VITE_API_BASE_URL`. Cette variable est intégrée au bundle au moment du build :
+
+```text
+VITE_API_BASE_URL=https://api.example.com
+```
+
+Copier `.env.example` vers un fichier d'environnement Vite adapté au contexte
+local ou fournir la variable lors du build. Si elle est absente, les cartes
+Backend et Base de données affichent un état indisponible sans interrompre le
+rendu du dashboard.
+
+Le build Docker accepte la même valeur comme argument de build :
+
+```text
+docker build --build-arg VITE_API_BASE_URL=https://api.example.com .
+```
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

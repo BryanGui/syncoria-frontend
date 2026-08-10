@@ -287,6 +287,26 @@
   background: #659477;
 }
 
+.status-pill--loading {
+  border-color: #e2e5e9;
+  background: #f6f7f8;
+  color: #667085;
+}
+
+.status-pill--loading .status-pill__dot {
+  background: #98a2b3;
+}
+
+.status-pill--error {
+  border-color: #ecdada;
+  background: #fbf5f5;
+  color: #8a4f4f;
+}
+
+.status-pill--error .status-pill__dot {
+  background: #b76666;
+}
+
 .status-card h2 {
   margin: 22px 0 0;
   color: var(--color-text-primary);
