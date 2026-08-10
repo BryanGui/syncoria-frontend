@@ -1,3 +1,8 @@
+import {
+  technicalLogger,
+  type TechnicalLogger,
+} from '../observability/logger.ts'
+
 export type HealthEndpoint = '/health' | '/health/db'
 export type HealthStatus = 'loading' | 'operational' | 'unavailable'
 
@@ -26,8 +31,15 @@ export async function fetchHealthStatus(
   endpoint: HealthEndpoint,
   signal?: AbortSignal,
   request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
 ): Promise<HealthStatus> {
   if (apiBaseUrl === null) {
+    logger.warning('API base URL is not configured.', {
+      page: 'dashboard',
+      action: 'load_health_status',
+      endpoint,
+      errorType: 'configuration_error',
+    })
     return 'unavailable'
   }
 
@@ -39,14 +51,38 @@ export async function fetchHealthStatus(
     })
 
     if (!response.ok) {
+      logger.warning('Health endpoint returned an unavailable response.', {
+        page: 'dashboard',
+        action: 'load_health_status',
+        endpoint,
+        httpStatus: response.status,
+      })
       return 'unavailable'
     }
 
     const responsePayload: unknown = await response.json()
-    return isHealthResponse(responsePayload) && responsePayload.status === 'ok'
-      ? 'operational'
-      : 'unavailable'
-  } catch {
+    if (!isHealthResponse(responsePayload) || responsePayload.status !== 'ok') {
+      logger.warning('Health endpoint returned an invalid response.', {
+        page: 'dashboard',
+        action: 'load_health_status',
+        endpoint,
+        errorType: 'invalid_response',
+      })
+      return 'unavailable'
+    }
+
+    return 'operational'
+  } catch (error: unknown) {
+    if (signal?.aborted) {
+      return 'unavailable'
+    }
+
+    logger.error('Health endpoint request failed.', {
+      page: 'dashboard',
+      action: 'load_health_status',
+      endpoint,
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+    })
     return 'unavailable'
   }
 }
