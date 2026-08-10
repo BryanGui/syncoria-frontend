@@ -1,5 +1,14 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import './App.css'
+import {
+  fetchHealthStatus,
+  INITIAL_HEALTH_STATUS,
+  normalizeApiBaseUrl,
+  type HealthEndpoint,
+  type HealthStatus,
+} from './api/health'
+
+const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
 type IconName =
   | 'overview'
@@ -112,16 +121,23 @@ interface StatusCardProps {
   label: string
   status: string
   detail: string
+  tone?: 'error' | 'loading' | 'success'
 }
 
-function StatusCard({ icon, label, status, detail }: StatusCardProps) {
+function StatusCard({
+  icon,
+  label,
+  status,
+  detail,
+  tone = 'success',
+}: StatusCardProps) {
   return (
     <article className="status-card">
       <div className="status-card__topline">
         <span className="status-card__icon">
           <Icon name={icon} size={21} />
         </span>
-        <span className="status-pill">
+        <span className={`status-pill status-pill--${tone}`}>
           <span className="status-pill__dot" />
           {status}
         </span>
@@ -131,6 +147,86 @@ function StatusCard({ icon, label, status, detail }: StatusCardProps) {
         <p>{detail}</p>
       </div>
     </article>
+  )
+}
+
+interface HealthStatusCardProps {
+  endpoint: HealthEndpoint
+  icon: IconName
+  label: string
+  operationalDetail: string
+  operationalStatus: string
+  unavailableDetail: string
+}
+
+function useHealthStatus(endpoint: HealthEndpoint): HealthStatus {
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>(
+    INITIAL_HEALTH_STATUS,
+  )
+
+  useEffect(() => {
+    const abortController = new AbortController()
+    let isActive = true
+
+    setHealthStatus(INITIAL_HEALTH_STATUS)
+    void fetchHealthStatus(apiBaseUrl, endpoint, abortController.signal).then(
+      (loadedStatus) => {
+        if (isActive) {
+          setHealthStatus(loadedStatus)
+        }
+      },
+    )
+
+    return () => {
+      isActive = false
+      abortController.abort()
+    }
+  }, [endpoint])
+
+  return healthStatus
+}
+
+function HealthStatusCard({
+  endpoint,
+  icon,
+  label,
+  operationalDetail,
+  operationalStatus,
+  unavailableDetail,
+}: HealthStatusCardProps) {
+  const healthStatus = useHealthStatus(endpoint)
+
+  if (healthStatus === 'loading') {
+    return (
+      <StatusCard
+        detail="Vérification en cours…"
+        icon={icon}
+        label={label}
+        status="Chargement"
+        tone="loading"
+      />
+    )
+  }
+
+  if (healthStatus === 'unavailable') {
+    return (
+      <StatusCard
+        detail={unavailableDetail}
+        icon={icon}
+        label={label}
+        status="Indisponible"
+        tone="error"
+      />
+    )
+  }
+
+  return (
+    <StatusCard
+      detail={operationalDetail}
+      icon={icon}
+      label={label}
+      status={operationalStatus}
+    />
   )
 }
 
@@ -210,23 +306,27 @@ function App() {
           <div className="section-heading">
             <div>
               <h2 id="systems-title">État du système</h2>
-              <p>Données statiques de démonstration</p>
+              <p>Disponibilité des services</p>
             </div>
             <span className="updated-label">Mis à jour à l’instant</span>
           </div>
 
           <div className="status-grid">
-            <StatusCard
-              detail="Le service répond normalement."
+            <HealthStatusCard
+              endpoint="/health"
               icon="server"
               label="Backend"
-              status="Opérationnel"
+              operationalDetail="Le service répond normalement."
+              operationalStatus="Opérationnel"
+              unavailableDetail="Le service ne répond pas."
             />
-            <StatusCard
-              detail="La connexion est disponible."
+            <HealthStatusCard
+              endpoint="/health/db"
               icon="database"
               label="Base de données"
-              status="Opérationnelle"
+              operationalDetail="La connexion est disponible."
+              operationalStatus="Opérationnelle"
+              unavailableDetail="La connexion est indisponible."
             />
             <StatusCard
               detail="Aucune opération en attente."
