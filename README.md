@@ -29,6 +29,11 @@ de session n'est enregistré dans le stockage du navigateur ou intégré au
 bundle. La configuration CORS correspondante reste sous la responsabilité du
 backend.
 
+Une fois la session validée, la page `Clients` charge le registre réel avec
+`GET /admin/tenants`. Elle n'affiche que l'identifiant technique, le slug et le
+statut fournis par FastAPI. Une réponse 401 renvoie l'utilisateur vers l'écran
+de connexion.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

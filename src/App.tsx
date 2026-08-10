@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useReducer,
   useState,
   type FormEvent,
   type ReactNode,
@@ -18,6 +20,12 @@ import {
   type HealthEndpoint,
   type HealthStatus,
 } from './api/health'
+import {
+  dashboardNavigationReducer,
+  INITIAL_DASHBOARD_NAVIGATION_STATE,
+  type DashboardPage,
+} from './navigation/dashboardNavigation'
+import { ClientsPage } from './pages/ClientsPage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
@@ -119,9 +127,13 @@ function Icon({ name, size = 20 }: IconProps) {
   )
 }
 
-const navigation: Array<{ icon: IconName; label: string }> = [
-  { icon: 'overview', label: 'Vue d’ensemble' },
-  { icon: 'clients', label: 'Clients' },
+const navigation: Array<{
+  icon: IconName
+  label: string
+  page?: DashboardPage
+}> = [
+  { icon: 'overview', label: 'Vue d’ensemble', page: 'overview' },
+  { icon: 'clients', label: 'Clients', page: 'clients' },
   { icon: 'data', label: 'Données' },
   { icon: 'sync', label: 'Synchronisations' },
   { icon: 'process', label: 'Processus' },
@@ -358,11 +370,17 @@ function LoginPage({
 
 interface DashboardProps {
   onLogout: () => Promise<boolean>
+  onSessionExpired: () => void
 }
 
-function Dashboard({ onLogout }: DashboardProps) {
+function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
+  const [navigationState, dispatchNavigation] = useReducer(
+    dashboardNavigationReducer,
+    INITIAL_DASHBOARD_NAVIGATION_STATE,
+  )
+  const isOverview = navigationState.activePage === 'overview'
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -386,16 +404,34 @@ function Dashboard({ onLogout }: DashboardProps) {
         <nav aria-label="Navigation principale" className="navigation">
           <p className="navigation__label">Administration</p>
           <ul>
-            {navigation.map((item, index) => (
+            {navigation.map((item) => (
               <li key={item.label}>
-                <a
-                  aria-current={index === 0 ? 'page' : undefined}
-                  className={index === 0 ? 'navigation__link navigation__link--active' : 'navigation__link'}
-                  href={index === 0 ? '#overview' : `#${item.label.toLowerCase()}`}
-                >
-                  <Icon name={item.icon} />
-                  <span>{item.label}</span>
-                </a>
+                {item.page ? (
+                  <button
+                    aria-current={navigationState.activePage === item.page
+                      ? 'page'
+                      : undefined}
+                    className={navigationState.activePage === item.page
+                      ? 'navigation__link navigation__link--active'
+                      : 'navigation__link'}
+                    onClick={() => dispatchNavigation({
+                      type: 'open_page',
+                      page: item.page as DashboardPage,
+                    })}
+                    type="button"
+                  >
+                    <Icon name={item.icon} />
+                    <span>{item.label}</span>
+                  </button>
+                ) : (
+                  <a
+                    className="navigation__link"
+                    href={`#${item.label.toLowerCase()}`}
+                  >
+                    <Icon name={item.icon} />
+                    <span>{item.label}</span>
+                  </a>
+                )}
               </li>
             ))}
           </ul>
@@ -410,13 +446,15 @@ function Dashboard({ onLogout }: DashboardProps) {
         </div>
       </aside>
 
-      <main className="main-content" id="overview">
+      <main className="main-content" id={navigationState.activePage}>
         <header className="page-header">
           <div>
             <p className="eyebrow">Administration</p>
-            <h1>Vue d’ensemble</h1>
+            <h1>{isOverview ? 'Vue d’ensemble' : 'Clients'}</h1>
             <p className="page-header__description">
-              Consultez l’état général des services et les dernières opérations.
+              {isOverview
+                ? 'Consultez l’état général des services et les dernières opérations.'
+                : 'Consultez les tenants enregistrés dans Syncoria.'}
             </p>
           </div>
           <div className="page-header__actions">
@@ -440,7 +478,9 @@ function Dashboard({ onLogout }: DashboardProps) {
           </div>
         </header>
 
-        <section aria-labelledby="systems-title" className="systems-section">
+        {isOverview ? (
+          <>
+          <section aria-labelledby="systems-title" className="systems-section">
           <div className="section-heading">
             <div>
               <h2 id="systems-title">État du système</h2>
@@ -473,9 +513,9 @@ function Dashboard({ onLogout }: DashboardProps) {
               status="À jour"
             />
           </div>
-        </section>
+          </section>
 
-        <section aria-labelledby="activity-title" className="activity-panel">
+          <section aria-labelledby="activity-title" className="activity-panel">
           <div className="activity-panel__header">
             <div className="activity-panel__heading">
               <span className="activity-panel__heading-icon">
@@ -506,7 +546,14 @@ function Dashboard({ onLogout }: DashboardProps) {
               title="Environnement initialisé"
             />
           </ul>
-        </section>
+          </section>
+          </>
+        ) : (
+          <ClientsPage
+            apiBaseUrl={apiBaseUrl}
+            onSessionExpired={onSessionExpired}
+          />
+        )}
       </main>
     </div>
   )
@@ -537,6 +584,10 @@ function App() {
     return wasLoggedOut
   }
 
+  const handleSessionExpired = useCallback(() => {
+    setSessionStatus('unauthenticated')
+  }, [])
+
   if (sessionStatus === 'loading') {
     return (
       <main aria-live="polite" className="session-loading">
@@ -558,7 +609,12 @@ function App() {
     )
   }
 
-  return <Dashboard onLogout={handleLogout} />
+  return (
+    <Dashboard
+      onLogout={handleLogout}
+      onSessionExpired={handleSessionExpired}
+    />
+  )
 }
 
 export default App
