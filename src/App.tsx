@@ -1,5 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import './App.css'
+import {
+  createAdminSession,
+  deleteAdminSession,
+  fetchAdminSession,
+  type AdminSessionStatus,
+} from './api/adminSession'
 import {
   fetchHealthStatus,
   INITIAL_HEALTH_STATUS,
@@ -251,7 +262,119 @@ function ActivityItem({ title, description, time }: ActivityItemProps) {
   )
 }
 
-function App() {
+interface LoginPageProps {
+  initialError?: string
+  onAuthenticated: () => void
+  onRetrySession: () => void
+}
+
+function LoginPage({
+  initialError,
+  onAuthenticated,
+  onRetrySession,
+}: LoginPageProps) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(initialError)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setErrorMessage(undefined)
+
+    const result = await createAdminSession(apiBaseUrl, username, password)
+    setPassword('')
+    setIsSubmitting(false)
+
+    if (result === 'authenticated') {
+      onAuthenticated()
+      return
+    }
+    setErrorMessage(
+      result === 'rejected'
+        ? 'Identifiant ou mot de passe incorrect.'
+        : 'Le service d’authentification est indisponible.',
+    )
+  }
+
+  return (
+    <main className="login-page">
+      <section aria-labelledby="login-title" className="login-panel">
+        <div className="login-brand">
+          <span className="brand__mark" aria-hidden="true">S</span>
+          <span>Syncoria</span>
+        </div>
+        <p className="eyebrow">Administration</p>
+        <h1 id="login-title">Connexion</h1>
+        <p className="login-panel__description">
+          Identifiez-vous pour accéder au dashboard administrateur.
+        </p>
+
+        <form className="login-form" onSubmit={handleSubmit}>
+          <label htmlFor="admin-username">Identifiant</label>
+          <input
+            autoComplete="username"
+            id="admin-username"
+            maxLength={128}
+            name="username"
+            onChange={(event) => setUsername(event.target.value)}
+            required
+            type="text"
+            value={username}
+          />
+
+          <label htmlFor="admin-password">Mot de passe</label>
+          <input
+            autoComplete="current-password"
+            id="admin-password"
+            maxLength={1024}
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            type="password"
+            value={password}
+          />
+
+          {errorMessage && (
+            <div aria-live="polite" className="login-error" role="alert">
+              <span>{errorMessage}</span>
+              {initialError && (
+                <button onClick={onRetrySession} type="button">
+                  Réessayer
+                </button>
+              )}
+            </div>
+          )}
+
+          <button className="primary-button" disabled={isSubmitting} type="submit">
+            {isSubmitting ? 'Connexion…' : 'Se connecter'}
+          </button>
+        </form>
+      </section>
+    </main>
+  )
+}
+
+interface DashboardProps {
+  onLogout: () => Promise<boolean>
+}
+
+function Dashboard({ onLogout }: DashboardProps) {
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState(false)
+
+  async function handleLogout() {
+    setIsLoggingOut(true)
+    setLogoutError(false)
+    const wasLoggedOut = await onLogout()
+    if (wasLoggedOut) {
+      return
+    }
+    setIsLoggingOut(false)
+    setLogoutError(true)
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -296,9 +419,24 @@ function App() {
               Consultez l’état général des services et les dernières opérations.
             </p>
           </div>
-          <div className="context-badge">
-            <span>Espace</span>
-            <strong>Démonstration</strong>
+          <div className="page-header__actions">
+            <div className="context-badge">
+              <span>Espace</span>
+              <strong>Démonstration</strong>
+            </div>
+            <button
+              className="secondary-button"
+              disabled={isLoggingOut}
+              onClick={handleLogout}
+              type="button"
+            >
+              {isLoggingOut ? 'Déconnexion…' : 'Se déconnecter'}
+            </button>
+            {logoutError && (
+              <p aria-live="polite" className="logout-error" role="alert">
+                Déconnexion impossible. Réessayez.
+              </p>
+            )}
           </div>
         </header>
 
@@ -372,6 +510,55 @@ function App() {
       </main>
     </div>
   )
+}
+
+function App() {
+  const [sessionStatus, setSessionStatus] = useState<
+    AdminSessionStatus | 'loading'
+  >('loading')
+
+  function loadSession() {
+    setSessionStatus('loading')
+    const abortController = new AbortController()
+    void fetchAdminSession(apiBaseUrl, abortController.signal).then(setSessionStatus)
+    return abortController
+  }
+
+  useEffect(() => {
+    const abortController = loadSession()
+    return () => abortController.abort()
+  }, [])
+
+  async function handleLogout() {
+    const wasLoggedOut = await deleteAdminSession(apiBaseUrl)
+    if (wasLoggedOut) {
+      setSessionStatus('unauthenticated')
+    }
+    return wasLoggedOut
+  }
+
+  if (sessionStatus === 'loading') {
+    return (
+      <main aria-live="polite" className="session-loading">
+        <span className="session-loading__indicator" aria-hidden="true" />
+        <p>Vérification de la session…</p>
+      </main>
+    )
+  }
+
+  if (sessionStatus !== 'authenticated') {
+    return (
+      <LoginPage
+        initialError={sessionStatus === 'error'
+          ? 'Impossible de vérifier la session administrateur.'
+          : undefined}
+        onAuthenticated={() => setSessionStatus('authenticated')}
+        onRetrySession={loadSession}
+      />
+    )
+  }
+
+  return <Dashboard onLogout={handleLogout} />
 }
 
 export default App

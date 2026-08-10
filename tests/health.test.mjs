@@ -46,7 +46,11 @@ test('normalizes the configured API base URL', () => {
 })
 
 test('returns operational for a successful health response', async () => {
-  const request = async () => Response.json({ status: 'ok' })
+  let capturedOptions
+  const request = async (_url, options) => {
+    capturedOptions = options
+    return Response.json({ status: 'ok' })
+  }
 
   assert.equal(
     await fetchHealthStatus(
@@ -57,6 +61,7 @@ test('returns operational for a successful health response', async () => {
     ),
     'operational',
   )
+  assert.equal(capturedOptions.credentials, 'include')
 })
 
 test('returns unavailable for an HTTP error', async () => {

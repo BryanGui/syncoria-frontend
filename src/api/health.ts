@@ -45,6 +45,7 @@ export async function fetchHealthStatus(
 
   try {
     const response = await request(`${apiBaseUrl}${endpoint}`, {
+      credentials: 'include',
       headers: { Accept: 'application/json' },
       method: 'GET',
       signal,

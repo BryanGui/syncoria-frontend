@@ -20,6 +20,15 @@ Le build Docker accepte la même valeur comme argument de build :
 docker build --build-arg VITE_API_BASE_URL=https://api.example.com .
 ```
 
+## Session administrateur
+
+Le frontend vérifie la session avec `GET /admin/session` avant d'afficher le
+dashboard. La connexion et la déconnexion utilisent la même URL avec `POST` et
+`DELETE`. Tous ces appels incluent les cookies, mais aucun mot de passe ni jeton
+de session n'est enregistré dans le stockage du navigateur ou intégré au
+bundle. La configuration CORS correspondante reste sous la responsabilité du
+backend.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
