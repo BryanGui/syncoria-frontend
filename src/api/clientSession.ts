@@ -112,6 +112,7 @@ export async function fetchCurrentClientUser(
 
 export async function createClientSession(
   apiBaseUrl: string | null,
+  tenant: string,
   login: string,
   password: string,
   request: typeof fetch = fetch,
@@ -121,7 +122,7 @@ export async function createClientSession(
 
   try {
     const response = await request(`${apiBaseUrl}/auth/session`, {
-      body: JSON.stringify({ login, password }),
+      body: JSON.stringify({ tenant, login, password }),
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',

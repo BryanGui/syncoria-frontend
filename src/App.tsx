@@ -387,6 +387,7 @@ function ClientLoginPage({
   onRetrySession,
   onSwitchMode,
 }: LoginPageProps) {
+  const [tenant, setTenant] = useState('')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -396,7 +397,7 @@ function ClientLoginPage({
     event.preventDefault()
     setIsSubmitting(true)
     setErrorMessage(undefined)
-    const result = await createClientSession(apiBaseUrl, login, password)
+    const result = await createClientSession(apiBaseUrl, tenant, login, password)
     setPassword('')
     setIsSubmitting(false)
 
@@ -406,7 +407,7 @@ function ClientLoginPage({
     }
     setErrorMessage(
       result === 'rejected'
-        ? 'Identifiant ou mot de passe incorrect.'
+        ? 'Entreprise, identifiant ou mot de passe incorrect.'
         : 'Le service d’authentification est indisponible.',
     )
   }
@@ -425,6 +426,18 @@ function ClientLoginPage({
         </p>
 
         <form className="login-form" onSubmit={handleSubmit}>
+          <label htmlFor="client-tenant">Entreprise</label>
+          <input
+            autoComplete="organization"
+            id="client-tenant"
+            maxLength={128}
+            name="tenant"
+            onChange={(event) => setTenant(event.target.value)}
+            required
+            type="text"
+            value={tenant}
+          />
+
           <label htmlFor="client-login">Identifiant</label>
           <input
             autoComplete="username"
