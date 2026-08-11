@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -54,6 +55,7 @@ test('submits client credentials only to the client session endpoint', async () 
   assert.equal(
     await createClientSession(
       'https://api.example.com',
+      'syncoria_lab',
       'client@example.test',
       sensitivePassword,
       request,
@@ -64,10 +66,14 @@ test('submits client credentials only to the client session endpoint', async () 
   assert.equal(capturedUrl, 'https://api.example.com/auth/session')
   assert.equal(capturedOptions.credentials, 'include')
   assert.deepEqual(JSON.parse(capturedOptions.body), {
+    tenant: 'syncoria_lab',
     login: 'client@example.test',
     password: sensitivePassword,
   })
-  assert.doesNotMatch(JSON.stringify(entries), /browser-only-password|client@example/)
+  assert.doesNotMatch(
+    JSON.stringify(entries),
+    /browser-only-password|client@example|syncoria_lab/,
+  )
 })
 
 test('maps rejected client credentials to a generic state', async () => {
@@ -79,11 +85,28 @@ test('maps rejected client credentials to a generic state', async () => {
   assert.equal(
     await createClientSession(
       'https://api.example.com',
+      'missing-company',
       'missing',
       'wrong',
       request,
     ),
     'rejected',
+  )
+})
+
+test('client login shows company before login and persists no credentials', async () => {
+  const [applicationSource, clientSessionSource] = await Promise.all([
+    readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/api/clientSession.ts', import.meta.url), 'utf8'),
+  ])
+
+  const companyFieldPosition = applicationSource.indexOf('htmlFor="client-tenant"')
+  const loginFieldPosition = applicationSource.indexOf('htmlFor="client-login"')
+  assert.ok(companyFieldPosition >= 0)
+  assert.ok(companyFieldPosition < loginFieldPosition)
+  assert.doesNotMatch(
+    `${applicationSource}\n${clientSessionSource}`,
+    /localStorage|sessionStorage/,
   )
 })
 
