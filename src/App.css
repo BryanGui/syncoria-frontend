@@ -286,28 +286,45 @@ button.navigation__link {
   gap: 10px;
 }
 
-.login-mode-button {
-  width: 100%;
-  margin-top: 20px;
-  padding: 10px;
-  border: 0;
+.login-mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 24px 0;
+  padding: 4px;
+  border: 1px solid #d7dbe1;
+  border-radius: 10px;
+  background: #f3f4f6;
+}
+
+.login-mode-selector button {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
-.login-mode-button:hover,
-.login-mode-button:focus-visible {
+.login-mode-selector button:hover,
+.login-mode-selector button:focus-visible {
   color: var(--color-text-primary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
-.login-mode-button:focus-visible {
-  outline: 2px solid #9ca3af;
-  outline-offset: 2px;
+.login-mode-selector button:focus-visible {
+  outline: 2px solid #6b7280;
+  outline-offset: 1px;
+}
+
+.login-mode-selector .login-mode-selector__active {
+  border-color: #d1d5db;
+  background: #fff;
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
 }
 
 .login-form label {

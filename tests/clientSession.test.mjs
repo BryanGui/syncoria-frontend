@@ -7,7 +7,10 @@ import {
   deleteClientSession,
   fetchCurrentClientUser,
 } from '../src/api/clientSession.ts'
-import { selectLoginMode } from '../src/auth/loginMode.ts'
+import {
+  createLoginModeTransition,
+  selectLoginMode,
+} from '../src/auth/loginMode.ts'
 
 
 function createLoggerSpy() {
@@ -39,6 +42,19 @@ const meResponse = {
 test('switches explicitly between client and admin login modes', () => {
   assert.equal(selectLoginMode('client'), 'client')
   assert.equal(selectLoginMode('admin'), 'admin')
+})
+
+test('switching login mode clears password and previous form error', () => {
+  assert.deepEqual(createLoginModeTransition('admin'), {
+    loginMode: 'admin',
+    password: '',
+    errorMessage: undefined,
+  })
+  assert.deepEqual(createLoginModeTransition('client'), {
+    loginMode: 'client',
+    password: '',
+    errorMessage: undefined,
+  })
 })
 
 test('submits client credentials only to the client session endpoint', async () => {
@@ -107,6 +123,41 @@ test('client login shows company before login and persists no credentials', asyn
   assert.doesNotMatch(
     `${applicationSource}\n${clientSessionSource}`,
     /localStorage|sessionStorage/,
+  )
+})
+
+test('login mode selector is visible above both exclusive forms', async () => {
+  const applicationSource = await readFile(
+    new URL('../src/App.tsx', import.meta.url),
+    'utf8',
+  )
+
+  const adminStart = applicationSource.indexOf('function AdminLoginPage')
+  const clientStart = applicationSource.indexOf('function ClientLoginPage')
+  const dashboardStart = applicationSource.indexOf('interface DashboardProps')
+  const adminSource = applicationSource.slice(adminStart, clientStart)
+  const clientSource = applicationSource.slice(clientStart, dashboardStart)
+
+  const adminSelectorPosition = adminSource.indexOf('<LoginModeSelector')
+  const clientSelectorPosition = clientSource.indexOf('<LoginModeSelector')
+  assert.ok(adminSelectorPosition >= 0)
+  assert.ok(clientSelectorPosition >= 0)
+  assert.ok(adminSelectorPosition < adminSource.indexOf('<form'))
+  assert.ok(clientSelectorPosition < clientSource.indexOf('<form'))
+  assert.match(applicationSource, />\s*Espace client\s*</)
+  assert.match(applicationSource, />\s*Administration Syncoria\s*</)
+  assert.match(applicationSource, /aria-pressed=\{activeMode === 'client'\}/)
+  assert.match(applicationSource, /aria-pressed=\{activeMode === 'admin'\}/)
+  assert.match(applicationSource, /useState<LoginMode>\('client'\)/)
+  assert.match(clientSource, /id="client-tenant"/)
+  assert.match(clientSource, /id="client-login"/)
+  assert.match(clientSource, /id="client-password"/)
+  assert.match(adminSource, /id="admin-username"/)
+  assert.match(adminSource, /id="admin-password"/)
+  assert.doesNotMatch(adminSource, /client-tenant|name="tenant"/)
+  assert.doesNotMatch(
+    applicationSource,
+    /login-mode-button|Accéder à la connexion client|Accéder à l’administration/,
   )
 })
 

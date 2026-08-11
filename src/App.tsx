@@ -30,7 +30,11 @@ import {
   INITIAL_DASHBOARD_NAVIGATION_STATE,
   type DashboardPage,
 } from './navigation/dashboardNavigation'
-import { selectLoginMode, type LoginMode } from './auth/loginMode'
+import {
+  createLoginModeTransition,
+  selectLoginMode,
+  type LoginMode,
+} from './auth/loginMode'
 import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
@@ -286,19 +290,62 @@ interface LoginPageProps {
   initialError?: string
   onAuthenticated: () => void
   onRetrySession: () => void
-  onSwitchMode: () => void
+  onSelectMode: (mode: LoginMode) => void
+}
+
+interface LoginModeSelectorProps {
+  activeMode: LoginMode
+  onSelectMode: (mode: LoginMode) => void
+}
+
+function LoginModeSelector({
+  activeMode,
+  onSelectMode,
+}: LoginModeSelectorProps) {
+  return (
+    <div
+      aria-label="Type d’espace"
+      className="login-mode-selector"
+      role="group"
+    >
+      <button
+        aria-pressed={activeMode === 'client'}
+        className={activeMode === 'client' ? 'login-mode-selector__active' : ''}
+        onClick={() => onSelectMode('client')}
+        type="button"
+      >
+        Espace client
+      </button>
+      <button
+        aria-pressed={activeMode === 'admin'}
+        className={activeMode === 'admin' ? 'login-mode-selector__active' : ''}
+        onClick={() => onSelectMode('admin')}
+        type="button"
+      >
+        Administration Syncoria
+      </button>
+    </div>
+  )
 }
 
 function AdminLoginPage({
   initialError,
   onAuthenticated,
   onRetrySession,
-  onSwitchMode,
+  onSelectMode,
 }: LoginPageProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(initialError)
+
+  function handleModeSelection(nextMode: LoginMode) {
+    if (nextMode === 'admin') return
+    const transition = createLoginModeTransition(nextMode)
+    setPassword(transition.password)
+    setErrorMessage(transition.errorMessage)
+    onSelectMode(transition.loginMode)
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -327,6 +374,10 @@ function AdminLoginPage({
           <span className="brand__mark" aria-hidden="true">S</span>
           <span>Syncoria</span>
         </div>
+        <LoginModeSelector
+          activeMode="admin"
+          onSelectMode={handleModeSelection}
+        />
         <p className="eyebrow">Administration</p>
         <h1 id="login-title">Connexion</h1>
         <p className="login-panel__description">
@@ -373,9 +424,6 @@ function AdminLoginPage({
             {isSubmitting ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
-        <button className="login-mode-button" onClick={onSwitchMode} type="button">
-          Accéder à la connexion client
-        </button>
       </section>
     </main>
   )
@@ -385,13 +433,21 @@ function ClientLoginPage({
   initialError,
   onAuthenticated,
   onRetrySession,
-  onSwitchMode,
+  onSelectMode,
 }: LoginPageProps) {
   const [tenant, setTenant] = useState('')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(initialError)
+
+  function handleModeSelection(nextMode: LoginMode) {
+    if (nextMode === 'client') return
+    const transition = createLoginModeTransition(nextMode)
+    setPassword(transition.password)
+    setErrorMessage(transition.errorMessage)
+    onSelectMode(transition.loginMode)
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -419,6 +475,10 @@ function ClientLoginPage({
           <span className="brand__mark" aria-hidden="true">S</span>
           <span>Syncoria</span>
         </div>
+        <LoginModeSelector
+          activeMode="client"
+          onSelectMode={handleModeSelection}
+        />
         <p className="eyebrow">Espace client</p>
         <h1 id="client-login-title">Connexion</h1>
         <p className="login-panel__description">
@@ -477,9 +537,6 @@ function ClientLoginPage({
             {isSubmitting ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
-        <button className="login-mode-button" onClick={onSwitchMode} type="button">
-          Accéder à l’administration Syncoria
-        </button>
       </section>
     </main>
   )
@@ -836,7 +893,7 @@ function App() {
             : undefined}
           onAuthenticated={loadClientSession}
           onRetrySession={loadClientSession}
-          onSwitchMode={() => setLoginMode(selectLoginMode('admin'))}
+          onSelectMode={(mode) => setLoginMode(selectLoginMode(mode))}
         />
       )
     }
@@ -847,7 +904,7 @@ function App() {
           : undefined}
         onAuthenticated={() => setSessionState({ status: 'admin_authenticated' })}
         onRetrySession={loadAdminSession}
-        onSwitchMode={() => setLoginMode(selectLoginMode('client'))}
+        onSelectMode={(mode) => setLoginMode(selectLoginMode(mode))}
       />
     )
   }

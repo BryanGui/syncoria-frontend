@@ -54,6 +54,11 @@ La connexion client demande le slug de l'entreprise, l'identifiant et le mot de
 passe. Le slug sert uniquement à résoudre le compte tenant-scopé lors du login ;
 il ne permet aucune navigation ni sélection de tenant après authentification.
 
+Un sélecteur visible au-dessus du formulaire distingue `Espace client` de
+`Administration Syncoria`. Le mode client est sélectionné par défaut. Changer de
+mode efface le mot de passe et l'erreur du formulaire précédent ; le champ
+Entreprise n'est rendu que dans le formulaire client.
+
 Le tenant client est uniquement celui retourné par `/me` : l'interface ne
 propose ni liste de clients ni sélection d'un autre tenant. Elle transmet ce
 modèle au même composant `TenantWorkspace` que l'adaptateur administrateur.
