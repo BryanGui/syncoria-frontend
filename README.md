@@ -34,6 +34,14 @@ Une fois la session validée, la page `Clients` charge le registre réel avec
 statut fournis par FastAPI. Une réponse 401 renvoie l'utilisateur vers l'écran
 de connexion.
 
+Chaque client ouvre ensuite un composant partagé `TenantWorkspace`, alimenté
+dans le contexte administrateur par `GET /admin/tenants/{tenant_id}`. Le
+composant reçoit uniquement un modèle de vue par props et ne dépend pas de la
+route admin ; un futur portail client pourra donc l'alimenter avec une identité
+tenant dérivée côté backend de sa propre session. Seule la Vue générale affiche
+actuellement les champs réels `slug`, `status` et `id`. Les sections Données,
+Intégrations, Automatisations et Logs restent explicitement vides.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
