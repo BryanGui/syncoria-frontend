@@ -11,8 +11,13 @@ import {
   createAdminSession,
   deleteAdminSession,
   fetchAdminSession,
-  type AdminSessionStatus,
 } from './api/adminSession'
+import {
+  createClientSession,
+  deleteClientSession,
+  fetchCurrentClientUser,
+  type CurrentClientUser,
+} from './api/clientSession'
 import {
   fetchHealthStatus,
   INITIAL_HEALTH_STATUS,
@@ -25,7 +30,9 @@ import {
   INITIAL_DASHBOARD_NAVIGATION_STATE,
   type DashboardPage,
 } from './navigation/dashboardNavigation'
+import { selectLoginMode, type LoginMode } from './auth/loginMode'
 import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
+import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
@@ -279,12 +286,14 @@ interface LoginPageProps {
   initialError?: string
   onAuthenticated: () => void
   onRetrySession: () => void
+  onSwitchMode: () => void
 }
 
-function LoginPage({
+function AdminLoginPage({
   initialError,
   onAuthenticated,
   onRetrySession,
+  onSwitchMode,
 }: LoginPageProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -364,6 +373,100 @@ function LoginPage({
             {isSubmitting ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
+        <button className="login-mode-button" onClick={onSwitchMode} type="button">
+          Accéder à la connexion client
+        </button>
+      </section>
+    </main>
+  )
+}
+
+function ClientLoginPage({
+  initialError,
+  onAuthenticated,
+  onRetrySession,
+  onSwitchMode,
+}: LoginPageProps) {
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(initialError)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setErrorMessage(undefined)
+    const result = await createClientSession(apiBaseUrl, login, password)
+    setPassword('')
+    setIsSubmitting(false)
+
+    if (result === 'authenticated') {
+      onAuthenticated()
+      return
+    }
+    setErrorMessage(
+      result === 'rejected'
+        ? 'Identifiant ou mot de passe incorrect.'
+        : 'Le service d’authentification est indisponible.',
+    )
+  }
+
+  return (
+    <main className="login-page">
+      <section aria-labelledby="client-login-title" className="login-panel">
+        <div className="login-brand">
+          <span className="brand__mark" aria-hidden="true">S</span>
+          <span>Syncoria</span>
+        </div>
+        <p className="eyebrow">Espace client</p>
+        <h1 id="client-login-title">Connexion</h1>
+        <p className="login-panel__description">
+          Identifiez-vous pour accéder à l’espace de votre organisation.
+        </p>
+
+        <form className="login-form" onSubmit={handleSubmit}>
+          <label htmlFor="client-login">Identifiant</label>
+          <input
+            autoComplete="username"
+            id="client-login"
+            maxLength={254}
+            name="login"
+            onChange={(event) => setLogin(event.target.value)}
+            required
+            type="text"
+            value={login}
+          />
+
+          <label htmlFor="client-password">Mot de passe</label>
+          <input
+            autoComplete="current-password"
+            id="client-password"
+            maxLength={1024}
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            type="password"
+            value={password}
+          />
+
+          {errorMessage && (
+            <div aria-live="polite" className="login-error" role="alert">
+              <span>{errorMessage}</span>
+              {initialError && (
+                <button onClick={onRetrySession} type="button">
+                  Réessayer
+                </button>
+              )}
+            </div>
+          )}
+
+          <button className="primary-button" disabled={isSubmitting} type="submit">
+            {isSubmitting ? 'Connexion…' : 'Se connecter'}
+          </button>
+        </form>
+        <button className="login-mode-button" onClick={onSwitchMode} type="button">
+          Accéder à l’administration Syncoria
+        </button>
       </section>
     </main>
   )
@@ -585,36 +688,115 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
   )
 }
 
-function App() {
-  const [sessionStatus, setSessionStatus] = useState<
-    AdminSessionStatus | 'loading'
-  >('loading')
+type ApplicationSessionState =
+  | { status: 'loading' }
+  | { status: 'unauthenticated' }
+  | { status: 'error' }
+  | { status: 'admin_authenticated' }
+  | { status: 'client_authenticated'; currentUser: CurrentClientUser }
 
-  function loadSession() {
-    setSessionStatus('loading')
+
+function App() {
+  const [sessionState, setSessionState] = useState<ApplicationSessionState>({
+    status: 'loading',
+  })
+  const [loginMode, setLoginMode] = useState<LoginMode>('client')
+
+  function loadSessions() {
+    setSessionState({ status: 'loading' })
     const abortController = new AbortController()
-    void fetchAdminSession(apiBaseUrl, abortController.signal).then(setSessionStatus)
+    void fetchCurrentClientUser(apiBaseUrl, abortController.signal).then(
+      async (clientResult) => {
+        if (abortController.signal.aborted) return
+        if (clientResult.status === 'loaded') {
+          setSessionState({
+            status: 'client_authenticated',
+            currentUser: clientResult.currentUser,
+          })
+          return
+        }
+
+        const adminResult = await fetchAdminSession(
+          apiBaseUrl,
+          abortController.signal,
+        )
+        if (abortController.signal.aborted) return
+        if (adminResult === 'authenticated') {
+          setSessionState({ status: 'admin_authenticated' })
+          return
+        }
+        setSessionState({
+          status: clientResult.status === 'error' || adminResult === 'error'
+            ? 'error'
+            : 'unauthenticated',
+        })
+      },
+    )
+    return abortController
+  }
+
+  function loadClientSession() {
+    setSessionState({ status: 'loading' })
+    const abortController = new AbortController()
+    void fetchCurrentClientUser(apiBaseUrl, abortController.signal).then((result) => {
+      if (abortController.signal.aborted) return
+      if (result.status === 'loaded') {
+        setSessionState({
+          status: 'client_authenticated',
+          currentUser: result.currentUser,
+        })
+        return
+      }
+      setSessionState({ status: result.status === 'error' ? 'error' : 'unauthenticated' })
+    })
+    return abortController
+  }
+
+  function loadAdminSession() {
+    setSessionState({ status: 'loading' })
+    const abortController = new AbortController()
+    void fetchAdminSession(apiBaseUrl, abortController.signal).then((result) => {
+      if (abortController.signal.aborted) return
+      setSessionState({
+        status: result === 'authenticated'
+          ? 'admin_authenticated'
+          : result === 'error'
+            ? 'error'
+            : 'unauthenticated',
+      })
+    })
     return abortController
   }
 
   useEffect(() => {
-    const abortController = loadSession()
+    const abortController = loadSessions()
     return () => abortController.abort()
   }, [])
 
   async function handleLogout() {
     const wasLoggedOut = await deleteAdminSession(apiBaseUrl)
     if (wasLoggedOut) {
-      setSessionStatus('unauthenticated')
+      setLoginMode(selectLoginMode('admin'))
+      setSessionState({ status: 'unauthenticated' })
+    }
+    return wasLoggedOut
+  }
+
+  async function handleClientLogout() {
+    const wasLoggedOut = await deleteClientSession(apiBaseUrl)
+    if (wasLoggedOut) {
+      setLoginMode(selectLoginMode('client'))
+      setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
   }
 
   const handleSessionExpired = useCallback(() => {
-    setSessionStatus('unauthenticated')
+    setLoginMode(selectLoginMode('admin'))
+    setSessionState({ status: 'unauthenticated' })
   }, [])
 
-  if (sessionStatus === 'loading') {
+  if (sessionState.status === 'loading') {
     return (
       <main aria-live="polite" className="session-loading">
         <span className="session-loading__indicator" aria-hidden="true" />
@@ -623,14 +805,36 @@ function App() {
     )
   }
 
-  if (sessionStatus !== 'authenticated') {
+  if (sessionState.status === 'client_authenticated') {
     return (
-      <LoginPage
-        initialError={sessionStatus === 'error'
+      <ClientWorkspacePage
+        currentUser={sessionState.currentUser}
+        onLogout={handleClientLogout}
+      />
+    )
+  }
+
+  if (sessionState.status !== 'admin_authenticated') {
+    if (loginMode === 'client') {
+      return (
+        <ClientLoginPage
+          initialError={sessionState.status === 'error'
+            ? 'Impossible de vérifier la session client.'
+            : undefined}
+          onAuthenticated={loadClientSession}
+          onRetrySession={loadClientSession}
+          onSwitchMode={() => setLoginMode(selectLoginMode('admin'))}
+        />
+      )
+    }
+    return (
+      <AdminLoginPage
+        initialError={sessionState.status === 'error'
           ? 'Impossible de vérifier la session administrateur.'
           : undefined}
-        onAuthenticated={() => setSessionStatus('authenticated')}
-        onRetrySession={loadSession}
+        onAuthenticated={() => setSessionState({ status: 'admin_authenticated' })}
+        onRetrySession={loadAdminSession}
+        onSwitchMode={() => setLoginMode(selectLoginMode('client'))}
       />
     )
   }

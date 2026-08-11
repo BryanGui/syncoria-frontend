@@ -42,6 +42,18 @@ tenant dérivée côté backend de sa propre session. Seule la Vue générale af
 actuellement les champs réels `slug`, `status` et `id`. Les sections Données,
 Intégrations, Automatisations et Logs restent explicitement vides.
 
+## Session client
+
+L'écran de connexion distingue explicitement l'espace client de
+l'administration Syncoria. La session client est créée par
+`POST /auth/session`, vérifiée par `GET /me` et révoquée par
+`DELETE /auth/session`, toujours avec `credentials: include`. Aucun token ou mot
+de passe n'est conservé dans le stockage navigateur.
+
+Le tenant client est uniquement celui retourné par `/me` : l'interface ne
+propose ni liste de clients ni sélection d'un autre tenant. Elle transmet ce
+modèle au même composant `TenantWorkspace` que l'adaptateur administrateur.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

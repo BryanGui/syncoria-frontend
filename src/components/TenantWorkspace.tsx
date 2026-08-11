@@ -8,7 +8,7 @@ import {
 
 interface TenantWorkspaceProps {
   tenant: TenantWorkspaceTenant
-  onBack: () => void
+  onBack?: () => void
 }
 
 export function TenantWorkspace({ tenant, onBack }: TenantWorkspaceProps) {
@@ -20,9 +20,11 @@ export function TenantWorkspace({ tenant, onBack }: TenantWorkspaceProps) {
     <section aria-labelledby="tenant-workspace-title" className="tenant-workspace">
       <div className="tenant-workspace__heading">
         <div>
-          <button className="back-button" onClick={onBack} type="button">
-            ← Retour aux clients
-          </button>
+          {onBack && (
+            <button className="back-button" onClick={onBack} type="button">
+              ← Retour aux clients
+            </button>
+          )}
           <p className="eyebrow">Espace tenant</p>
           <h2 id="tenant-workspace-title">{tenant.slug}</h2>
         </div>

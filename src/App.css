@@ -286,6 +286,30 @@ button.navigation__link {
   gap: 10px;
 }
 
+.login-mode-button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.login-mode-button:hover,
+.login-mode-button:focus-visible {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-mode-button:focus-visible {
+  outline: 2px solid #9ca3af;
+  outline-offset: 2px;
+}
+
 .login-form label {
   color: var(--color-text-body);
   font-size: 13px;
@@ -671,6 +695,53 @@ button.navigation__link {
   margin-top: 0;
 }
 
+.client-workspace-page {
+  width: min(100%, 1280px);
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 36px 48px 64px;
+  box-sizing: border-box;
+}
+
+.client-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.client-workspace-header .brand {
+  padding: 0;
+}
+
+.client-workspace-header__account {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.client-workspace-header__account > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.client-workspace-header__account strong {
+  color: var(--color-text-body);
+  font-size: 13px;
+}
+
+.client-workspace-header__account span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.client-workspace-page > .logout-error {
+  margin-top: 16px;
+  text-align: right;
+}
+
 .section-heading,
 .activity-panel__header {
   display: flex;
@@ -871,6 +942,19 @@ button.navigation__link {
 
   .main-content {
     padding: 40px 32px 48px;
+  }
+
+  .client-workspace-page {
+    padding: 28px 20px 40px;
+  }
+
+  .client-workspace-header {
+    align-items: flex-start;
+  }
+
+  .client-workspace-header__account {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .status-grid {
