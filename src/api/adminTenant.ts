@@ -4,14 +4,13 @@ import {
 } from '../observability/logger.ts'
 import type { TenantWorkspaceTenant } from '../tenantWorkspace/model.ts'
 
-export type AdminTenant = TenantWorkspaceTenant
-
-export type AdminTenantsResult =
-  | { status: 'loaded'; tenants: AdminTenant[] }
+export type AdminTenantResult =
+  | { status: 'loaded'; tenant: TenantWorkspaceTenant }
   | { status: 'unauthenticated' }
+  | { status: 'not_found' }
   | { status: 'error' }
 
-function isAdminTenant(value: unknown): value is AdminTenant {
+function isTenantWorkspaceTenant(value: unknown): value is TenantWorkspaceTenant {
   return (
     typeof value === 'object'
     && value !== null
@@ -24,18 +23,20 @@ function isAdminTenant(value: unknown): value is AdminTenant {
   )
 }
 
-export async function fetchAdminTenants(
+export async function fetchAdminTenant(
   apiBaseUrl: string | null,
+  tenantId: string,
   signal?: AbortSignal,
   request: typeof fetch = fetch,
   logger: TechnicalLogger = technicalLogger,
-): Promise<AdminTenantsResult> {
+): Promise<AdminTenantResult> {
   if (apiBaseUrl === null) {
     return { status: 'error' }
   }
 
+  const endpoint = `/admin/tenants/${encodeURIComponent(tenantId)}`
   try {
-    const response = await request(`${apiBaseUrl}/admin/tenants`, {
+    const response = await request(`${apiBaseUrl}${endpoint}`, {
       credentials: 'include',
       headers: { Accept: 'application/json' },
       method: 'GET',
@@ -44,40 +45,38 @@ export async function fetchAdminTenants(
     if (response.status === 401) {
       return { status: 'unauthenticated' }
     }
+    if (response.status === 404) {
+      return { status: 'not_found' }
+    }
     if (!response.ok) {
-      logger.warning('Admin tenants endpoint returned an error.', {
-        page: 'clients',
-        action: 'load_admin_tenants',
-        endpoint: '/admin/tenants',
+      logger.warning('Admin tenant endpoint returned an error.', {
+        page: 'tenant_workspace',
+        action: 'load_admin_tenant',
+        endpoint: '/admin/tenants/{tenant_id}',
         httpStatus: response.status,
       })
       return { status: 'error' }
     }
 
     const responsePayload: unknown = await response.json()
-    if (!Array.isArray(responsePayload) || !responsePayload.every(isAdminTenant)) {
-      logger.warning('Admin tenants endpoint returned an invalid response.', {
-        page: 'clients',
-        action: 'load_admin_tenants',
-        endpoint: '/admin/tenants',
+    if (!isTenantWorkspaceTenant(responsePayload)) {
+      logger.warning('Admin tenant endpoint returned an invalid response.', {
+        page: 'tenant_workspace',
+        action: 'load_admin_tenant',
+        endpoint: '/admin/tenants/{tenant_id}',
         errorType: 'invalid_response',
       })
       return { status: 'error' }
     }
-    return {
-      status: 'loaded',
-      tenants: responsePayload.map(({ id, slug, status }) => ({
-        id,
-        slug,
-        status,
-      })),
-    }
+
+    const { id, slug, status } = responsePayload
+    return { status: 'loaded', tenant: { id, slug, status } }
   } catch (error: unknown) {
     if (!signal?.aborted) {
-      logger.error('Admin tenants request failed.', {
-        page: 'clients',
-        action: 'load_admin_tenants',
-        endpoint: '/admin/tenants',
+      logger.error('Admin tenant request failed.', {
+        page: 'tenant_workspace',
+        action: 'load_admin_tenant',
+        endpoint: '/admin/tenants/{tenant_id}',
         errorType: error instanceof Error ? error.name : 'UnknownError',
       })
     }

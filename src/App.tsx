@@ -25,6 +25,7 @@ import {
   INITIAL_DASHBOARD_NAVIGATION_STATE,
   type DashboardPage,
 } from './navigation/dashboardNavigation'
+import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
@@ -130,7 +131,7 @@ function Icon({ name, size = 20 }: IconProps) {
 const navigation: Array<{
   icon: IconName
   label: string
-  page?: DashboardPage
+  page?: Exclude<DashboardPage, 'tenant_workspace'>
 }> = [
   { icon: 'overview', label: 'Vue d’ensemble', page: 'overview' },
   { icon: 'clients', label: 'Clients', page: 'clients' },
@@ -381,6 +382,7 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
     INITIAL_DASHBOARD_NAVIGATION_STATE,
   )
   const isOverview = navigationState.activePage === 'overview'
+  const isClients = navigationState.activePage === 'clients'
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -408,15 +410,19 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
               <li key={item.label}>
                 {item.page ? (
                   <button
-                    aria-current={navigationState.activePage === item.page
+                    aria-current={(navigationState.activePage === item.page
+                      || (item.page === 'clients'
+                        && navigationState.activePage === 'tenant_workspace'))
                       ? 'page'
                       : undefined}
-                    className={navigationState.activePage === item.page
+                    className={(navigationState.activePage === item.page
+                      || (item.page === 'clients'
+                        && navigationState.activePage === 'tenant_workspace'))
                       ? 'navigation__link navigation__link--active'
                       : 'navigation__link'}
                     onClick={() => dispatchNavigation({
                       type: 'open_page',
-                      page: item.page as DashboardPage,
+                      page: item.page as Exclude<DashboardPage, 'tenant_workspace'>,
                     })}
                     type="button"
                   >
@@ -450,11 +456,17 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
         <header className="page-header">
           <div>
             <p className="eyebrow">Administration</p>
-            <h1>{isOverview ? 'Vue d’ensemble' : 'Clients'}</h1>
+            <h1>{isOverview
+              ? 'Vue d’ensemble'
+              : isClients
+                ? 'Clients'
+                : 'Espace tenant'}</h1>
             <p className="page-header__description">
               {isOverview
                 ? 'Consultez l’état général des services et les dernières opérations.'
-                : 'Consultez les tenants enregistrés dans Syncoria.'}
+                : isClients
+                  ? 'Consultez les tenants enregistrés dans Syncoria.'
+                  : 'Consultez les informations et sections du tenant sélectionné.'}
             </p>
           </div>
           <div className="page-header__actions">
@@ -548,12 +560,26 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
           </ul>
           </section>
           </>
-        ) : (
+        ) : isClients ? (
           <ClientsPage
             apiBaseUrl={apiBaseUrl}
+            onOpenTenant={(tenantId) => dispatchNavigation({
+              type: 'open_tenant',
+              tenantId,
+            })}
             onSessionExpired={onSessionExpired}
           />
-        )}
+        ) : navigationState.selectedTenantId !== null ? (
+          <AdminTenantWorkspacePage
+            apiBaseUrl={apiBaseUrl}
+            onBack={() => dispatchNavigation({
+              type: 'open_page',
+              page: 'clients',
+            })}
+            onSessionExpired={onSessionExpired}
+            tenantId={navigationState.selectedTenantId}
+          />
+        ) : null}
       </main>
     </div>
   )

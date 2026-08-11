@@ -7,6 +7,7 @@ import {
 
 interface ClientsPageProps {
   apiBaseUrl: string | null
+  onOpenTenant: (tenantId: string) => void
   onSessionExpired: () => void
 }
 
@@ -17,6 +18,7 @@ type ClientsPageState =
 
 export function ClientsPage({
   apiBaseUrl,
+  onOpenTenant,
   onSessionExpired,
 }: ClientsPageProps) {
   const [reloadKey, setReloadKey] = useState(0)
@@ -94,12 +96,21 @@ export function ClientsPage({
               <th scope="col">Client</th>
               <th scope="col">Statut</th>
               <th scope="col">Identifiant technique</th>
+              <th scope="col"><span className="visually-hidden">Action</span></th>
             </tr>
           </thead>
           <tbody>
             {pageState.tenants.map((tenant) => (
               <tr key={tenant.id}>
-                <td><strong>{tenant.slug}</strong></td>
+                <td>
+                  <button
+                    className="client-link"
+                    onClick={() => onOpenTenant(tenant.id)}
+                    type="button"
+                  >
+                    {tenant.slug}
+                  </button>
+                </td>
                 <td>
                   <span className={tenant.status === 'active'
                     ? 'tenant-status tenant-status--active'
@@ -108,6 +119,15 @@ export function ClientsPage({
                   </span>
                 </td>
                 <td><code>{tenant.id}</code></td>
+                <td>
+                  <button
+                    className="secondary-button clients-table__open"
+                    onClick={() => onOpenTenant(tenant.id)}
+                    type="button"
+                  >
+                    Ouvrir
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
