@@ -26,9 +26,11 @@ import {
   type HealthStatus,
 } from './api/health'
 import {
+  ADMIN_DASHBOARD_NAVIGATION,
   dashboardNavigationReducer,
   INITIAL_DASHBOARD_NAVIGATION_STATE,
-  type DashboardPage,
+  isDashboardNavigationItemActive,
+  type DashboardNavigationIcon,
 } from './navigation/dashboardNavigation'
 import {
   createLoginModeTransition,
@@ -38,15 +40,11 @@ import {
 import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
+import { IntegrationsPage } from './pages/IntegrationsPage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
-type IconName =
-  | 'overview'
-  | 'clients'
-  | 'data'
-  | 'sync'
-  | 'process'
+type IconName = DashboardNavigationIcon
   | 'server'
   | 'database'
   | 'activity'
@@ -97,6 +95,13 @@ function Icon({ name, size = 20 }: IconProps) {
         <path d="M7 6h10M6 8l5 8M18 8l-5 8" />
       </>
     ),
+    integrations: (
+      <>
+        <path d="M8 12h8" />
+        <path d="M9 7H7a5 5 0 0 0 0 10h2" />
+        <path d="M15 7h2a5 5 0 0 1 0 10h-2" />
+      </>
+    ),
     server: (
       <>
         <rect x="3" y="4" width="18" height="6" rx="2" />
@@ -138,18 +143,6 @@ function Icon({ name, size = 20 }: IconProps) {
     </svg>
   )
 }
-
-const navigation: Array<{
-  icon: IconName
-  label: string
-  page?: Exclude<DashboardPage, 'tenant_workspace'>
-}> = [
-  { icon: 'overview', label: 'Vue d’ensemble', page: 'overview' },
-  { icon: 'clients', label: 'Clients', page: 'clients' },
-  { icon: 'data', label: 'Données' },
-  { icon: 'sync', label: 'Synchronisations' },
-  { icon: 'process', label: 'Processus' },
-]
 
 interface StatusCardProps {
   icon: IconName
@@ -556,6 +549,7 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
   )
   const isOverview = navigationState.activePage === 'overview'
   const isClients = navigationState.activePage === 'clients'
+  const isIntegrations = navigationState.activePage === 'integrations'
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -579,40 +573,43 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
         <nav aria-label="Navigation principale" className="navigation">
           <p className="navigation__label">Administration</p>
           <ul>
-            {navigation.map((item) => (
-              <li key={item.label}>
-                {item.page ? (
-                  <button
-                    aria-current={(navigationState.activePage === item.page
-                      || (item.page === 'clients'
-                        && navigationState.activePage === 'tenant_workspace'))
-                      ? 'page'
-                      : undefined}
-                    className={(navigationState.activePage === item.page
-                      || (item.page === 'clients'
-                        && navigationState.activePage === 'tenant_workspace'))
-                      ? 'navigation__link navigation__link--active'
-                      : 'navigation__link'}
-                    onClick={() => dispatchNavigation({
-                      type: 'open_page',
-                      page: item.page as Exclude<DashboardPage, 'tenant_workspace'>,
-                    })}
-                    type="button"
-                  >
-                    <Icon name={item.icon} />
-                    <span>{item.label}</span>
-                  </button>
-                ) : (
-                  <a
-                    className="navigation__link"
-                    href={`#${item.label.toLowerCase()}`}
-                  >
-                    <Icon name={item.icon} />
-                    <span>{item.label}</span>
-                  </a>
-                )}
-              </li>
-            ))}
+            {ADMIN_DASHBOARD_NAVIGATION.map((item) => {
+              const page = item.page
+              const isActive = page
+                ? isDashboardNavigationItemActive(
+                    page,
+                    navigationState.activePage,
+                  )
+                : false
+              return (
+                <li key={item.label}>
+                  {page ? (
+                    <button
+                      aria-current={isActive ? 'page' : undefined}
+                      className={isActive
+                        ? 'navigation__link navigation__link--active'
+                        : 'navigation__link'}
+                      onClick={() => dispatchNavigation({
+                        type: 'open_page',
+                        page,
+                      })}
+                      type="button"
+                    >
+                      <Icon name={item.icon} />
+                      <span>{item.label}</span>
+                    </button>
+                  ) : (
+                    <a
+                      className="navigation__link"
+                      href={`#${item.label.toLowerCase()}`}
+                    >
+                      <Icon name={item.icon} />
+                      <span>{item.label}</span>
+                    </a>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </nav>
 
@@ -633,13 +630,17 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
               ? 'Vue d’ensemble'
               : isClients
                 ? 'Clients'
-                : 'Espace tenant'}</h1>
+                : isIntegrations
+                  ? 'Intégrations'
+                  : 'Espace tenant'}</h1>
             <p className="page-header__description">
               {isOverview
                 ? 'Consultez l’état général des services et les dernières opérations.'
                 : isClients
                   ? 'Consultez les tenants enregistrés dans Syncoria.'
-                  : 'Consultez les informations et sections du tenant sélectionné.'}
+                  : isIntegrations
+                    ? 'Préparez et suivez les intégrations des clients Syncoria.'
+                    : 'Consultez les informations et sections du tenant sélectionné.'}
             </p>
           </div>
           <div className="page-header__actions">
@@ -742,6 +743,8 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
             })}
             onSessionExpired={onSessionExpired}
           />
+        ) : isIntegrations ? (
+          <IntegrationsPage />
         ) : navigationState.selectedTenantId !== null ? (
           <AdminTenantWorkspacePage
             apiBaseUrl={apiBaseUrl}
