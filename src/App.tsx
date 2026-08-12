@@ -744,7 +744,10 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
             onSessionExpired={onSessionExpired}
           />
         ) : isIntegrations ? (
-          <IntegrationsPage />
+          <IntegrationsPage
+            apiBaseUrl={apiBaseUrl}
+            onSessionExpired={onSessionExpired}
+          />
         ) : navigationState.selectedTenantId !== null ? (
           <AdminTenantWorkspacePage
             apiBaseUrl={apiBaseUrl}
