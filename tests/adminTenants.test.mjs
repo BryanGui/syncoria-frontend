@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { fetchAdminTenants } from '../src/api/adminTenants.ts'
+import {
+  createAdminTenant,
+  fetchAdminTenants,
+} from '../src/api/adminTenants.ts'
 
 
 function createLoggerSpy() {
@@ -24,6 +27,7 @@ test('loads real admin tenants with credential cookies', async () => {
   const tenants = [
     {
       id: '11111111-1111-4111-8111-111111111111',
+      name: 'Alpha Conseil',
       slug: 'alpha',
       status: 'active',
     },
@@ -109,6 +113,7 @@ test('keeps only the minimal tenant fields from a valid response', async () => {
   const request = async () => Response.json([
     {
       id: '11111111-1111-4111-8111-111111111111',
+      name: 'Alpha Conseil',
       slug: 'alpha',
       status: 'active',
       credential: 'must-not-enter-application-state',
@@ -125,9 +130,95 @@ test('keeps only the minimal tenant fields from a valid response', async () => {
     status: 'loaded',
     tenants: [{
       id: '11111111-1111-4111-8111-111111111111',
+      name: 'Alpha Conseil',
       slug: 'alpha',
       status: 'active',
     }],
   })
   assert.doesNotMatch(JSON.stringify(result), /credential|must-not-enter/)
+})
+
+const createdTenant = {
+  id: '33333333-3333-4333-8333-333333333333',
+  name: 'Novalia Talents',
+  slug: 'novalia',
+  status: 'active',
+}
+
+test('creates a real admin tenant with credential cookies', async () => {
+  let capturedUrl
+  let capturedOptions
+  const request = async (url, options) => {
+    capturedUrl = url
+    capturedOptions = options
+    return Response.json(createdTenant, { status: 201 })
+  }
+
+  assert.deepEqual(
+    await createAdminTenant(
+      'https://api.example.com',
+      { name: 'Novalia Talents', slug: 'novalia' },
+      request,
+    ),
+    { status: 'created', tenant: createdTenant },
+  )
+  assert.equal(capturedUrl, 'https://api.example.com/admin/tenants')
+  assert.equal(capturedOptions.method, 'POST')
+  assert.equal(capturedOptions.credentials, 'include')
+  assert.deepEqual(JSON.parse(capturedOptions.body), {
+    name: 'Novalia Talents',
+    slug: 'novalia',
+  })
+})
+
+test('reports duplicate, invalid and expired-session creation separately', async () => {
+  for (const [httpStatus, expectedStatus] of [
+    [401, 'unauthenticated'],
+    [409, 'conflict'],
+    [422, 'invalid'],
+  ]) {
+    const request = async () => Response.json({}, { status: httpStatus })
+    const result = await createAdminTenant(
+      'https://api.example.com',
+      { name: 'Novalia Talents', slug: 'novalia' },
+      request,
+    )
+    assert.deepEqual(result, { status: expectedStatus })
+  }
+})
+
+test('returns a generic tenant creation error without logging API details', async () => {
+  const { entries, logger } = createLoggerSpy()
+  const request = async () => Response.json(
+    { detail: 'sensitive database detail' },
+    { status: 503 },
+  )
+
+  assert.deepEqual(
+    await createAdminTenant(
+      'https://api.example.com',
+      { name: 'Novalia Talents', slug: 'novalia' },
+      request,
+      logger,
+    ),
+    { status: 'error' },
+  )
+  assert.equal(entries[0].context.httpStatus, 503)
+  assert.doesNotMatch(JSON.stringify(entries), /sensitive database detail/)
+})
+
+test('rejects a malformed tenant creation response', async () => {
+  const request = async () => Response.json(
+    { id: createdTenant.id, slug: 'novalia', status: 'active' },
+    { status: 201 },
+  )
+
+  assert.deepEqual(
+    await createAdminTenant(
+      'https://api.example.com',
+      { name: 'Novalia Talents', slug: 'novalia' },
+      request,
+    ),
+    { status: 'error' },
+  )
 })
