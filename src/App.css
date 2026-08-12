@@ -451,10 +451,118 @@ button.navigation__link {
   font-size: 13px;
 }
 
-.clients-panel__header > span {
+.clients-panel__actions > span {
   color: var(--color-text-secondary);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.clients-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tenant-creation-form {
+  padding: 22px;
+  border-bottom: 1px solid var(--color-border);
+  background: #fafbfc;
+}
+
+.tenant-creation-form__heading,
+.tenant-creation-form__buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tenant-creation-form__heading h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 16px;
+}
+
+.tenant-creation-form__heading p {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.tenant-creation-form__close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.tenant-creation-form__close:hover,
+.tenant-creation-form__close:focus-visible {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.tenant-creation-form__fields {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.tenant-creation-form__fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--color-text-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tenant-creation-form__fields input {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 14px;
+}
+
+.tenant-creation-form__fields input:focus-visible,
+.tenant-creation-form__close:focus-visible {
+  outline: 2px solid #9ca3af;
+  outline-offset: 2px;
+}
+
+.tenant-creation-form__help,
+.tenant-creation-form__field-error {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.tenant-creation-form__help {
+  color: var(--color-text-secondary);
+}
+
+.tenant-creation-form__field-error,
+.tenant-creation-form__error {
+  color: #a23b3b;
+}
+
+.tenant-creation-form__error {
+  margin: 16px 0 0;
+  font-size: 13px;
+}
+
+.tenant-creation-form__buttons {
+  margin-top: 20px;
+  justify-content: flex-end;
 }
 
 .clients-table-wrapper {
@@ -574,6 +682,12 @@ button.navigation__link {
 
 .clients-state--loading p {
   margin: 0;
+}
+
+.clients-state--embedded {
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 .tenant-workspace {
@@ -1053,6 +1167,16 @@ button.navigation__link {
 
   .clients-panel__header {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .clients-panel__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .tenant-creation-form__fields {
+    grid-template-columns: 1fr;
   }
 
   .clients-table {
