@@ -19,6 +19,10 @@ const tenantWorkspaceSource = await readFile(
   new URL('../src/components/TenantWorkspace.tsx', import.meta.url),
   'utf8',
 )
+const clientsPageSource = await readFile(
+  new URL('../src/pages/ClientsPage.tsx', import.meta.url),
+  'utf8',
+)
 
 test('adds the integration page only to the admin tenant workspace', () => {
   assert.match(adminWorkspaceSource, /adminIntegration=\{/)
@@ -66,4 +70,60 @@ test('displays only sanitized verification fields and replaces stale OK state', 
   assert.match(integrationSource, /applyProviderVerification/)
   assert.match(integrationSource, /upsertProviderRecord/)
   assert.doesNotMatch(integrationSource, /response\.text|response\.body|JSON\.stringify\(providerRecord/)
+})
+
+test('shows localized active and archived tenant statuses', () => {
+  assert.match(clientsPageSource, /getTenantStatusLabel\(tenant\.status\)/)
+  assert.match(tenantWorkspaceSource, /getTenantStatusLabel\(tenant\.status\)/)
+})
+
+test('requires an explicit destructive confirmation before archival', () => {
+  assert.match(adminWorkspaceSource, /Archiver le client/)
+  assert.match(adminWorkspaceSource, /role="alertdialog"/)
+  assert.match(adminWorkspaceSource, /Confirmer l’archivage/)
+  assert.match(adminWorkspaceSource, /coupe les accès du client/)
+  assert.match(adminWorkspaceSource, /anciens tokens ne pourront pas/)
+  assert.match(adminWorkspaceSource, /pageState\.tenant\.status === 'active'/)
+})
+
+test('offers reactivation only for an archived tenant and explains reconfiguration', () => {
+  assert.match(adminWorkspaceSource, /Réactiver le client/)
+  assert.match(
+    adminWorkspaceSource,
+    /providers et credentials doivent être reconfigurés/,
+  )
+  assert.match(
+    adminWorkspaceSource,
+    /providers devront être reconfigurés après réactivation/,
+  )
+})
+
+test('renders archived integrations read-only and clears stale providers', () => {
+  assert.match(integrationSource, /tenantStatus === 'archived'/)
+  assert.match(
+    integrationSource,
+    /tenantStatus === 'archived'[\s\S]*?setProviders\(\[\]\)/,
+  )
+  assert.match(integrationSource, /Client archivé\./)
+  assert.match(integrationSource, /Les intégrations sont désactivées/)
+  assert.match(integrationSource, /credentials ont été révoqués/)
+  assert.match(
+    integrationSource,
+    /tenantStatus === 'active'[\s\S]*?\+ Ajouter un provider/,
+  )
+})
+
+test('reloads providers from the backend after tenant reactivation', () => {
+  assert.match(
+    integrationSource,
+    /setProviders\(\[\]\)[\s\S]*?fetchAdminTenantProviders/,
+  )
+  assert.match(
+    integrationSource,
+    /tenantStatus\]\)/,
+  )
+  assert.doesNotMatch(
+    adminWorkspaceSource,
+    /createAdminTenantProvider|Notion|n8n/,
+  )
 })

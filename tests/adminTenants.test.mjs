@@ -31,6 +31,12 @@ test('loads real admin tenants with credential cookies', async () => {
       slug: 'alpha',
       status: 'active',
     },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      name: 'Beta Conseil',
+      slug: 'beta',
+      status: 'archived',
+    },
   ]
   let capturedUrl
   let capturedOptions

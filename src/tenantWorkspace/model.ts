@@ -4,6 +4,12 @@ export interface TenantWorkspaceTenant {
   status: string
 }
 
+export function getTenantStatusLabel(status: string): string {
+  if (status === 'active') return 'Actif'
+  if (status === 'archived') return 'Archivé'
+  return status
+}
+
 export const TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
   'Données',

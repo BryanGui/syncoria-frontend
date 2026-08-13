@@ -11,6 +11,7 @@ import {
   tenantCreationFormReducer,
   validateTenantCreationDraft,
 } from '../tenantCreation/form'
+import { getTenantStatusLabel } from '../tenantWorkspace/model'
 
 interface ClientsPageProps {
   apiBaseUrl: string | null
@@ -259,7 +260,7 @@ export function ClientsPage({
                     <span className={tenant.status === 'active'
                       ? 'tenant-status tenant-status--active'
                       : 'tenant-status'}>
-                      {tenant.status}
+                      {getTenantStatusLabel(tenant.status)}
                     </span>
                   </td>
                   <td><code>{tenant.id}</code></td>

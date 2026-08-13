@@ -6,15 +6,22 @@ import {
   type AdminTenantWorkspaceSection,
   type TenantWorkspaceSection,
   type TenantWorkspaceTenant,
+  getTenantStatusLabel,
 } from '../tenantWorkspace/model'
 
 interface TenantWorkspaceProps {
   tenant: TenantWorkspaceTenant
   onBack?: () => void
   adminIntegration?: ReactNode
+  lifecycleControls?: ReactNode
 }
 
-export function TenantWorkspace({ adminIntegration, tenant, onBack }: TenantWorkspaceProps) {
+export function TenantWorkspace({
+  adminIntegration,
+  lifecycleControls,
+  tenant,
+  onBack,
+}: TenantWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<
     TenantWorkspaceSection | AdminTenantWorkspaceSection
   >(
@@ -36,11 +43,14 @@ export function TenantWorkspace({ adminIntegration, tenant, onBack }: TenantWork
           <p className="eyebrow">Espace tenant</p>
           <h2 id="tenant-workspace-title">{tenant.slug}</h2>
         </div>
-        <span className={tenant.status === 'active'
-          ? 'tenant-status tenant-status--active'
-          : 'tenant-status'}>
-          {tenant.status}
-        </span>
+        <div className="tenant-workspace__heading-actions">
+          <span className={tenant.status === 'active'
+            ? 'tenant-status tenant-status--active'
+            : 'tenant-status'}>
+            {getTenantStatusLabel(tenant.status)}
+          </span>
+          {lifecycleControls}
+        </div>
       </div>
 
       <nav aria-label="Sections de l’espace tenant" className="tenant-workspace__tabs">
@@ -67,7 +77,7 @@ export function TenantWorkspace({ adminIntegration, tenant, onBack }: TenantWork
           </div>
           <div>
             <span>Statut</span>
-            <strong>{tenant.status}</strong>
+            <strong>{getTenantStatusLabel(tenant.status)}</strong>
           </div>
           <div>
             <span>Identifiant technique</span>

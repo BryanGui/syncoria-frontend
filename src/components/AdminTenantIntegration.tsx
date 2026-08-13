@@ -22,6 +22,7 @@ import {
 interface AdminTenantIntegrationProps {
   apiBaseUrl: string | null
   tenantId: string
+  tenantStatus: string
   onSessionExpired: () => void
 }
 
@@ -542,6 +543,7 @@ function ProviderCreationForm({
 export function AdminTenantIntegration({
   apiBaseUrl,
   tenantId,
+  tenantStatus,
   onSessionExpired,
 }: AdminTenantIntegrationProps) {
   const [providers, setProviders] = useState<AdminProviderRecord[]>([])
@@ -550,8 +552,17 @@ export function AdminTenantIntegration({
   const [isAddingProvider, setIsAddingProvider] = useState(false)
 
   useEffect(() => {
+    if (tenantStatus === 'archived') {
+      setProviders([])
+      setIsAddingProvider(false)
+      setLoadState('loaded')
+      return undefined
+    }
+
     const abortController = new AbortController()
     let isActive = true
+    setProviders([])
+    setIsAddingProvider(false)
     setLoadState('loading')
     void fetchAdminTenantProviders(
       apiBaseUrl,
@@ -574,7 +585,7 @@ export function AdminTenantIntegration({
       isActive = false
       abortController.abort()
     }
-  }, [apiBaseUrl, onSessionExpired, reloadKey, tenantId])
+  }, [apiBaseUrl, onSessionExpired, reloadKey, tenantId, tenantStatus])
 
   function updateProvider(provider: AdminProviderRecord) {
     setProviders((currentProviders) => upsertProviderRecord(currentProviders, provider))
@@ -592,7 +603,7 @@ export function AdminTenantIntegration({
           <h3 id="tenant-integration-title">Intégration</h3>
           <p>Configurez les connexions externes et vérifiez leur authentification.</p>
         </div>
-        {loadState === 'loaded' && !isAddingProvider ? (
+        {tenantStatus === 'active' && loadState === 'loaded' && !isAddingProvider ? (
           <button
             className="primary-button"
             onClick={() => setIsAddingProvider(true)}
@@ -602,7 +613,15 @@ export function AdminTenantIntegration({
           </button>
         ) : null}
       </div>
-      {loadState === 'loading' ? (
+      {tenantStatus === 'archived' ? (
+        <div className="provider-list-state provider-list-state--archived">
+          <strong>Client archivé.</strong>
+          <p>
+            Les intégrations sont désactivées et les credentials ont été révoqués.
+            Réactivez le client pour configurer de nouvelles connexions.
+          </p>
+        </div>
+      ) : loadState === 'loading' ? (
         <div aria-live="polite" className="provider-list-state">
           <span className="session-loading__indicator" aria-hidden="true" />
           <p>Chargement des providers…</p>
