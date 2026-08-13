@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import {
   TENANT_WORKSPACE_SECTIONS,
+  ADMIN_TENANT_WORKSPACE_SECTIONS,
+  type AdminTenantWorkspaceSection,
   type TenantWorkspaceSection,
   type TenantWorkspaceTenant,
 } from '../tenantWorkspace/model'
@@ -9,12 +11,18 @@ import {
 interface TenantWorkspaceProps {
   tenant: TenantWorkspaceTenant
   onBack?: () => void
+  adminIntegration?: ReactNode
 }
 
-export function TenantWorkspace({ tenant, onBack }: TenantWorkspaceProps) {
-  const [activeSection, setActiveSection] = useState<TenantWorkspaceSection>(
+export function TenantWorkspace({ adminIntegration, tenant, onBack }: TenantWorkspaceProps) {
+  const [activeSection, setActiveSection] = useState<
+    TenantWorkspaceSection | AdminTenantWorkspaceSection
+  >(
     'Vue générale',
   )
+  const sections = adminIntegration === undefined
+    ? TENANT_WORKSPACE_SECTIONS
+    : ADMIN_TENANT_WORKSPACE_SECTIONS
 
   return (
     <section aria-labelledby="tenant-workspace-title" className="tenant-workspace">
@@ -36,7 +44,7 @@ export function TenantWorkspace({ tenant, onBack }: TenantWorkspaceProps) {
       </div>
 
       <nav aria-label="Sections de l’espace tenant" className="tenant-workspace__tabs">
-        {TENANT_WORKSPACE_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <button
             aria-current={activeSection === section ? 'page' : undefined}
             className={activeSection === section
@@ -66,6 +74,8 @@ export function TenantWorkspace({ tenant, onBack }: TenantWorkspaceProps) {
             <code>{tenant.id}</code>
           </div>
         </div>
+      ) : activeSection === 'Intégration' && adminIntegration !== undefined ? (
+        adminIntegration
       ) : (
         <div className="tenant-workspace__empty">
           <h3>{activeSection}</h3>

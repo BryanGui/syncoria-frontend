@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { fetchAdminTenant } from '../api/adminTenant'
+import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { TenantWorkspace } from '../components/TenantWorkspace'
 import {
   beginTenantWorkspaceLoad,
@@ -89,5 +90,17 @@ export function AdminTenantWorkspacePage({
     )
   }
 
-  return <TenantWorkspace onBack={onBack} tenant={pageState.tenant} />
+  return (
+    <TenantWorkspace
+      adminIntegration={(
+        <AdminTenantIntegration
+          apiBaseUrl={apiBaseUrl}
+          onSessionExpired={onSessionExpired}
+          tenantId={pageState.tenant.id}
+        />
+      )}
+      onBack={onBack}
+      tenant={pageState.tenant}
+    />
+  )
 }
