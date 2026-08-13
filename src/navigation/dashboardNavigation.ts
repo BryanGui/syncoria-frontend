@@ -1,7 +1,6 @@
 export type DashboardPage =
   | 'overview'
   | 'clients'
-  | 'integrations'
   | 'tenant_workspace'
 
 export type DashboardNavigationIcon =
@@ -22,7 +21,6 @@ export const ADMIN_DASHBOARD_NAVIGATION: ReadonlyArray<{
   { icon: 'data', label: 'Données' },
   { icon: 'sync', label: 'Synchronisations' },
   { icon: 'process', label: 'Processus' },
-  { icon: 'integrations', label: 'Intégrations', page: 'integrations' },
 ]
 
 export interface DashboardNavigationState {

@@ -6,7 +6,6 @@ import {
   buildProviderConfiguration,
   getProviderConnectionLabel,
   getProviderConnectionState,
-  selectProviderRecord,
   upsertProviderRecord,
 } from '../src/tenantProviders/state.ts'
 
@@ -84,23 +83,8 @@ test('applies only the sanitized verification structure to the displayed record'
   assert.equal(updated.last_verification_message, verification.message)
 })
 
-test('prefers the active record and otherwise keeps the latest disabled record', () => {
-  const oldDisabled = {
-    ...provider,
-    id: 'old',
-    status: 'disabled',
-    updated_at: '2026-08-13T07:00:00Z',
-  }
-  const latestDisabled = {
-    ...provider,
-    id: 'latest',
-    status: 'disabled',
-    updated_at: '2026-08-13T09:00:00Z',
-  }
-  assert.equal(selectProviderRecord([oldDisabled, provider], 'notion').id, provider.id)
-  assert.equal(
-    selectProviderRecord([oldDisabled, latestDisabled], 'notion').id,
-    latestDisabled.id,
-  )
-  assert.equal(selectProviderRecord([provider], 'n8n'), null)
+test('adds only the provider record returned by the backend', () => {
+  const providers = upsertProviderRecord([], provider)
+  assert.deepEqual(providers, [provider])
+  assert.equal(providers.some((item) => item.provider === 'n8n'), false)
 })
