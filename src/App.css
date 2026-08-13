@@ -1055,6 +1055,13 @@ button.navigation__link {
   font-size: 20px;
 }
 
+.tenant-integration__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
 .tenant-integration__heading p {
   margin: 6px 0 0;
   color: var(--color-text-secondary);
@@ -1216,7 +1223,8 @@ button.navigation__link {
   font-weight: 600;
 }
 
-.provider-form input {
+.provider-form input,
+.provider-form select {
   width: 100%;
   min-height: 40px;
   padding: 0 11px;
@@ -1229,6 +1237,7 @@ button.navigation__link {
 }
 
 .provider-form input:focus-visible,
+.provider-form select:focus-visible,
 .provider-card__disable:focus-visible {
   outline: 2px solid #9ca3af;
   outline-offset: 2px;
@@ -1246,6 +1255,27 @@ button.navigation__link {
 
 .provider-form__error {
   color: #934545;
+}
+
+.provider-form--creation {
+  max-width: 620px;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.provider-form__heading h4 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 16px;
+}
+
+.provider-form__heading p {
+  margin: 5px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .provider-list-state {
@@ -1658,6 +1688,10 @@ button.navigation__link {
 
   .tenant-integration {
     padding: 20px;
+  }
+
+  .tenant-integration__heading {
+    flex-direction: column;
   }
 
   .provider-card__details > div {

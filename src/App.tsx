@@ -40,7 +40,6 @@ import {
 import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
-import { IntegrationsPage } from './pages/IntegrationsPage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
@@ -549,7 +548,6 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
   )
   const isOverview = navigationState.activePage === 'overview'
   const isClients = navigationState.activePage === 'clients'
-  const isIntegrations = navigationState.activePage === 'integrations'
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -630,17 +628,13 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
               ? 'Vue d’ensemble'
               : isClients
                 ? 'Clients'
-                : isIntegrations
-                  ? 'Intégrations'
-                  : 'Espace tenant'}</h1>
+                : 'Espace tenant'}</h1>
             <p className="page-header__description">
               {isOverview
                 ? 'Consultez l’état général des services et les dernières opérations.'
                 : isClients
                   ? 'Consultez les tenants enregistrés dans Syncoria.'
-                  : isIntegrations
-                    ? 'Préparez et suivez les intégrations des clients Syncoria.'
-                    : 'Consultez les informations et sections du tenant sélectionné.'}
+                  : 'Consultez les informations et sections du tenant sélectionné.'}
             </p>
           </div>
           <div className="page-header__actions">
@@ -741,11 +735,6 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
               type: 'open_tenant',
               tenantId,
             })}
-            onSessionExpired={onSessionExpired}
-          />
-        ) : isIntegrations ? (
-          <IntegrationsPage
-            apiBaseUrl={apiBaseUrl}
             onSessionExpired={onSessionExpired}
           />
         ) : navigationState.selectedTenantId !== null ? (

@@ -29,18 +29,9 @@ const clientWorkspaceSource = await readFile(
   'utf8',
 )
 
-test('renders the Integrations header and empty state through the admin dashboard', () => {
-  assert.match(applicationSource, /isIntegrations[\s\S]*?'Intégrations'/)
-  assert.match(
-    applicationSource,
-    /Préparez et suivez les intégrations des clients Syncoria\./,
-  )
-  assert.match(applicationSource, /<IntegrationsPage[\s\S]*?apiBaseUrl=\{apiBaseUrl\}/)
-  assert.match(integrationsPageSource, /Aucune intégration configurée/)
-  assert.match(
-    integrationsPageSource,
-    /Les futures fiches d’intégration des clients seront préparées et suivies/,
-  )
+test('does not expose the historical Integrations page from the admin dashboard', () => {
+  assert.doesNotMatch(applicationSource, /isIntegrations|<IntegrationsPage/)
+  assert.doesNotMatch(applicationSource, /from '.\/pages\/IntegrationsPage'/)
 })
 
 test('does not invent integration data or expose the admin page to clients', () => {

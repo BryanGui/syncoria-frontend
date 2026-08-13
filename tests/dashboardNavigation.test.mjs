@@ -19,38 +19,18 @@ test('opens Clients without a document navigation', () => {
   )
 })
 
-test('opens Integrations and clears a previously selected tenant', () => {
-  assert.deepEqual(
-    dashboardNavigationReducer(
-      {
-        activePage: 'tenant_workspace',
-        selectedTenantId: '11111111-1111-4111-8111-111111111111',
-      },
-      { type: 'open_page', page: 'integrations' },
-    ),
-    { activePage: 'integrations', selectedTenantId: null },
-  )
-})
-
-test('places the real Integrations destination immediately after Processus', () => {
-  const processIndex = ADMIN_DASHBOARD_NAVIGATION.findIndex(
-    (item) => item.label === 'Processus',
-  )
-  const integrationsItem = ADMIN_DASHBOARD_NAVIGATION[processIndex + 1]
-
-  assert.deepEqual(integrationsItem, {
-    icon: 'integrations',
-    label: 'Intégrations',
-    page: 'integrations',
-  })
-})
-
-test('keeps Integrations active only on its page and Clients active in a tenant workspace', () => {
+test('does not expose a global Integrations destination', () => {
   assert.equal(
-    isDashboardNavigationItemActive('integrations', 'integrations'),
-    true,
+    ADMIN_DASHBOARD_NAVIGATION.some((item) => item.label === 'Intégrations'),
+    false,
   )
-  assert.equal(isDashboardNavigationItemActive('clients', 'integrations'), false)
+  assert.equal(
+    ADMIN_DASHBOARD_NAVIGATION.some((item) => item.page === 'integrations'),
+    false,
+  )
+})
+
+test('keeps Clients active in a tenant workspace', () => {
   assert.equal(isDashboardNavigationItemActive('clients', 'tenant_workspace'), true)
 })
 

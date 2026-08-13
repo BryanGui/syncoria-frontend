@@ -16,7 +16,6 @@ import {
   buildProviderConfiguration,
   getProviderConnectionLabel,
   getProviderConnectionState,
-  selectProviderRecord,
   upsertProviderRecord,
 } from '../tenantProviders/state'
 
@@ -27,28 +26,26 @@ interface AdminTenantIntegrationProps {
 }
 
 interface ProviderDefinition {
-  provider: AdminProvider
   title: string
   secretLabel: string
   secretReplacementLabel: string
 }
 
-const PROVIDERS: readonly ProviderDefinition[] = [
-  {
-    provider: 'notion',
-    title: 'Notion',
-    secretLabel: 'Token Notion',
-    secretReplacementLabel: 'Remplacer le token',
-  },
-  {
-    provider: 'n8n',
-    title: 'n8n',
-    secretLabel: 'Clé API n8n',
-    secretReplacementLabel: 'Remplacer la clé',
-  },
-]
+function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
+  return provider === 'notion'
+    ? {
+      title: 'Notion',
+      secretLabel: 'Token Notion',
+      secretReplacementLabel: 'Remplacer le token',
+    }
+    : {
+      title: 'n8n',
+      secretLabel: 'Clé API n8n',
+      secretReplacementLabel: 'Remplacer la clé',
+    }
+}
 
-type FormMode = 'create' | 'edit' | 'credential' | null
+type FormMode = 'edit' | 'credential' | null
 
 function formatVerificationDate(value: string | null): string {
   if (value === null) return 'Jamais'
@@ -69,9 +66,9 @@ function mutationErrorMessage(result: AdminProviderMutationResult): string {
   return 'La modification n’a pas pu être enregistrée.'
 }
 
-interface ProviderCardProps extends ProviderDefinition {
+interface ProviderCardProps {
   apiBaseUrl: string | null
-  providerRecord: AdminProviderRecord | null
+  providerRecord: AdminProviderRecord
   tenantId: string
   onProviderChanged: (provider: AdminProviderRecord) => void
   onSessionExpired: () => void
@@ -79,15 +76,13 @@ interface ProviderCardProps extends ProviderDefinition {
 
 function ProviderCard({
   apiBaseUrl,
-  provider,
   providerRecord,
-  secretLabel,
-  secretReplacementLabel,
   tenantId,
-  title,
   onProviderChanged,
   onSessionExpired,
 }: ProviderCardProps) {
+  const provider = providerRecord.provider
+  const { title, secretLabel, secretReplacementLabel } = getProviderDefinition(provider)
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [name, setName] = useState('')
   const [configurationValue, setConfigurationValue] = useState('')
@@ -102,8 +97,8 @@ function ProviderCard({
     ? 'Référence workspace'
     : 'URL de base'
   const currentConfiguration = provider === 'notion'
-    ? providerRecord?.configuration.workspace_reference
-    : providerRecord?.configuration.base_url
+    ? providerRecord.configuration.workspace_reference
+    : providerRecord.configuration.base_url
 
   function closeForm() {
     if (isSubmitting) return
@@ -112,16 +107,7 @@ function ProviderCard({
     setFormMode(null)
   }
 
-  function openCreateForm() {
-    setName(title)
-    setConfigurationValue('')
-    setSecret('')
-    setErrorMessage(null)
-    setFormMode('create')
-  }
-
   function openEditForm() {
-    if (providerRecord === null) return
     setName(providerRecord.name)
     setConfigurationValue(currentConfiguration ?? '')
     setSecret('')
@@ -157,7 +143,6 @@ function ProviderCard({
     if (
       normalizedName.length === 0
       || (provider === 'n8n' && normalizedConfiguration.length === 0)
-      || (formMode === 'create' && secret.length === 0)
     ) {
       setErrorMessage('Renseignez tous les champs obligatoires.')
       return
@@ -169,28 +154,19 @@ function ProviderCard({
       provider,
       normalizedConfiguration,
     )
-    const result = formMode === 'create'
-      ? await createAdminTenantProvider(apiBaseUrl, tenantId, {
-        provider,
-        name: normalizedName,
-        configuration,
-        secret,
-      })
-      : providerRecord === null
-        ? { status: 'not_found' as const }
-        : await updateAdminTenantProvider(
-          apiBaseUrl,
-          tenantId,
-          providerRecord.id,
-          { name: normalizedName, configuration },
-        )
+    const result = await updateAdminTenantProvider(
+      apiBaseUrl,
+      tenantId,
+      providerRecord.id,
+      { name: normalizedName, configuration },
+    )
     await handleMutationResult(result)
     setIsSubmitting(false)
   }
 
   async function submitCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (secret.length === 0 || providerRecord === null) {
+    if (secret.length === 0) {
       setErrorMessage('Renseignez le nouveau credential.')
       return
     }
@@ -207,7 +183,6 @@ function ProviderCard({
   }
 
   async function verifyConnection() {
-    if (providerRecord === null) return
     setIsVerifying(true)
     setErrorMessage(null)
     const result = await verifyAdminTenantProvider(
@@ -230,7 +205,6 @@ function ProviderCard({
   }
 
   async function disableConnection() {
-    if (providerRecord === null) return
     setIsDisabling(true)
     setErrorMessage(null)
     const result = await deleteAdminTenantProvider(
@@ -260,7 +234,6 @@ function ProviderCard({
   }
 
   async function reactivateConnection() {
-    if (providerRecord === null) return
     setIsSubmitting(true)
     setErrorMessage(null)
     const result = await updateAdminTenantProvider(
@@ -280,10 +253,10 @@ function ProviderCard({
           <p className="provider-card__eyebrow">Provider</p>
           <h4>{title}</h4>
         </div>
-        <span className={providerRecord?.status === 'active'
+        <span className={providerRecord.status === 'active'
           ? 'tenant-status tenant-status--active'
           : 'tenant-status'}>
-          {providerRecord === null ? 'non configuré' : providerRecord.status}
+          {providerRecord.status}
         </span>
       </div>
 
@@ -296,11 +269,11 @@ function ProviderCard({
         </div>
         <div>
           <dt>Nom</dt>
-          <dd>{providerRecord?.name ?? '—'}</dd>
+          <dd>{providerRecord.name}</dd>
         </div>
         <div>
           <dt>Credential</dt>
-          <dd>{providerRecord?.credential_configured ? 'Configuré' : 'Non configuré'}</dd>
+          <dd>{providerRecord.credential_configured ? 'Configuré' : 'Non configuré'}</dd>
         </div>
         <div>
           <dt>{configurationLabel}</dt>
@@ -308,29 +281,28 @@ function ProviderCard({
         </div>
         <div>
           <dt>Dernière vérification</dt>
-          <dd>{formatVerificationDate(providerRecord?.last_verified_at ?? null)}</dd>
+          <dd>{formatVerificationDate(providerRecord.last_verified_at)}</dd>
         </div>
       </dl>
 
-      {providerRecord?.last_verified_at !== null
-        && providerRecord?.last_verified_at !== undefined ? (
-          <div
-            aria-live="polite"
-            className={`provider-verification provider-verification--${connectionState}`}
-          >
-            <strong>{connectionState === 'ok' ? 'Connexion vérifiée' : 'Échec de la vérification'}</strong>
-            {providerRecord.last_verification_message ? (
-              <p>{providerRecord.last_verification_message}</p>
-            ) : null}
-            {providerRecord.last_verification_http_status !== null ? (
-              <span>HTTP {providerRecord.last_verification_http_status}</span>
-            ) : providerRecord.last_verification_code ? (
-              <span>{providerRecord.last_verification_code}</span>
-            ) : null}
-          </div>
-        ) : null}
+      {providerRecord.last_verified_at !== null ? (
+        <div
+          aria-live="polite"
+          className={`provider-verification provider-verification--${connectionState}`}
+        >
+          <strong>{connectionState === 'ok' ? 'Connexion vérifiée' : 'Échec de la vérification'}</strong>
+          {providerRecord.last_verification_message ? (
+            <p>{providerRecord.last_verification_message}</p>
+          ) : null}
+          {providerRecord.last_verification_http_status !== null ? (
+            <span>HTTP {providerRecord.last_verification_http_status}</span>
+          ) : providerRecord.last_verification_code ? (
+            <span>{providerRecord.last_verification_code}</span>
+          ) : null}
+        </div>
+      ) : null}
 
-      {formMode === 'create' || formMode === 'edit' ? (
+      {formMode === 'edit' ? (
         <form className="provider-form" onSubmit={submitForm}>
           <label>
             Nom
@@ -353,18 +325,6 @@ function ProviderCard({
               value={configurationValue}
             />
           </label>
-          {formMode === 'create' ? (
-            <label>
-              {secretLabel}
-              <input
-                autoComplete="new-password"
-                disabled={isSubmitting}
-                onChange={(event) => setSecret(event.target.value)}
-                type="password"
-                value={secret}
-              />
-            </label>
-          ) : null}
           {errorMessage ? <p className="provider-form__error" role="alert">{errorMessage}</p> : null}
           <div className="provider-form__actions">
             <button className="secondary-button" disabled={isSubmitting} onClick={closeForm} type="button">
@@ -403,11 +363,7 @@ function ProviderCard({
         <>
           {errorMessage ? <p className="provider-form__error" role="alert">{errorMessage}</p> : null}
           <div className="provider-card__actions">
-            {providerRecord === null ? (
-              <button className="primary-button" onClick={openCreateForm} type="button">
-                Configurer
-              </button>
-            ) : providerRecord.status !== 'active' ? (
+            {providerRecord.status !== 'active' ? (
               <button
                 className="primary-button"
                 disabled={isSubmitting}
@@ -449,6 +405,140 @@ function ProviderCard({
   )
 }
 
+interface ProviderCreationFormProps {
+  apiBaseUrl: string | null
+  tenantId: string
+  onCancel: () => void
+  onCreated: (provider: AdminProviderRecord) => void
+  onSessionExpired: () => void
+}
+
+function ProviderCreationForm({
+  apiBaseUrl,
+  tenantId,
+  onCancel,
+  onCreated,
+  onSessionExpired,
+}: ProviderCreationFormProps) {
+  const [provider, setProvider] = useState<AdminProvider>('notion')
+  const [name, setName] = useState('')
+  const [configurationValue, setConfigurationValue] = useState('')
+  const [secret, setSecret] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const { secretLabel } = getProviderDefinition(provider)
+  const configurationLabel = provider === 'notion'
+    ? 'Référence workspace (facultatif)'
+    : 'URL de base'
+
+  function cancelCreation() {
+    if (isSubmitting) return
+    setSecret('')
+    onCancel()
+  }
+
+  async function submitCreation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const normalizedName = name.trim()
+    const normalizedConfiguration = configurationValue.trim()
+    if (
+      normalizedName.length === 0
+      || secret.length === 0
+      || (provider === 'n8n' && normalizedConfiguration.length === 0)
+    ) {
+      setErrorMessage('Renseignez tous les champs obligatoires.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMessage(null)
+    const result = await createAdminTenantProvider(apiBaseUrl, tenantId, {
+      provider,
+      name: normalizedName,
+      configuration: buildProviderConfiguration(provider, normalizedConfiguration),
+      secret,
+    })
+    setSecret('')
+    setIsSubmitting(false)
+    if (result.status === 'unauthenticated') {
+      onSessionExpired()
+      return
+    }
+    if (result.status !== 'saved') {
+      setErrorMessage(mutationErrorMessage(result))
+      return
+    }
+    onCreated(result.provider)
+  }
+
+  return (
+    <form className="provider-form provider-form--creation" onSubmit={submitCreation}>
+      <div className="provider-form__heading">
+        <div>
+          <h4>Ajouter un provider</h4>
+          <p>La connexion apparaîtra après sa création côté backend.</p>
+        </div>
+      </div>
+      <label>
+        Provider
+        <select
+          disabled={isSubmitting}
+          onChange={(event) => {
+            setProvider(event.target.value as AdminProvider)
+            setConfigurationValue('')
+            setSecret('')
+            setErrorMessage(null)
+          }}
+          value={provider}
+        >
+          <option value="notion">Notion</option>
+          <option value="n8n">n8n</option>
+        </select>
+      </label>
+      <label>
+        Nom
+        <input
+          disabled={isSubmitting}
+          maxLength={200}
+          onChange={(event) => setName(event.target.value)}
+          value={name}
+        />
+      </label>
+      <label>
+        {configurationLabel}
+        <input
+          autoCapitalize="none"
+          disabled={isSubmitting}
+          onChange={(event) => setConfigurationValue(event.target.value)}
+          placeholder={provider === 'n8n' ? 'https://instance.example.com' : undefined}
+          spellCheck={false}
+          type={provider === 'n8n' ? 'url' : 'text'}
+          value={configurationValue}
+        />
+      </label>
+      <label>
+        {secretLabel}
+        <input
+          autoComplete="new-password"
+          disabled={isSubmitting}
+          onChange={(event) => setSecret(event.target.value)}
+          type="password"
+          value={secret}
+        />
+      </label>
+      {errorMessage ? <p className="provider-form__error" role="alert">{errorMessage}</p> : null}
+      <div className="provider-form__actions">
+        <button className="secondary-button" disabled={isSubmitting} onClick={cancelCreation} type="button">
+          Annuler
+        </button>
+        <button className="primary-button" disabled={isSubmitting} type="submit">
+          {isSubmitting ? 'Création…' : 'Créer le provider'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export function AdminTenantIntegration({
   apiBaseUrl,
   tenantId,
@@ -457,6 +547,7 @@ export function AdminTenantIntegration({
   const [providers, setProviders] = useState<AdminProviderRecord[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [reloadKey, setReloadKey] = useState(0)
+  const [isAddingProvider, setIsAddingProvider] = useState(false)
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -489,6 +580,11 @@ export function AdminTenantIntegration({
     setProviders((currentProviders) => upsertProviderRecord(currentProviders, provider))
   }
 
+  function addProvider(provider: AdminProviderRecord) {
+    updateProvider(provider)
+    setIsAddingProvider(false)
+  }
+
   return (
     <section aria-labelledby="tenant-integration-title" className="tenant-integration">
       <div className="tenant-integration__heading">
@@ -496,6 +592,15 @@ export function AdminTenantIntegration({
           <h3 id="tenant-integration-title">Intégration</h3>
           <p>Configurez les connexions externes et vérifiez leur authentification.</p>
         </div>
+        {loadState === 'loaded' && !isAddingProvider ? (
+          <button
+            className="primary-button"
+            onClick={() => setIsAddingProvider(true)}
+            type="button"
+          >
+            + Ajouter un provider
+          </button>
+        ) : null}
       </div>
       {loadState === 'loading' ? (
         <div aria-live="polite" className="provider-list-state">
@@ -510,19 +615,35 @@ export function AdminTenantIntegration({
           </button>
         </div>
       ) : (
-        <div className="provider-grid">
-          {PROVIDERS.map((definition) => (
-            <ProviderCard
-              {...definition}
+        <>
+          {isAddingProvider ? (
+            <ProviderCreationForm
               apiBaseUrl={apiBaseUrl}
-              key={definition.provider}
-              onProviderChanged={updateProvider}
+              onCancel={() => setIsAddingProvider(false)}
+              onCreated={addProvider}
               onSessionExpired={onSessionExpired}
-              providerRecord={selectProviderRecord(providers, definition.provider)}
               tenantId={tenantId}
             />
-          ))}
-        </div>
+          ) : null}
+          {providers.length === 0 && !isAddingProvider ? (
+            <div className="provider-list-state provider-list-state--empty">
+              <p>Aucun provider configuré.</p>
+            </div>
+          ) : providers.length > 0 ? (
+            <div className="provider-grid">
+              {providers.map((providerRecord) => (
+                <ProviderCard
+                  apiBaseUrl={apiBaseUrl}
+                  key={providerRecord.id}
+                  onProviderChanged={updateProvider}
+                  onSessionExpired={onSessionExpired}
+                  providerRecord={providerRecord}
+                  tenantId={tenantId}
+                />
+              ))}
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   )

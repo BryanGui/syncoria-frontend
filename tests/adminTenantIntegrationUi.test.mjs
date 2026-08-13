@@ -27,10 +27,22 @@ test('adds the integration page only to the admin tenant workspace', () => {
   assert.doesNotMatch(clientWorkspaceSource, /AdminTenantIntegration|adminIntegration/)
 })
 
-test('renders Notion and n8n cards with their operational actions', () => {
-  assert.match(integrationSource, /title: 'Notion'/)
-  assert.match(integrationSource, /title: 'n8n'/)
-  assert.match(integrationSource, /Configurer/)
+test('renders only provider records returned by the backend', () => {
+  assert.match(integrationSource, /providers\.length === 0/)
+  assert.match(integrationSource, /Aucun provider configuré\./)
+  assert.match(integrationSource, /providers\.map\(\(providerRecord\)/)
+  assert.doesNotMatch(integrationSource, /PROVIDERS\.map|selectProviderRecord/)
+})
+
+test('offers Notion and n8n only from the add-provider form', () => {
+  assert.match(integrationSource, /\+ Ajouter un provider/)
+  assert.match(integrationSource, /<option value="notion">Notion<\/option>/)
+  assert.match(integrationSource, /<option value="n8n">n8n<\/option>/)
+  assert.match(integrationSource, /<ProviderCreationForm/)
+})
+
+test('renders the operational actions on a real provider card', () => {
+  assert.match(integrationSource, /providerRecord=\{providerRecord\}/)
   assert.match(integrationSource, /Remplacer le token/)
   assert.match(integrationSource, /Remplacer la clé/)
   assert.match(integrationSource, /Vérifier la connexion/)

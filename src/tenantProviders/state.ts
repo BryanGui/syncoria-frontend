@@ -18,19 +18,6 @@ export function buildProviderConfiguration(
   return { base_url: value }
 }
 
-export function selectProviderRecord(
-  providers: readonly AdminProviderRecord[],
-  provider: AdminProvider,
-): AdminProviderRecord | null {
-  const candidates = providers.filter((item) => item.provider === provider)
-  return candidates.find((item) => item.status === 'active')
-    ?? candidates.reduce<AdminProviderRecord | null>((latest, item) => {
-      if (latest === null) return item
-      return Date.parse(item.updated_at) >= Date.parse(latest.updated_at) ? item : latest
-    }, null)
-    ?? null
-}
-
 export function upsertProviderRecord(
   providers: readonly AdminProviderRecord[],
   provider: AdminProviderRecord,
