@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   ADMIN_TENANT_WORKSPACE_SECTIONS,
   TENANT_WORKSPACE_SECTIONS,
+  getTenantStatusLabel,
 } from '../src/tenantWorkspace/model.ts'
 import { beginTenantWorkspaceLoad } from '../src/tenantWorkspace/state.ts'
 
@@ -42,4 +43,9 @@ test('starting another tenant load clears the previous tenant immediately', () =
   assert.notDeepEqual(previousState, beginTenantWorkspaceLoad())
   assert.deepEqual(beginTenantWorkspaceLoad(), { status: 'loading' })
   assert.doesNotMatch(JSON.stringify(beginTenantWorkspaceLoad()), /alpha/)
+})
+
+test('displays the supported tenant lifecycle statuses in French', () => {
+  assert.equal(getTenantStatusLabel('active'), 'Actif')
+  assert.equal(getTenantStatusLabel('archived'), 'Archivé')
 })

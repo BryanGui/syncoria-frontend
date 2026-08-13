@@ -24,7 +24,7 @@ function isAdminTenant(value: unknown): value is AdminTenant {
     && 'slug' in value
     && typeof value.slug === 'string'
     && 'status' in value
-    && typeof value.status === 'string'
+    && (value.status === 'active' || value.status === 'archived')
   )
 }
 

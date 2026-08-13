@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 
-import { fetchAdminTenant } from '../api/adminTenant'
+import {
+  archiveAdminTenant,
+  fetchAdminTenant,
+  reactivateAdminTenant,
+  type AdminTenantLifecycleResult,
+} from '../api/adminTenant'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { TenantWorkspace } from '../components/TenantWorkspace'
 import {
@@ -25,6 +30,10 @@ export function AdminTenantWorkspacePage({
   const [pageState, setPageState] = useState<TenantWorkspaceLoadState>(
     beginTenantWorkspaceLoad,
   )
+  const [isArchiveConfirmationOpen, setIsArchiveConfirmationOpen] = useState(false)
+  const [isLifecycleSubmitting, setIsLifecycleSubmitting] = useState(false)
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null)
+  const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null)
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -47,6 +56,49 @@ export function AdminTenantWorkspacePage({
       abortController.abort()
     }
   }, [apiBaseUrl, onSessionExpired, reloadKey, tenantId])
+
+  function handleLifecycleFailure(result: AdminTenantLifecycleResult) {
+    if (result.status === 'unauthenticated') {
+      onSessionExpired()
+      return
+    }
+    if (result.status === 'not_found') {
+      setLifecycleError('Ce client n’existe plus.')
+    } else if (result.status === 'conflict') {
+      setLifecycleError('L’état du client a changé. Rechargez la fiche.')
+    } else {
+      setLifecycleError('Le statut du client ne peut pas être modifié pour le moment.')
+    }
+  }
+
+  async function archiveTenant() {
+    setIsLifecycleSubmitting(true)
+    setLifecycleError(null)
+    setLifecycleNotice(null)
+    const result = await archiveAdminTenant(apiBaseUrl, tenantId)
+    setIsLifecycleSubmitting(false)
+    if (result.status !== 'updated') {
+      handleLifecycleFailure(result)
+      return
+    }
+    setPageState({ status: 'loaded', tenant: result.tenant })
+    setIsArchiveConfirmationOpen(false)
+  }
+
+  async function reactivateTenant() {
+    setIsLifecycleSubmitting(true)
+    setLifecycleError(null)
+    const result = await reactivateAdminTenant(apiBaseUrl, tenantId)
+    setIsLifecycleSubmitting(false)
+    if (result.status !== 'updated') {
+      handleLifecycleFailure(result)
+      return
+    }
+    setPageState({ status: 'loaded', tenant: result.tenant })
+    setLifecycleNotice(
+      'Client réactivé. Les providers et credentials doivent être reconfigurés.',
+    )
+  }
 
   if (pageState.status === 'loading') {
     return (
@@ -97,7 +149,77 @@ export function AdminTenantWorkspacePage({
           apiBaseUrl={apiBaseUrl}
           onSessionExpired={onSessionExpired}
           tenantId={pageState.tenant.id}
+          tenantStatus={pageState.tenant.status}
         />
+      )}
+      lifecycleControls={(
+        <div className="tenant-lifecycle">
+          {pageState.tenant.status === 'active' ? (
+            isArchiveConfirmationOpen ? (
+              <div
+                aria-labelledby="archive-tenant-confirmation-title"
+                className="tenant-lifecycle__confirmation"
+                role="alertdialog"
+              >
+                <strong id="archive-tenant-confirmation-title">
+                  Confirmer l’archivage
+                </strong>
+                <p>
+                  L’archivage coupe les accès du client et supprime les providers
+                  et credentials configurés. Les anciens tokens ne pourront pas
+                  être restaurés automatiquement après une réactivation.
+                </p>
+                <div>
+                  <button
+                    className="secondary-button"
+                    disabled={isLifecycleSubmitting}
+                    onClick={() => setIsArchiveConfirmationOpen(false)}
+                    type="button"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    className="danger-button"
+                    disabled={isLifecycleSubmitting}
+                    onClick={() => void archiveTenant()}
+                    type="button"
+                  >
+                    {isLifecycleSubmitting ? 'Archivage…' : 'Confirmer l’archivage'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="danger-button"
+                onClick={() => {
+                  setLifecycleError(null)
+                  setIsArchiveConfirmationOpen(true)
+                }}
+                type="button"
+              >
+                Archiver le client
+              </button>
+            )
+          ) : (
+            <div className="tenant-lifecycle__reactivation">
+              <button
+                className="primary-button"
+                disabled={isLifecycleSubmitting}
+                onClick={() => void reactivateTenant()}
+                type="button"
+              >
+                {isLifecycleSubmitting ? 'Réactivation…' : 'Réactiver le client'}
+              </button>
+              <span>Les providers devront être reconfigurés après réactivation.</span>
+            </div>
+          )}
+          {lifecycleError ? (
+            <p className="tenant-lifecycle__error" role="alert">{lifecycleError}</p>
+          ) : null}
+          {lifecycleNotice ? (
+            <p className="tenant-lifecycle__notice" role="status">{lifecycleNotice}</p>
+          ) : null}
+        </div>
       )}
       onBack={onBack}
       tenant={pageState.tenant}

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { fetchAdminTenant } from '../src/api/adminTenant.ts'
+import {
+  archiveAdminTenant,
+  fetchAdminTenant,
+  reactivateAdminTenant,
+} from '../src/api/adminTenant.ts'
 
 
 function createLoggerSpy() {
@@ -101,6 +105,105 @@ test('rejects a malformed tenant response', async () => {
 
   assert.deepEqual(
     await fetchAdminTenant('https://api.example.com', tenant.id, undefined, request),
+    { status: 'error' },
+  )
+})
+
+test('archives a tenant through the dedicated admin endpoint', async () => {
+  let capturedUrl
+  let capturedOptions
+  const archivedTenant = { ...tenant, status: 'archived' }
+  const request = async (url, options) => {
+    capturedUrl = url
+    capturedOptions = options
+    return Response.json({
+      ...archivedTenant,
+      credential: 'must-not-enter-application-state',
+    })
+  }
+
+  assert.deepEqual(
+    await archiveAdminTenant(
+      'https://api.example.com',
+      tenant.id,
+      request,
+    ),
+    { status: 'updated', tenant: archivedTenant },
+  )
+  assert.equal(
+    capturedUrl,
+    `https://api.example.com/admin/tenants/${tenant.id}/archive`,
+  )
+  assert.equal(capturedOptions.method, 'POST')
+  assert.equal(capturedOptions.credentials, 'include')
+})
+
+test('reactivates a tenant without sending provider state', async () => {
+  let capturedOptions
+  const request = async (_url, options) => {
+    capturedOptions = options
+    return Response.json(tenant)
+  }
+
+  assert.deepEqual(
+    await reactivateAdminTenant(
+      'https://api.example.com',
+      tenant.id,
+      request,
+    ),
+    { status: 'updated', tenant },
+  )
+  assert.equal(capturedOptions.method, 'POST')
+  assert.equal('body' in capturedOptions, false)
+})
+
+test('reports lifecycle authentication, missing and conflict states separately', async () => {
+  for (const [httpStatus, expectedStatus] of [
+    [401, 'unauthenticated'],
+    [404, 'not_found'],
+    [409, 'conflict'],
+  ]) {
+    const request = async () => Response.json({}, { status: httpStatus })
+    assert.deepEqual(
+      await archiveAdminTenant(
+        'https://api.example.com',
+        tenant.id,
+        request,
+      ),
+      { status: expectedStatus },
+    )
+  }
+})
+
+test('sanitizes lifecycle backend failures', async () => {
+  const { entries, logger } = createLoggerSpy()
+  const request = async () => Response.json(
+    { detail: 'sensitive database detail' },
+    { status: 503 },
+  )
+
+  assert.deepEqual(
+    await reactivateAdminTenant(
+      'https://api.example.com',
+      tenant.id,
+      request,
+      logger,
+    ),
+    { status: 'error' },
+  )
+  assert.equal(entries[0].context.httpStatus, 503)
+  assert.doesNotMatch(JSON.stringify(entries), /sensitive database detail/)
+})
+
+test('rejects a malformed lifecycle response', async () => {
+  const request = async () => Response.json({ id: tenant.id, status: 'archived' })
+
+  assert.deepEqual(
+    await archiveAdminTenant(
+      'https://api.example.com',
+      tenant.id,
+      request,
+    ),
     { status: 'error' },
   )
 })
