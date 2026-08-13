@@ -1,10 +1,22 @@
 import type {
   AdminProvider,
+  AdminProviderConfiguration,
   AdminProviderRecord,
   ProviderVerificationResult,
 } from '../api/adminTenantProviders.ts'
 
 export type ProviderConnectionState = 'not_configured' | 'pending' | 'ok' | 'error'
+
+export function buildProviderConfiguration(
+  provider: AdminProvider,
+  rawValue: string,
+): AdminProviderConfiguration {
+  const value = rawValue.trim()
+  if (provider === 'notion') {
+    return value.length === 0 ? {} : { workspace_reference: value }
+  }
+  return { base_url: value }
+}
 
 export function selectProviderRecord(
   providers: readonly AdminProviderRecord[],

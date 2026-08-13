@@ -10,6 +10,7 @@ import {
   updateAdminTenantProvider,
   verifyAdminTenantProvider,
 } from '../src/api/adminTenantProviders.ts'
+import { buildProviderConfiguration } from '../src/tenantProviders/state.ts'
 
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
@@ -109,6 +110,29 @@ test('creates Notion and n8n using only their expected non-sensitive configurati
     })
     assert.doesNotMatch(JSON.stringify(result), new RegExp(syntheticSecret))
   }
+})
+
+test('creates Notion without sending an empty workspace reference', async () => {
+  let capturedOptions
+  const request = async (_url, options) => {
+    capturedOptions = options
+    return Response.json({ ...notionRecord, configuration: {} }, { status: 201 })
+  }
+  const result = await createAdminTenantProvider(
+    'https://api.example.com',
+    tenantId,
+    {
+      provider: 'notion',
+      name: 'Notion recrutement',
+      configuration: buildProviderConfiguration('notion', '   '),
+      secret: randomBytes(24).toString('base64url'),
+    },
+    request,
+  )
+  const body = JSON.parse(capturedOptions.body)
+  assert.equal(result.status, 'saved')
+  assert.deepEqual(body.configuration, {})
+  assert.equal('workspace_reference' in body.configuration, false)
 })
 
 test('updates configuration and keeps the backend verification invalidation', async () => {

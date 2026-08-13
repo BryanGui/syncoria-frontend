@@ -8,12 +8,12 @@ import {
   updateAdminTenantProvider,
   verifyAdminTenantProvider,
   type AdminProvider,
-  type AdminProviderConfiguration,
   type AdminProviderMutationResult,
   type AdminProviderRecord,
 } from '../api/adminTenantProviders'
 import {
   applyProviderVerification,
+  buildProviderConfiguration,
   getProviderConnectionLabel,
   getProviderConnectionState,
   selectProviderRecord,
@@ -165,9 +165,10 @@ function ProviderCard({
 
     setIsSubmitting(true)
     setErrorMessage(null)
-    const configuration: AdminProviderConfiguration = provider === 'notion'
-      ? { workspace_reference: normalizedConfiguration }
-      : { base_url: normalizedConfiguration }
+    const configuration = buildProviderConfiguration(
+      provider,
+      normalizedConfiguration,
+    )
     const result = formMode === 'create'
       ? await createAdminTenantProvider(apiBaseUrl, tenantId, {
         provider,

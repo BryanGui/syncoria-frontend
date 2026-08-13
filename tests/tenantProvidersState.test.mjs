@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   applyProviderVerification,
+  buildProviderConfiguration,
   getProviderConnectionLabel,
   getProviderConnectionState,
   selectProviderRecord,
@@ -26,6 +27,16 @@ const provider = {
   last_verification_code: null,
   last_verification_message: 'Authentification confirmée.',
 }
+
+test('builds optional Notion and required n8n configuration consistently', () => {
+  assert.deepEqual(buildProviderConfiguration('notion', '   '), {})
+  assert.deepEqual(buildProviderConfiguration('notion', ' workspace '), {
+    workspace_reference: 'workspace',
+  })
+  assert.deepEqual(buildProviderConfiguration('n8n', ' https://n8n.example.com '), {
+    base_url: 'https://n8n.example.com',
+  })
+})
 
 test('represents empty, pending, successful and failed connections', () => {
   assert.equal(getProviderConnectionState(null), 'not_configured')
