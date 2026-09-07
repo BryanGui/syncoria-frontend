@@ -1597,3 +1597,13 @@ button.navigation__link {
     grid-column: 2;
   }
 }
+
+.tenant-audit { padding: 1.5rem; }
+.tenant-audit__report { max-width: 42rem; padding: 1.25rem; border: 1px solid #dce4ec; border-radius: 12px; }
+.tenant-audit__report h4 { margin-top: 0; font-size: 1.15rem; }
+.tenant-audit__report dl { max-width: 25rem; }
+.tenant-audit__report dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; }
+.tenant-audit__report dd { margin: 0; font-weight: 600; }
+.tenant-audit__actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.tenant-audit__actions a { text-decoration: none; }
+.tenant-audit__hint { font-size: .8em; }

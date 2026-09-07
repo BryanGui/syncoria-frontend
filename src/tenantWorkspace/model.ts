@@ -24,6 +24,7 @@ export const ADMIN_TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
   'Données',
   'Intégration',
+  'Audit & cartographie',
   'Automatisations',
   'Logs',
 ] as const

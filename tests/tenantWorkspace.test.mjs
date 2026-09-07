@@ -24,6 +24,7 @@ test('adds a singular Integration section to the admin workspace only', () => {
     'Vue générale',
     'Données',
     'Intégration',
+    'Audit & cartographie',
     'Automatisations',
     'Logs',
   ])

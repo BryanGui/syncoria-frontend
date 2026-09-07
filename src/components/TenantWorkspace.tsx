@@ -12,11 +12,13 @@ import {
 interface TenantWorkspaceProps {
   tenant: TenantWorkspaceTenant
   onBack?: () => void
+  adminReports?: ReactNode
   adminIntegration?: ReactNode
   lifecycleControls?: ReactNode
 }
 
 export function TenantWorkspace({
+  adminReports,
   adminIntegration,
   lifecycleControls,
   tenant,
@@ -84,6 +86,8 @@ export function TenantWorkspace({
             <code>{tenant.id}</code>
           </div>
         </div>
+      ) : activeSection === 'Audit & cartographie' && adminReports !== undefined ? (
+        adminReports
       ) : activeSection === 'Intégration' && adminIntegration !== undefined ? (
         adminIntegration
       ) : (
