@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildAdminTenantReportPdfUrl, fetchAdminTenantReports } from '../src/api/adminTenantReports.ts'
+import { archiveAdminTenantReport, buildAdminTenantReportPdfUrl, fetchAdminTenantReports } from '../src/api/adminTenantReports.ts'
 import { TENANT_WORKSPACE_SECTIONS, ADMIN_TENANT_WORKSPACE_SECTIONS } from '../src/tenantWorkspace/model.ts'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
 const report = {
   id: 'audit-example', title: 'Audit exemple', status: 'completed',
+  provider: 'notion', report_date: '2026-09-07',
   sources_analyzed: 3, sources_retained: 2, sources_excluded: 1,
   records_retained: 7, decisions_required: 1,
 }
@@ -55,4 +56,40 @@ test('constructs only the bounded PDF endpoint for the selected tenant', () => {
 test('audit navigation exists only in the admin workspace', () => {
   assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Audit & cartographie'), true)
   assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Audit & cartographie'), false)
+})
+
+
+test('keeps same-provider reports and archives sorted newest first', async () => {
+  const newer = { ...report, id: 'audit-notion-2026-10-15', report_date: '2026-10-15' }
+  const archived = { ...report, id: 'audit-notion-2026-08-01', report_date: '2026-08-01', status: 'archived' }
+  assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => Response.json([archived, report, newer])), { status: 'loaded', reports: [newer, report, archived] })
+})
+
+test('rejects impossible, implicit and missing dates', async () => {
+  for (const report_date of ['2026-02-30', '2026-13-01', '07/09/2026', '2026-09-07T00:00:00Z', '0000-01-01', null, undefined]) {
+    assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => Response.json([{ ...report, report_date }])), { status: 'error' })
+  }
+})
+
+test('archives only the selected report and validates returned state', async () => {
+  const archived = { ...report, status: 'archived' }
+  const signal = new AbortController().signal
+  const request = async (url, options) => {
+    assert.equal(url, `https://api.example.com/admin/tenants/${tenantId}/reports/audit-example/archive`)
+    assert.equal(options.method, 'POST')
+    assert.equal(options.credentials, 'include')
+    assert.equal(options.signal, signal)
+    return Response.json(archived)
+  }
+  assert.deepEqual(await archiveAdminTenantReport('https://api.example.com', tenantId, report.id, signal, request), { status: 'archived', report: archived })
+  for (const payload of [report, { ...archived, id: 'other' }]) {
+    assert.deepEqual(await archiveAdminTenantReport('https://api.example.com', tenantId, report.id, undefined, async () => Response.json(payload)), { status: 'error' })
+  }
+})
+
+test('archive handles expired session, missing report and sanitized failures', async () => {
+  for (const [status, expected] of [[401, 'unauthenticated'], [404, 'not_found'], [503, 'error']]) {
+    assert.deepEqual(await archiveAdminTenantReport('https://api.example.com', tenantId, report.id, undefined, async () => Response.json({ detail: 'internal failure' }, { status })), { status: expected })
+  }
+  assert.deepEqual(await archiveAdminTenantReport('https://api.example.com', tenantId, '../other', undefined, () => { throw new Error('must not request') }), { status: 'error' })
 })
