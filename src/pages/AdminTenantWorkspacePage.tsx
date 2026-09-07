@@ -6,6 +6,7 @@ import {
   reactivateAdminTenant,
   type AdminTenantLifecycleResult,
 } from '../api/adminTenant'
+import { AdminTenantReports } from '../components/AdminTenantReports'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { TenantWorkspace } from '../components/TenantWorkspace'
 import {
@@ -144,6 +145,14 @@ export function AdminTenantWorkspacePage({
 
   return (
     <TenantWorkspace
+      adminReports={pageState.tenant.status === 'active' ? (
+        <AdminTenantReports
+          key={pageState.tenant.id}
+          apiBaseUrl={apiBaseUrl}
+          tenantId={pageState.tenant.id}
+          onSessionExpired={onSessionExpired}
+        />
+      ) : <p className="tenant-audit">Client archivé : les rapports ne sont pas disponibles.</p>}
       adminIntegration={(
         <AdminTenantIntegration
           apiBaseUrl={apiBaseUrl}

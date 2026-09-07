@@ -95,3 +95,25 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+### Audit & cartographie (administration)
+
+La fiche client admin comporte un onglet **Audit & cartographie**. Il charge
+`GET /admin/tenants/{tenant_id}/reports` et présente les métadonnées publiées
+par le backend, sans chiffres spécifiques à un client dans le code React.
+Un catalogue vide affiche « Aucun rapport publié pour ce client ».
+
+« Voir le rapport » ouvre le PDF dans un nouvel onglet via
+`GET /admin/tenants/{tenant_id}/reports/{report_id}/pdf`. « Télécharger PDF »
+utilise la même route avec `?download=true`. Le navigateur envoie le cookie
+admin HttpOnly directement à l’API ; aucun token n’est lu par le frontend.
+L’API contrôle de nouveau la session et le tenant pour chaque accès, y compris
+si la session expire entre le chargement de la fiche et l’ouverture du PDF.
+Les erreurs de métadonnées sont génériques et peuvent être retentées.
+
+Le compteur de décisions n’est affiché que lorsqu’il est fourni par le backend.
+« Terminé » qualifie l’audit, pas l’ingestion ou la validation des règles métier.
+L’espace client ne reçoit pas cet onglet. Aucun rapport, chemin filesystem ou
+payload Notion n’est embarqué dans le build. Voir le ticket backend
+[BryanGui/syncoria-backend#56](https://github.com/BryanGui/syncoria-backend/issues/56)
+et `docs/AUDIT_REPORT_STANDARD.md` dans le dépôt backend pour la publication.
