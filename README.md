@@ -117,3 +117,46 @@ L’espace client ne reçoit pas cet onglet. Aucun rapport, chemin filesystem ou
 payload Notion n’est embarqué dans le build. Voir le ticket backend
 [BryanGui/syncoria-backend#56](https://github.com/BryanGui/syncoria-backend/issues/56)
 et `docs/AUDIT_REPORT_STANDARD.md` dans le dépôt backend pour la publication.
+
+### Rapports datés et archivage (#58)
+
+L’onglet audit affiche `report_date` (ISO côté API) en `JJ/MM/AAAA`, sans
+conversion de fuseau horaire. Plusieurs rapports du même provider peuvent
+coexister. Les sections « Rapports actifs » et « Rapports archivés » sont triées
+par date décroissante puis ID décroissant pour départager les dates identiques.
+
+« Archiver » ouvre une confirmation avec la date du rapport. Annuler n’effectue
+aucun appel d’écriture ; confirmer appelle
+`POST /admin/tenants/{tenant_id}/reports/{report_id}/archive`, puis recharge la
+liste. Les erreurs restent génériques et une session expirée renvoie à la
+connexion. Les rapports archivés gardent leurs liens de consultation et de
+téléchargement. Aucun fichier ni catalogue n’est écrit par le frontend.
+
+Les corrections d’alignement, hauteur et padding sont limitées aux actions de
+l’onglet audit. Sur mobile, les boutons prennent toute la largeur. Les styles
+globaux des autres écrans restent inchangés.
+
+Validation :
+
+```sh
+npm ci
+npm test
+npm run lint
+VITE_API_BASE_URL=https://api.bryanlab.ovh npm run build
+npx playwright install chromium
+npm run test:browser
+git diff --check
+```
+
+`@playwright/test` est une dépendance de développement nécessaire aux tests
+réels du centrage desktop/mobile, de la confirmation, du déplacement vers les
+archives et du téléchargement. Aucun code Playwright n’entre dans le bundle.
+Les tests servent le build localement et interceptent toutes les requêtes API
+avec des données synthétiques ; aucun appel n’atteint la production. Les
+résultats et captures sont ignorés par Git. Les dépendances système Chromium
+peuvent être installées dans un conteneur de test isolé avec
+`npx playwright install --with-deps chromium`.
+
+Les modifications package.json/package-lock.json ajoutent uniquement cet outil
+de test et le script `test:browser` ; aucune dépendance applicative n’est mise à
+jour. Le backend #58 et sa migration 014 sont requis avant activation de l’UI.
