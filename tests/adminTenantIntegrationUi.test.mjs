@@ -60,12 +60,36 @@ test('keeps provider-specific credential terminology inside forms', () => {
   assert.match(integrationSource, /Nouveau \{secretLabel\.toLocaleLowerCase\('fr-FR'\)\}/)
 })
 
-test('renders the credential type declared by each provider definition', () => {
-  assert.match(integrationSource, /credentialType: 'Token'/)
-  assert.match(integrationSource, /credentialType: 'Clé API'/)
+test('centralizes credential type values and labels by provider', () => {
   assert.match(
     integrationSource,
-    /<dt>Credential<\/dt>[\s\S]*?<dt>Type de credential<\/dt>\s*<dd>\{credentialType\}<\/dd>/,
+    /credentialTypes: \[\{ value: 'integration_token', label: 'Token' \}\]/,
+  )
+  assert.match(
+    integrationSource,
+    /credentialTypes: \[\{ value: 'api_key', label: 'Clé API' \}\]/,
+  )
+})
+
+test('offers provider credential types and resets the selection on provider change', () => {
+  assert.match(
+    integrationSource,
+    /Provider[\s\S]*?<\/select>\s*<\/label>\s*<label>\s*Type de credential/,
+  )
+  assert.match(integrationSource, /credentialTypes\.map\(\(\{ label, value \}\)/)
+  assert.match(
+    integrationSource,
+    /setCredentialType\(\s*getProviderDefinition\(nextProvider\)\.credentialTypes\[0\]\.value/,
+  )
+  assert.match(integrationSource, /credential_type: credentialType/)
+})
+
+test('renders the credential type received from the backend with a neutral fallback', () => {
+  assert.match(integrationSource, /value === providerRecord\.credential_type/)
+  assert.match(integrationSource, /\?\.label \?\? 'À préciser'/)
+  assert.match(
+    integrationSource,
+    /<dt>Credential<\/dt>[\s\S]*?<dt>Type de credential<\/dt>\s*<dd>\{credentialTypeLabel\}<\/dd>/,
   )
 })
 

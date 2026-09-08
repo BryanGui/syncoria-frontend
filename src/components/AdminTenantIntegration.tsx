@@ -29,7 +29,10 @@ interface AdminTenantIntegrationProps {
 interface ProviderDefinition {
   title: string
   secretLabel: string
-  credentialType: string
+  credentialTypes: readonly [
+    { value: string; label: string },
+    ...Array<{ value: string; label: string }>,
+  ]
 }
 
 function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
@@ -37,12 +40,12 @@ function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
     ? {
       title: 'Notion',
       secretLabel: 'Token Notion',
-      credentialType: 'Token',
+      credentialTypes: [{ value: 'integration_token', label: 'Token' }],
     }
     : {
       title: 'n8n',
       secretLabel: 'Clé API n8n',
-      credentialType: 'Clé API',
+      credentialTypes: [{ value: 'api_key', label: 'Clé API' }],
     }
 }
 
@@ -83,7 +86,7 @@ function ProviderCard({
   onSessionExpired,
 }: ProviderCardProps) {
   const provider = providerRecord.provider
-  const { title, secretLabel, credentialType } = getProviderDefinition(provider)
+  const { title, secretLabel, credentialTypes } = getProviderDefinition(provider)
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [name, setName] = useState('')
   const [configurationValue, setConfigurationValue] = useState('')
@@ -94,6 +97,9 @@ function ProviderCard({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const connectionState = getProviderConnectionState(providerRecord)
+  const credentialTypeLabel = credentialTypes.find(
+    ({ value }) => value === providerRecord.credential_type,
+  )?.label ?? 'À préciser'
   const configurationLabel = provider === 'notion'
     ? 'Référence workspace'
     : 'URL de base'
@@ -278,7 +284,7 @@ function ProviderCard({
         </div>
         <div>
           <dt>Type de credential</dt>
-          <dd>{credentialType}</dd>
+          <dd>{credentialTypeLabel}</dd>
         </div>
         <div>
           <dt>{configurationLabel}</dt>
@@ -426,12 +432,15 @@ function ProviderCreationForm({
   onSessionExpired,
 }: ProviderCreationFormProps) {
   const [provider, setProvider] = useState<AdminProvider>('notion')
+  const [credentialType, setCredentialType] = useState(
+    getProviderDefinition('notion').credentialTypes[0].value,
+  )
   const [name, setName] = useState('')
   const [configurationValue, setConfigurationValue] = useState('')
   const [secret, setSecret] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const { secretLabel } = getProviderDefinition(provider)
+  const { credentialTypes, secretLabel } = getProviderDefinition(provider)
   const configurationLabel = provider === 'notion'
     ? 'Référence workspace (facultatif)'
     : 'URL de base'
@@ -459,6 +468,7 @@ function ProviderCreationForm({
     setErrorMessage(null)
     const result = await createAdminTenantProvider(apiBaseUrl, tenantId, {
       provider,
+      credential_type: credentialType,
       name: normalizedName,
       configuration: buildProviderConfiguration(provider, normalizedConfiguration),
       secret,
@@ -489,7 +499,11 @@ function ProviderCreationForm({
         <select
           disabled={isSubmitting}
           onChange={(event) => {
-            setProvider(event.target.value as AdminProvider)
+            const nextProvider = event.target.value as AdminProvider
+            setProvider(nextProvider)
+            setCredentialType(
+              getProviderDefinition(nextProvider).credentialTypes[0].value,
+            )
             setConfigurationValue('')
             setSecret('')
             setErrorMessage(null)
@@ -498,6 +512,18 @@ function ProviderCreationForm({
         >
           <option value="notion">Notion</option>
           <option value="n8n">n8n</option>
+        </select>
+      </label>
+      <label>
+        Type de credential
+        <select
+          disabled={isSubmitting}
+          onChange={(event) => setCredentialType(event.target.value)}
+          value={credentialType}
+        >
+          {credentialTypes.map(({ label, value }) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
         </select>
       </label>
       <label>
