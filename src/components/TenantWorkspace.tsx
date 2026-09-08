@@ -86,9 +86,9 @@ export function TenantWorkspace({
             <code>{tenant.id}</code>
           </div>
         </div>
-      ) : activeSection === 'Audit & cartographie' && adminReports !== undefined ? (
+      ) : activeSection === 'Rapports' && adminReports !== undefined ? (
         adminReports
-      ) : activeSection === 'Intégration' && adminIntegration !== undefined ? (
+      ) : activeSection === 'Provider credentials' && adminIntegration !== undefined ? (
         adminIntegration
       ) : (
         <div className="tenant-workspace__empty">

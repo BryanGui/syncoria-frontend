@@ -24,10 +24,10 @@ const clientsPageSource = await readFile(
   'utf8',
 )
 
-test('adds the integration page only to the admin tenant workspace', () => {
+test('renders provider credentials only in the admin tenant workspace', () => {
   assert.match(adminWorkspaceSource, /adminIntegration=\{/)
   assert.match(adminWorkspaceSource, /<AdminTenantIntegration/)
-  assert.match(tenantWorkspaceSource, /activeSection === 'Intégration'/)
+  assert.match(tenantWorkspaceSource, /activeSection === 'Provider credentials'/)
   assert.doesNotMatch(clientWorkspaceSource, /AdminTenantIntegration|adminIntegration/)
 })
 

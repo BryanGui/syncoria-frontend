@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -8,6 +9,11 @@ import {
 } from '../src/tenantWorkspace/model.ts'
 import { beginTenantWorkspaceLoad } from '../src/tenantWorkspace/state.ts'
 
+
+const tenantWorkspaceSource = await readFile(
+  new URL('../src/components/TenantWorkspace.tsx', import.meta.url),
+  'utf8',
+)
 
 test('defines the five requested workspace sections without invented data', () => {
   assert.deepEqual(TENANT_WORKSPACE_SECTIONS, [
@@ -19,16 +25,40 @@ test('defines the five requested workspace sections without invented data', () =
   ])
 })
 
-test('adds a singular Integration section to the admin workspace only', () => {
+test('defines the exact admin workspace navigation without changing tenant navigation', () => {
   assert.deepEqual(ADMIN_TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
-    'Données',
-    'Intégration',
-    'Audit & cartographie',
+    'Provider credentials',
+    'Sources',
+    'Ingestion',
+    'Rapports',
     'Automatisations',
     'Logs',
   ])
-  assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Intégration'), false)
+  for (const legacySection of ['Données', 'Intégration', 'Audit & cartographie']) {
+    assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes(legacySection), false)
+  }
+})
+
+test('renders admin content only for provider credentials and reports', () => {
+  assert.match(
+    tenantWorkspaceSource,
+    /activeSection === 'Provider credentials'[\s\S]*?adminIntegration/,
+  )
+  assert.match(
+    tenantWorkspaceSource,
+    /activeSection === 'Rapports'[\s\S]*?adminReports/,
+  )
+})
+
+test('keeps Sources and Ingestion on the existing empty placeholder', () => {
+  assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Sources'/)
+  assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Ingestion'/)
+  assert.match(tenantWorkspaceSource, /className="tenant-workspace__empty"/)
+  assert.match(
+    tenantWorkspaceSource,
+    /Aucune donnée n’est affichée dans cette section pour le moment\./,
+  )
 })
 
 test('starting another tenant load clears the previous tenant immediately', () => {

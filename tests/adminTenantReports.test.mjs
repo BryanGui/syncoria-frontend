@@ -1,9 +1,18 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { archiveAdminTenantReport, buildAdminTenantReportPdfUrl, fetchAdminTenantReports } from '../src/api/adminTenantReports.ts'
 import { TENANT_WORKSPACE_SECTIONS, ADMIN_TENANT_WORKSPACE_SECTIONS } from '../src/tenantWorkspace/model.ts'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
+const adminWorkspaceSource = await readFile(
+  new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url),
+  'utf8',
+)
+const tenantWorkspaceSource = await readFile(
+  new URL('../src/components/TenantWorkspace.tsx', import.meta.url),
+  'utf8',
+)
 const report = {
   id: 'audit-example', title: 'Audit exemple', status: 'completed',
   provider: 'notion', report_date: '2026-09-07',
@@ -53,9 +62,12 @@ test('constructs only the bounded PDF endpoint for the selected tenant', () => {
   assert.equal(buildAdminTenantReportPdfUrl('https://api.example.com', '../other', 'audit-example'), undefined)
 })
 
-test('audit navigation exists only in the admin workspace', () => {
-  assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Audit & cartographie'), true)
-  assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Audit & cartographie'), false)
+test('reports navigation exists only in the admin workspace', () => {
+  assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Rapports'), true)
+  assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Rapports'), false)
+  assert.match(adminWorkspaceSource, /adminReports=\{/)
+  assert.match(adminWorkspaceSource, /<AdminTenantReports/)
+  assert.match(tenantWorkspaceSource, /activeSection === 'Rapports'/)
 })
 
 
