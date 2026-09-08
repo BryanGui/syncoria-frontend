@@ -47,11 +47,17 @@ test('offers Notion and n8n only from the add-provider form', () => {
 
 test('renders the operational actions on a real provider card', () => {
   assert.match(integrationSource, /providerRecord=\{providerRecord\}/)
-  assert.match(integrationSource, /Remplacer le token/)
-  assert.match(integrationSource, /Remplacer la clé/)
+  assert.match(integrationSource, /Modifier les identifiants/)
+  assert.doesNotMatch(integrationSource, /Remplacer le token|Remplacer la clé/)
   assert.match(integrationSource, /Vérifier la connexion/)
   assert.match(integrationSource, /Vérification…/)
   assert.match(integrationSource, /Désactiver/)
+})
+
+test('keeps provider-specific credential terminology inside forms', () => {
+  assert.match(integrationSource, /secretLabel: 'Token Notion'/)
+  assert.match(integrationSource, /secretLabel: 'Clé API n8n'/)
+  assert.match(integrationSource, /Nouveau \{secretLabel\.toLocaleLowerCase\('fr-FR'\)\}/)
 })
 
 test('uses password-only transient credential fields and clears them after success', () => {
