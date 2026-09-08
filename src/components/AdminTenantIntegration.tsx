@@ -29,6 +29,7 @@ interface AdminTenantIntegrationProps {
 interface ProviderDefinition {
   title: string
   secretLabel: string
+  credentialType: string
 }
 
 function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
@@ -36,10 +37,12 @@ function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
     ? {
       title: 'Notion',
       secretLabel: 'Token Notion',
+      credentialType: 'Token',
     }
     : {
       title: 'n8n',
       secretLabel: 'Clé API n8n',
+      credentialType: 'Clé API',
     }
 }
 
@@ -80,7 +83,7 @@ function ProviderCard({
   onSessionExpired,
 }: ProviderCardProps) {
   const provider = providerRecord.provider
-  const { title, secretLabel } = getProviderDefinition(provider)
+  const { title, secretLabel, credentialType } = getProviderDefinition(provider)
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [name, setName] = useState('')
   const [configurationValue, setConfigurationValue] = useState('')
@@ -272,6 +275,10 @@ function ProviderCard({
         <div>
           <dt>Credential</dt>
           <dd>{providerRecord.credential_configured ? 'Configuré' : 'Non configuré'}</dd>
+        </div>
+        <div>
+          <dt>Type de credential</dt>
+          <dd>{credentialType}</dd>
         </div>
         <div>
           <dt>{configurationLabel}</dt>
