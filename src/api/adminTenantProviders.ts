@@ -14,6 +14,7 @@ export interface AdminProviderRecord {
   id: string
   tenant_id: string
   provider: AdminProvider
+  credential_type: string | null
   name: string
   status: string
   configuration: AdminProviderConfiguration
@@ -38,6 +39,7 @@ export interface ProviderVerificationResult {
 
 export interface CreateAdminProviderInput {
   provider: AdminProvider
+  credential_type: string
   name: string
   configuration: AdminProviderConfiguration
   secret: string
@@ -110,6 +112,7 @@ function parseProviderRecord(value: unknown): AdminProviderRecord | null {
     typeof value.id !== 'string'
     || typeof value.tenant_id !== 'string'
     || (value.provider !== 'notion' && value.provider !== 'n8n')
+    || !isNullableString(value.credential_type)
     || typeof value.name !== 'string'
     || typeof value.status !== 'string'
     || configuration === null
@@ -127,6 +130,7 @@ function parseProviderRecord(value: unknown): AdminProviderRecord | null {
     id: value.id,
     tenant_id: value.tenant_id,
     provider: value.provider,
+    credential_type: value.credential_type,
     name: value.name,
     status: value.status,
     configuration,

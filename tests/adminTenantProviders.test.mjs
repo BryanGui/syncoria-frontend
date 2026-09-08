@@ -18,6 +18,7 @@ const notionRecord = {
   id: '22222222-2222-4222-8222-222222222222',
   tenant_id: tenantId,
   provider: 'notion',
+  credential_type: 'integration_token',
   name: 'Notion recrutement',
   status: 'active',
   configuration: { workspace_reference: 'workspace-example' },
@@ -71,15 +72,36 @@ test('loads a tenant-scoped provider list and supports the empty state', async (
   )
 })
 
+test('parses and preserves known, unknown, and null credential types', async () => {
+  const records = [
+    notionRecord,
+    { ...notionRecord, id: '33333333-3333-4333-8333-333333333333', credential_type: 'future_method' },
+    { ...notionRecord, id: '44444444-4444-4444-8444-444444444444', credential_type: null },
+  ]
+  const request = async () => Response.json(records)
+
+  const result = await fetchAdminTenantProviders(
+    'https://api.example.com', tenantId, undefined, request,
+  )
+
+  assert.equal(result.status, 'loaded')
+  assert.deepEqual(
+    result.providers.map((provider) => provider.credential_type),
+    ['integration_token', 'future_method', null],
+  )
+})
+
 test('creates Notion and n8n using only their expected non-sensitive configuration', async () => {
   for (const input of [
     {
       provider: 'notion',
+      credential_type: 'integration_token',
       name: 'Notion recrutement',
       configuration: { workspace_reference: 'workspace-example' },
     },
     {
       provider: 'n8n',
+      credential_type: 'api_key',
       name: 'n8n production',
       configuration: { base_url: 'https://automation.example.com' },
     },
@@ -89,6 +111,7 @@ test('creates Notion and n8n using only their expected non-sensitive configurati
     const responseRecord = {
       ...notionRecord,
       provider: input.provider,
+      credential_type: input.credential_type,
       name: input.name,
       configuration: input.configuration,
     }
@@ -123,6 +146,7 @@ test('creates Notion without sending an empty workspace reference', async () => 
     tenantId,
     {
       provider: 'notion',
+      credential_type: 'integration_token',
       name: 'Notion recrutement',
       configuration: buildProviderConfiguration('notion', '   '),
       secret: randomBytes(24).toString('base64url'),
