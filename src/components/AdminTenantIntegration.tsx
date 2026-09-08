@@ -29,7 +29,6 @@ interface AdminTenantIntegrationProps {
 interface ProviderDefinition {
   title: string
   secretLabel: string
-  secretReplacementLabel: string
 }
 
 function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
@@ -37,12 +36,10 @@ function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
     ? {
       title: 'Notion',
       secretLabel: 'Token Notion',
-      secretReplacementLabel: 'Remplacer le token',
     }
     : {
       title: 'n8n',
       secretLabel: 'Clé API n8n',
-      secretReplacementLabel: 'Remplacer la clé',
     }
 }
 
@@ -83,7 +80,7 @@ function ProviderCard({
   onSessionExpired,
 }: ProviderCardProps) {
   const provider = providerRecord.provider
-  const { title, secretLabel, secretReplacementLabel } = getProviderDefinition(provider)
+  const { title, secretLabel } = getProviderDefinition(provider)
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [name, setName] = useState('')
   const [configurationValue, setConfigurationValue] = useState('')
@@ -379,7 +376,7 @@ function ProviderCard({
                   Modifier
                 </button>
                 <button className="secondary-button" onClick={openCredentialForm} type="button">
-                  {secretReplacementLabel}
+                  Modifier les identifiants
                 </button>
                 <button
                   className="primary-button"
