@@ -60,6 +60,15 @@ test('keeps provider-specific credential terminology inside forms', () => {
   assert.match(integrationSource, /Nouveau \{secretLabel\.toLocaleLowerCase\('fr-FR'\)\}/)
 })
 
+test('renders the credential type declared by each provider definition', () => {
+  assert.match(integrationSource, /credentialType: 'Token'/)
+  assert.match(integrationSource, /credentialType: 'Clé API'/)
+  assert.match(
+    integrationSource,
+    /<dt>Credential<\/dt>[\s\S]*?<dt>Type de credential<\/dt>\s*<dd>\{credentialType\}<\/dd>/,
+  )
+})
+
 test('uses password-only transient credential fields and clears them after success', () => {
   assert.equal(integrationSource.match(/type="password"/g)?.length, 2)
   assert.match(
