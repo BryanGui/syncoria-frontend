@@ -846,6 +846,67 @@ button.navigation__link {
   border-bottom-color: #667085;
 }
 
+.tenant-workspace__integration {
+  min-width: 0;
+}
+
+.tenant-workspace__integration-heading {
+  padding: 24px 24px 0;
+}
+
+.tenant-workspace__integration-heading h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 20px;
+}
+
+.tenant-workspace__integration-heading p,
+.tenant-workspace__integration-context {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.tenant-workspace__subtabs {
+  margin-top: 20px;
+  padding: 0 24px;
+  display: flex;
+  gap: 10px;
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.tenant-workspace__subtab {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tenant-workspace__subtab:hover,
+.tenant-workspace__subtab:focus-visible,
+.tenant-workspace__subtab--active {
+  color: var(--color-text-primary);
+}
+
+.tenant-workspace__subtab--active {
+  border-bottom-color: #667085;
+}
+
+.tenant-workspace__integration-content > .tenant-audit {
+  margin-top: 18px;
+}
+
+.tenant-workspace__integration-context {
+  padding: 0 24px;
+}
+
 .tenant-overview {
   padding: 24px;
   display: grid;
@@ -1768,6 +1829,19 @@ button.navigation__link {
 
   .tenant-workspace__tabs {
     gap: 20px;
+  }
+
+  .tenant-workspace__integration-heading {
+    padding: 20px 20px 0;
+  }
+
+  .tenant-workspace__subtabs {
+    margin-top: 16px;
+    padding: 0 20px;
+  }
+
+  .tenant-workspace__integration-context {
+    padding: 0 20px;
   }
 
   .tenant-overview {
