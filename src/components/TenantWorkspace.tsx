@@ -3,7 +3,9 @@ import { useState, type ReactNode } from 'react'
 import {
   TENANT_WORKSPACE_SECTIONS,
   ADMIN_TENANT_WORKSPACE_SECTIONS,
+  INTEGRATION_WORKSPACE_SECTIONS,
   type AdminTenantWorkspaceSection,
+  type IntegrationWorkspaceSection,
   type TenantWorkspaceSection,
   type TenantWorkspaceTenant,
   getTenantStatusLabel,
@@ -31,6 +33,9 @@ export function TenantWorkspace({
   >(
     'Vue générale',
   )
+  const [activeIntegrationSection, setActiveIntegrationSection] = useState<
+    IntegrationWorkspaceSection
+  >('Audit & cartographie')
   const sections = adminIntegration === undefined
     ? TENANT_WORKSPACE_SECTIONS
     : ADMIN_TENANT_WORKSPACE_SECTIONS
@@ -88,12 +93,50 @@ export function TenantWorkspace({
             <code>{tenant.id}</code>
           </div>
         </div>
-      ) : activeSection === 'Rapports' && adminReports !== undefined ? (
-        adminReports
       ) : activeSection === 'Provider credentials' && adminIntegration !== undefined ? (
         adminIntegration
-      ) : activeSection === 'Ingestion' && adminIngestion !== undefined ? (
-        adminIngestion
+      ) : activeSection === 'Intégration' ? (
+        <section aria-labelledby="tenant-workspace-integration-title" className="tenant-workspace__integration">
+          <div className="tenant-workspace__integration-heading">
+            <h3 id="tenant-workspace-integration-title">Intégration</h3>
+            <p>Préparez les données du provider avant leur utilisation dans Syncoria.</p>
+          </div>
+          <nav aria-label="Étapes d’intégration" className="tenant-workspace__subtabs">
+            {INTEGRATION_WORKSPACE_SECTIONS.map((section) => (
+              <button
+                aria-current={activeIntegrationSection === section ? 'page' : undefined}
+                className={activeIntegrationSection === section
+                  ? 'tenant-workspace__subtab tenant-workspace__subtab--active'
+                  : 'tenant-workspace__subtab'}
+                key={section}
+                onClick={() => setActiveIntegrationSection(section)}
+                type="button"
+              >
+                {section}
+              </button>
+            ))}
+          </nav>
+          {activeIntegrationSection === 'Audit & cartographie' ? (
+            <div className="tenant-workspace__integration-content">
+              <p className="tenant-workspace__integration-context">
+                Les sources auditées et leurs décisions sont récapitulées dans les rapports disponibles.
+              </p>
+              {adminReports}
+            </div>
+          ) : activeIntegrationSection === 'Ingestion' ? (
+            adminIngestion
+          ) : (
+            <div className="tenant-workspace__empty">
+              <h3>Intégration des données</h3>
+              <p>Cette étape transformera plus tard les données brutes en données métier Syncoria.</p>
+            </div>
+          )}
+        </section>
+      ) : activeSection === 'Synchronisation' ? (
+        <div className="tenant-workspace__empty">
+          <h3>Synchronisation</h3>
+          <p>Cette étape préparera plus tard les mises à jour récurrentes après l’intégration des données.</p>
+        </div>
       ) : (
         <div className="tenant-workspace__empty">
           <h3>{activeSection}</h3>

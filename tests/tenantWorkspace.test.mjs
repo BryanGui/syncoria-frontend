@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import {
   ADMIN_TENANT_WORKSPACE_SECTIONS,
+  INTEGRATION_WORKSPACE_SECTIONS,
   TENANT_WORKSPACE_SECTIONS,
   getTenantStatusLabel,
 } from '../src/tenantWorkspace/model.ts'
@@ -25,43 +26,47 @@ test('defines the five requested workspace sections without invented data', () =
   ])
 })
 
-test('defines the exact admin workspace navigation without changing tenant navigation', () => {
+test('defines the exact admin workflow navigation without changing tenant navigation', () => {
   assert.deepEqual(ADMIN_TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
     'Provider credentials',
-    'Sources',
-    'Ingestion',
-    'Rapports',
+    'Intégration',
+    'Synchronisation',
     'Automatisations',
     'Logs',
   ])
-  for (const legacySection of ['Données', 'Intégration', 'Audit & cartographie']) {
+  for (const legacySection of ['Données', 'Sources', 'Ingestion', 'Rapports']) {
     assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes(legacySection), false)
   }
+  assert.deepEqual(INTEGRATION_WORKSPACE_SECTIONS, [
+    'Audit & cartographie',
+    'Ingestion',
+    'Intégration des données',
+  ])
 })
 
-test('renders admin content only for provider credentials and reports', () => {
+test('keeps credentials separate and composes integration through its two sub-tabs', () => {
   assert.match(
     tenantWorkspaceSource,
     /activeSection === 'Provider credentials'[\s\S]*?adminIntegration/,
   )
   assert.match(
     tenantWorkspaceSource,
-    /activeSection === 'Rapports'[\s\S]*?adminReports/,
+    /activeSection === 'Intégration'/,
   )
+  assert.match(tenantWorkspaceSource, /aria-label="Étapes d’intégration"/)
+  assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'/)
+  assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Ingestion'[\s\S]*?adminIngestion/)
+  assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
 })
 
-test('keeps Sources on the existing empty placeholder while rendering admin Ingestion content', () => {
-  assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Sources'/)
-  assert.match(
-    tenantWorkspaceSource,
-    /activeSection === 'Ingestion'[\s\S]*?adminIngestion/,
-  )
+test('uses audit by default and keeps integration placeholders scoped to their workflow steps', () => {
+  assert.match(tenantWorkspaceSource, />\('Audit & cartographie'\)/)
+  assert.match(tenantWorkspaceSource, /Intégration des données/)
+  assert.match(tenantWorkspaceSource, /activeSection === 'Synchronisation'/)
+  assert.match(tenantWorkspaceSource, /mises à jour récurrentes après l’intégration des données/)
   assert.match(tenantWorkspaceSource, /className="tenant-workspace__empty"/)
-  assert.match(
-    tenantWorkspaceSource,
-    /Aucune donnée n’est affichée dans cette section pour le moment\./,
-  )
+  assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Sources'|activeSection === 'Rapports'|activeSection === 'Ingestion'/)
 })
 
 test('starting another tenant load clears the previous tenant immediately', () => {

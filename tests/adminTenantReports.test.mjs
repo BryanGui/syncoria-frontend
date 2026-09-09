@@ -62,12 +62,12 @@ test('constructs only the bounded PDF endpoint for the selected tenant', () => {
   assert.equal(buildAdminTenantReportPdfUrl('https://api.example.com', '../other', 'audit-example'), undefined)
 })
 
-test('reports navigation exists only in the admin workspace', () => {
-  assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Rapports'), true)
+test('reports remain available through the admin integration audit step', () => {
+  assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Rapports'), false)
   assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Rapports'), false)
   assert.match(adminWorkspaceSource, /adminReports=\{/)
   assert.match(adminWorkspaceSource, /<AdminTenantReports/)
-  assert.match(tenantWorkspaceSource, /activeSection === 'Rapports'/)
+  assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
 })
 
 

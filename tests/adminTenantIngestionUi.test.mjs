@@ -9,8 +9,9 @@ const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx'
 const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
 const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
-test('replaces only the admin Ingestion placeholder with the dashboard', () => {
-  assert.match(workspace, /activeSection === 'Ingestion'[\s\S]*?adminIngestion/)
+test('renders the existing dashboard only from the Integration Ingestion sub-tab', () => {
+  assert.match(workspace, /activeIntegrationSection === 'Ingestion'[\s\S]*?adminIngestion/)
+  assert.doesNotMatch(workspace, /activeSection === 'Ingestion'/)
   assert.match(page, /<AdminTenantIngestion/)
   assert.match(component, /Provider record concerné/)
   assert.match(component, /Lancer l’ingestion/)
