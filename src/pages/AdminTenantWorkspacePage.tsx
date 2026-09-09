@@ -8,6 +8,7 @@ import {
 } from '../api/adminTenant'
 import { AdminTenantReports } from '../components/AdminTenantReports'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
+import { AdminTenantIngestion } from '../components/AdminTenantIngestion'
 import { TenantWorkspace } from '../components/TenantWorkspace'
 import {
   beginTenantWorkspaceLoad,
@@ -145,6 +146,14 @@ export function AdminTenantWorkspacePage({
 
   return (
     <TenantWorkspace
+      adminIngestion={(
+        <AdminTenantIngestion
+          apiBaseUrl={apiBaseUrl}
+          onSessionExpired={onSessionExpired}
+          tenantId={pageState.tenant.id}
+          tenantStatus={pageState.tenant.status}
+        />
+      )}
       adminReports={pageState.tenant.status === 'active' ? (
         <AdminTenantReports
           key={pageState.tenant.id}

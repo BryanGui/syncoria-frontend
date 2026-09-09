@@ -51,9 +51,12 @@ test('renders admin content only for provider credentials and reports', () => {
   )
 })
 
-test('keeps Sources and Ingestion on the existing empty placeholder', () => {
+test('keeps Sources on the existing empty placeholder while rendering admin Ingestion content', () => {
   assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Sources'/)
-  assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Ingestion'/)
+  assert.match(
+    tenantWorkspaceSource,
+    /activeSection === 'Ingestion'[\s\S]*?adminIngestion/,
+  )
   assert.match(tenantWorkspaceSource, /className="tenant-workspace__empty"/)
   assert.match(
     tenantWorkspaceSource,

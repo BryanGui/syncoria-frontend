@@ -14,12 +14,14 @@ interface TenantWorkspaceProps {
   onBack?: () => void
   adminReports?: ReactNode
   adminIntegration?: ReactNode
+  adminIngestion?: ReactNode
   lifecycleControls?: ReactNode
 }
 
 export function TenantWorkspace({
   adminReports,
   adminIntegration,
+  adminIngestion,
   lifecycleControls,
   tenant,
   onBack,
@@ -90,6 +92,8 @@ export function TenantWorkspace({
         adminReports
       ) : activeSection === 'Provider credentials' && adminIntegration !== undefined ? (
         adminIntegration
+      ) : activeSection === 'Ingestion' && adminIngestion !== undefined ? (
+        adminIngestion
       ) : (
         <div className="tenant-workspace__empty">
           <h3>{activeSection}</h3>
