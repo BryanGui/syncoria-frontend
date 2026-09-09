@@ -22,3 +22,16 @@ export function getProgressWidth(processed: number, expected: number | null): nu
   const percentage = getProgressPercentage(processed, expected)
   return percentage === null ? null : Math.min(100, percentage)
 }
+
+export function getProgressCountLabel(processed: number, expected: number | null): string {
+  const percentage = getProgressPercentage(processed, expected)
+  if (percentage === null) return `${processed} traités · volume attendu indisponible`
+  return `${processed} / ${expected} traités · ${Math.round(percentage)} %`
+}
+
+export function isLaunchResponseCurrent(
+  selectedProviderId: string,
+  launchedProviderId: string,
+): boolean {
+  return selectedProviderId === launchedProviderId
+}

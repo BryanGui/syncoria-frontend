@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   fetchAdminTenantIngestion,
   fetchLatestAdminTenantIngestion,
   launchAdminTenantIngestion,
+  supportsInitialIngestionProvider,
   type AdminInitialIngestion,
   type AdminInitialIngestionSource,
 } from '../api/adminTenantIngestions'
@@ -13,9 +14,10 @@ import {
 } from '../api/adminTenantProviders'
 import {
   getInitialIngestionStatusLabel,
-  getProgressPercentage,
+  getProgressCountLabel,
   getProgressWidth,
   isInitialIngestionActive,
+  isLaunchResponseCurrent,
 } from '../tenantIngestion'
 
 const POLLING_INTERVAL_MS = 5_000
@@ -62,7 +64,6 @@ function ProgressBar({
   processed: number
   label: string
 }) {
-  const percentage = getProgressPercentage(processed, expected)
   const width = getProgressWidth(processed, expected)
   const isIndeterminate = width === null
 
@@ -79,9 +80,6 @@ function ProgressBar({
         className="ingestion-progress__value"
         style={width === null ? undefined : { width: `${width}%` }}
       />
-      {percentage !== null && percentage > 100 ? (
-        <span className="ingestion-progress__overflow">{Math.round(percentage)} %</span>
-      ) : null}
     </div>
   )
 }
@@ -102,11 +100,7 @@ function SourceCard({ source }: { source: AdminInitialIngestionSource }) {
         processed={source.items_processed}
       />
       <div className="ingestion-source__counts">
-        {expected === null ? (
-          <span>{source.items_processed} traités · volume attendu indisponible</span>
-        ) : (
-          <span>{source.items_processed} / {expected} traités</span>
-        )}
+        <span>{getProgressCountLabel(source.items_processed, expected)}</span>
         <span>{source.items_inserted} insérés · {source.items_duplicate} doublons</span>
       </div>
       <dl className="ingestion-source__details">
@@ -134,8 +128,15 @@ export function AdminTenantIngestion({
   const [operation, setOperation] = useState<AdminInitialIngestion | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLaunching, setIsLaunching] = useState(false)
+  const selectedProviderIdRef = useRef(selectedProviderId)
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
+  const isSelectedProviderSupported = selectedProvider !== null
+    && supportsInitialIngestionProvider(selectedProvider.provider)
+
+  useEffect(() => {
+    selectedProviderIdRef.current = selectedProviderId
+  }, [selectedProviderId])
 
   useEffect(() => {
     if (tenantStatus !== 'active') {
@@ -160,9 +161,13 @@ export function AdminTenantIngestion({
         return
       }
       setProviders(result.providers)
-      setSelectedProviderId((currentId) => result.providers.some((provider) => provider.id === currentId)
-        ? currentId
-        : (result.providers[0]?.id ?? ''))
+      setSelectedProviderId((currentId) => {
+        const nextProviderId = result.providers.some((provider) => provider.id === currentId)
+          ? currentId
+          : (result.providers[0]?.id ?? '')
+        selectedProviderIdRef.current = nextProviderId
+        return nextProviderId
+      })
       setProviderState('loaded')
     })
     return () => {
@@ -241,11 +246,23 @@ export function AdminTenantIngestion({
   }, [apiBaseUrl, onSessionExpired, operation, selectedProvider, tenantId])
 
   async function launchIngestion() {
-    if (selectedProvider === null || isLaunching || (operation !== null && isInitialIngestionActive(operation.status))) return
+    if (
+      selectedProvider === null
+      || !supportsInitialIngestionProvider(selectedProvider.provider)
+      || isLaunching
+      || (operation !== null && isInitialIngestionActive(operation.status))
+    ) return
+    const launchedProviderId = selectedProvider.id
     setIsLaunching(true)
     setErrorMessage(null)
-    const result = await launchAdminTenantIngestion(apiBaseUrl, tenantId, selectedProvider.id)
+    const result = await launchAdminTenantIngestion(
+      apiBaseUrl,
+      tenantId,
+      launchedProviderId,
+      selectedProvider.provider,
+    )
     setIsLaunching(false)
+    if (!isLaunchResponseCurrent(selectedProviderIdRef.current, launchedProviderId)) return
     if (result.status === 'unauthenticated') {
       onSessionExpired()
       return
@@ -279,7 +296,7 @@ export function AdminTenantIngestion({
         {selectedProvider !== null ? (
           <button
             className="primary-button"
-            disabled={isLaunching || selectedProvider.status !== 'active' || (operation !== null && isInitialIngestionActive(operation.status))}
+            disabled={isLaunching || !isSelectedProviderSupported || selectedProvider.status !== 'active' || (operation !== null && isInitialIngestionActive(operation.status))}
             onClick={() => void launchIngestion()}
             type="button"
           >
@@ -299,12 +316,19 @@ export function AdminTenantIngestion({
           <label className="ingestion-provider-select">
             Provider record concerné
             <select
-              onChange={(event) => setSelectedProviderId(event.target.value)}
+              disabled={isLaunching}
+              onChange={(event) => {
+                selectedProviderIdRef.current = event.target.value
+                setSelectedProviderId(event.target.value)
+              }}
               value={selectedProviderId}
             >
               {providers.map((provider) => <option key={provider.id} value={provider.id}>{formatProvider(provider)}</option>)}
             </select>
           </label>
+          {!isSelectedProviderSupported ? (
+            <p className="ingestion-notice">L’ingestion initiale n’est pas encore disponible pour ce provider.</p>
+          ) : null}
           {errorMessage !== null ? <p className="ingestion-error" role="alert">{errorMessage}</p> : null}
           {operationState === 'loading' ? <p className="ingestion-empty">Chargement de la dernière ingestion…</p> : null}
           {operationState === 'none' ? <p className="ingestion-empty">Aucune ingestion n’a encore été lancée pour ce provider.</p> : null}
@@ -322,7 +346,7 @@ export function AdminTenantIngestion({
               <div className="ingestion-operation__progress">
                 <div className="ingestion-operation__progress-heading">
                   <h4>Progression globale</h4>
-                  {operation.items_expected === null ? <span>{operation.items_processed} traités · volume attendu indisponible</span> : <span>{operation.items_processed} / {operation.items_expected} traités</span>}
+                  <span>{getProgressCountLabel(operation.items_processed, operation.items_expected)}</span>
                 </div>
                 <ProgressBar expected={operation.items_expected} label="Progression globale" processed={operation.items_processed} />
                 <p>{operation.items_inserted} insérés · {operation.items_duplicate} doublons · {operation.items_rejected} rejetés</p>

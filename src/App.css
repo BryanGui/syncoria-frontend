@@ -1246,6 +1246,12 @@ button.navigation__link {
 .ingestion-error,
 .ingestion-source__error { color: #934545; }
 
+.ingestion-notice {
+  margin: 12px 0 0;
+  color: #80642f;
+  font-size: 12px;
+}
+
 .ingestion-operation {
   margin-top: 20px;
   display: grid;

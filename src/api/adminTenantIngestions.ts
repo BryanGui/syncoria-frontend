@@ -50,7 +50,11 @@ export interface AdminInitialIngestion {
 
 export type AdminInitialIngestionResult =
   | { status: 'loaded'; operation: AdminInitialIngestion }
-  | { status: 'not_found' | 'unauthenticated' | 'conflict' | 'error' }
+  | { status: 'not_found' | 'unauthenticated' | 'conflict' | 'unsupported' | 'error' }
+
+export function supportsInitialIngestionProvider(provider: string): boolean {
+  return provider === 'notion'
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -249,9 +253,11 @@ export function launchAdminTenantIngestion(
   apiBaseUrl: string | null,
   tenantId: string,
   providerRecordId: string,
+  provider: string,
   signal?: AbortSignal,
   request: typeof fetch = fetch,
   logger: TechnicalLogger = technicalLogger,
 ): Promise<AdminInitialIngestionResult> {
+  if (!supportsInitialIngestionProvider(provider)) return Promise.resolve({ status: 'unsupported' })
   return requestOperation(apiBaseUrl, tenantId, providerRecordId, 'POST', '', signal, request, logger)
 }
