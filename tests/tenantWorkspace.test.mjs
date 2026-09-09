@@ -15,6 +15,10 @@ const tenantWorkspaceSource = await readFile(
   new URL('../src/components/TenantWorkspace.tsx', import.meta.url),
   'utf8',
 )
+const workspaceStyles = await readFile(
+  new URL('../src/App.css', import.meta.url),
+  'utf8',
+)
 
 test('defines the five requested workspace sections without invented data', () => {
   assert.deepEqual(TENANT_WORKSPACE_SECTIONS, [
@@ -60,13 +64,31 @@ test('keeps credentials separate and composes integration through its two sub-ta
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
 })
 
+test('keeps distinct active states, focus treatment, and mobile scrolling for both tab levels', () => {
+  assert.match(tenantWorkspaceSource, /tenant-workspace__tab--active/)
+  assert.match(tenantWorkspaceSource, /tenant-workspace__subtab--active/)
+  assert.match(workspaceStyles, /\.tenant-workspace__tab:focus-visible/)
+  assert.match(workspaceStyles, /\.tenant-workspace__tab:hover/)
+  assert.match(workspaceStyles, /\.tenant-workspace__subtab:focus-visible/)
+  assert.match(workspaceStyles, /\.tenant-workspace__subtab:hover/)
+  assert.match(workspaceStyles, /\.tenant-workspace__subtabs[\s\S]*?flex-wrap: nowrap[\s\S]*?overflow-x: auto/)
+})
+
 test('uses audit by default and keeps integration placeholders scoped to their workflow steps', () => {
   assert.match(tenantWorkspaceSource, />\('Audit & cartographie'\)/)
-  assert.match(tenantWorkspaceSource, /Intégration des données/)
+  assert.equal(INTEGRATION_WORKSPACE_SECTIONS.includes('Intégration des données'), true)
   assert.match(tenantWorkspaceSource, /activeSection === 'Synchronisation'/)
   assert.match(tenantWorkspaceSource, /mises à jour récurrentes après l’intégration des données/)
   assert.match(tenantWorkspaceSource, /className="tenant-workspace__empty"/)
   assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Sources'|activeSection === 'Rapports'|activeSection === 'Ingestion'/)
+})
+
+test('renders the active integration section header without tenant-specific fixtures', () => {
+  assert.match(tenantWorkspaceSource, /tenant-workspace__integration-section-heading/)
+  assert.match(tenantWorkspaceSource, /Sources auditées, décisions retained\/excluded et rapports disponibles\./)
+  assert.match(tenantWorkspaceSource, /Copie brute initiale des sources retenues vers Syncoria\./)
+  assert.match(tenantWorkspaceSource, /Transformation future des données brutes en données métier Syncoria\./)
+  assert.doesNotMatch(tenantWorkspaceSource, /Novalia|90|raw_payload/)
 })
 
 test('starting another tenant load clears the previous tenant immediately', () => {
