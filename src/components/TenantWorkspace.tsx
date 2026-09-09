@@ -20,6 +20,16 @@ interface TenantWorkspaceProps {
   lifecycleControls?: ReactNode
 }
 
+function getIntegrationSectionDescription(section: IntegrationWorkspaceSection): string {
+  if (section === 'Audit & cartographie') {
+    return 'Sources auditées, décisions retained/excluded et rapports disponibles.'
+  }
+  if (section === 'Ingestion') {
+    return 'Copie brute initiale des sources retenues vers Syncoria.'
+  }
+  return 'Transformation future des données brutes en données métier Syncoria.'
+}
+
 export function TenantWorkspace({
   adminReports,
   adminIntegration,
@@ -116,21 +126,21 @@ export function TenantWorkspace({
               </button>
             ))}
           </nav>
-          {activeIntegrationSection === 'Audit & cartographie' ? (
-            <div className="tenant-workspace__integration-content">
-              <p className="tenant-workspace__integration-context">
-                Les sources auditées et leurs décisions sont récapitulées dans les rapports disponibles.
-              </p>
-              {adminReports}
-            </div>
-          ) : activeIntegrationSection === 'Ingestion' ? (
-            adminIngestion
-          ) : (
-            <div className="tenant-workspace__empty">
-              <h3>Intégration des données</h3>
-              <p>Cette étape transformera plus tard les données brutes en données métier Syncoria.</p>
-            </div>
-          )}
+          <div className="tenant-workspace__integration-content">
+            <header className="tenant-workspace__integration-section-heading">
+              <h3>{activeIntegrationSection}</h3>
+              <p>{getIntegrationSectionDescription(activeIntegrationSection)}</p>
+            </header>
+            {activeIntegrationSection === 'Audit & cartographie' ? (
+              adminReports
+            ) : activeIntegrationSection === 'Ingestion' ? (
+              adminIngestion
+            ) : (
+              <div className="tenant-workspace__empty">
+                <p>Cette étape sera disponible lorsque les données brutes pourront être intégrées au modèle métier.</p>
+              </div>
+            )}
+          </div>
         </section>
       ) : activeSection === 'Synchronisation' ? (
         <div className="tenant-workspace__empty">
