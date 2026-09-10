@@ -260,6 +260,71 @@ button.navigation__link {
   box-shadow: 0 16px 40px rgb(31 41 55 / 8%);
 }
 
+.login-overlay {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgb(53 51 61 / 32%);
+  backdrop-filter: blur(3px);
+}
+
+.login-overlay__panel {
+  width: min(100%, 470px);
+  max-height: calc(100svh - 48px);
+  position: relative;
+  overflow-y: auto;
+  border: 1px solid #e5e2ea;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(53 51 61 / 22%);
+}
+
+.login-overlay .login-page {
+  min-height: auto;
+  padding: 0;
+  display: block;
+}
+
+.login-overlay .login-panel {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.login-overlay__close {
+  width: 34px;
+  height: 34px;
+  position: absolute;
+  z-index: 1;
+  top: 18px;
+  right: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #77727f;
+  background: transparent;
+  cursor: pointer;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.login-overlay__close:hover,
+.login-overlay__close:focus-visible {
+  border-color: #e5e2ea;
+  color: #35333d;
+  background: #f8f7fb;
+}
+
+.login-overlay__close:focus-visible {
+  outline: 2px solid #7657e8;
+  outline-offset: 2px;
+}
+
 .login-brand {
   margin-bottom: 42px;
   display: flex;
@@ -1978,6 +2043,28 @@ button.navigation__link {
   .tenant-audit { padding: 1rem; }
   .tenant-audit__actions > a,
   .tenant-audit__actions > button { flex: 1 1 100%; width: 100%; }
+}
+
+@media (max-width: 620px) {
+  .login-overlay {
+    padding: 12px;
+    place-items: end center;
+  }
+
+  .login-overlay__panel {
+    width: 100%;
+    max-height: calc(100svh - 24px);
+    border-radius: 14px;
+  }
+
+  .login-overlay .login-panel {
+    padding: 28px 22px 24px;
+  }
+
+  .login-overlay__close {
+    top: 12px;
+    right: 12px;
+  }
 }
 
 .landing-page {
