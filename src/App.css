@@ -2027,9 +2027,10 @@ button.navigation__link {
 .tenant-audit__report dt { color: var(--color-text-secondary); font-size: .8rem; }
 .tenant-audit__report dd { margin: 0; color: var(--color-text-body); font-weight: 600; }
 .tenant-audit__summary { margin: 1.1rem 0 0; color: var(--color-text-secondary); font-size: .8rem; line-height: 1.5; }
-.tenant-audit__report--archived { padding: .85rem 1rem; }
+.tenant-audit__report--archived { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 1.5rem; row-gap: .25rem; padding: .85rem 1rem; }
+.tenant-audit__report--archived .tenant-audit__report-heading { grid-column: 1 / -1; }
 .tenant-audit__report--archived .tenant-audit__summary { margin-top: .45rem; }
-.tenant-audit__report--archived .tenant-audit__actions { margin-top: .8rem; }
+.tenant-audit__report--archived .tenant-audit__actions { align-self: end; grid-column: 2; grid-row: 2; margin-top: .45rem; }
 .tenant-audit__actions { display: flex; flex-wrap: wrap; align-items: stretch; gap: .75rem; }
 .tenant-audit__actions a { text-decoration: none; }
 
@@ -2054,6 +2055,8 @@ button.navigation__link {
   .tenant-audit__report-heading { flex-direction: column; gap: .5rem; }
   .tenant-audit__report-meta { justify-content: flex-start; }
   .tenant-audit__report-details { grid-template-columns: 1fr; gap: 0; }
+  .tenant-audit__report--archived { display: block; }
+  .tenant-audit__report--archived .tenant-audit__actions { margin-top: .8rem; }
   .tenant-audit__actions > a,
   .tenant-audit__actions > button { flex: 1 1 100%; width: 100%; }
 }

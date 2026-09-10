@@ -25,6 +25,7 @@ const POLLING_INTERVAL_MS = 5_000
 interface AdminTenantIngestionProps {
   apiBaseUrl: string | null
   tenantId: string
+  tenantSlug: string
   tenantStatus: string
   onSessionExpired: () => void
 }
@@ -49,10 +50,8 @@ function formatDuration(startedAt: string, completedAt: string | null): string {
   return `${minutes} min ${seconds % 60} s`
 }
 
-function formatProvider(provider: AdminProviderRecord): string {
-  return provider.name === provider.provider
-    ? provider.provider
-    : `${provider.name} · ${provider.provider}`
+function formatProvider(tenantSlug: string, providerType: string): string {
+  return `${tenantSlug} · ${providerType}`
 }
 
 function ProgressBar({
@@ -118,6 +117,7 @@ function SourceCard({ source }: { source: AdminInitialIngestionSource }) {
 export function AdminTenantIngestion({
   apiBaseUrl,
   tenantId,
+  tenantSlug,
   tenantStatus,
   onSessionExpired,
 }: AdminTenantIngestionProps) {
@@ -323,7 +323,7 @@ export function AdminTenantIngestion({
               }}
               value={selectedProviderId}
             >
-              {providers.map((provider) => <option key={provider.id} value={provider.id}>{formatProvider(provider)}</option>)}
+              {providers.map((provider) => <option key={provider.id} value={provider.id}>{formatProvider(tenantSlug, provider.provider)}</option>)}
             </select>
           </label>
           {!isSelectedProviderSupported ? (
