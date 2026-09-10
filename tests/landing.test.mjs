@@ -32,19 +32,34 @@ test('landing page contains the public message and five product blocks', () => {
 test('landing uses a dedicated login callback and does not contain tenant data', () => {
   assert.match(landingSource, /onLogin: \(\) => void/)
   assert.match(appSource, /<LandingPage/)
-  assert.match(appSource, /sessionState\.status === 'unauthenticated' && showLanding/)
-  assert.match(appSource, /setShowLanding\(false\)/)
+  assert.match(appSource, /const \[isLoginOpen, setIsLoginOpen\]/)
+  assert.match(appSource, /const \[isInitialSessionCheck, setIsInitialSessionCheck\]/)
+  assert.match(appSource, /sessionState\.status === 'unauthenticated' \|\| sessionState\.status === 'error'/)
+  assert.match(appSource, /className="login-overlay"/)
+  assert.match(appSource, /aria-modal="true"/)
+  assert.match(appSource, /Fermer la connexion/)
+  assert.doesNotMatch(appSource, /showLanding/)
   assert.doesNotMatch(landingSource, /Novalia|client@example|syncoria_lab|Calendly|analytics|cookie/i)
 })
 
 test('authenticated routes remain selected before the public landing', () => {
   const clientPosition = appSource.indexOf("sessionState.status === 'client_authenticated'")
-  const landingPosition = appSource.indexOf('<LandingPage')
-  const dashboardPosition = appSource.indexOf('<Dashboard')
+  const publicShellPosition = appSource.indexOf("sessionState.status === 'unauthenticated' || sessionState.status === 'error'")
+  const dashboardPosition = appSource.lastIndexOf('<Dashboard')
   assert.ok(clientPosition >= 0)
-  assert.ok(landingPosition > clientPosition)
-  assert.ok(dashboardPosition > landingPosition)
-  assert.match(appSource, /setShowLanding\(true\)/)
+  assert.ok(publicShellPosition >= 0)
+  assert.ok(dashboardPosition > clientPosition)
+  assert.match(appSource, /setIsLoginOpen\(false\)/)
+  assert.match(appSource, /sessionState\.status === 'loading' && isInitialSessionCheck/)
+})
+
+test('session errors keep the public shell and login remains retryable', () => {
+  assert.match(appSource, /status: clientResult\.status === 'error' \|\| adminResult === 'error'/)
+  assert.match(appSource, /initialError=\{sessionState\.status === 'error'/)
+  assert.match(appSource, /onRetrySession=\{loadClientSession\}/)
+  assert.match(appSource, /onRetrySession=\{loadAdminSession\}/)
+  assert.match(appStyles, /\.login-overlay \.login-page/)
+  assert.match(appStyles, /\.login-overlay__panel/)
 })
 
 test('landing palette and responsive layouts are defined', () => {

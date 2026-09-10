@@ -767,7 +767,8 @@ function App() {
     status: 'loading',
   })
   const [loginMode, setLoginMode] = useState<LoginMode>('client')
-  const [showLanding, setShowLanding] = useState(true)
+  const [isLoginOpen, setIsLoginOpen] = useState(false)
+  const [isInitialSessionCheck, setIsInitialSessionCheck] = useState(true)
 
   function loadSessions() {
     setSessionState({ status: 'loading' })
@@ -776,6 +777,7 @@ function App() {
       async (clientResult) => {
         if (abortController.signal.aborted) return
         if (clientResult.status === 'loaded') {
+          setIsInitialSessionCheck(false)
           setSessionState({
             status: 'client_authenticated',
             currentUser: clientResult.currentUser,
@@ -789,12 +791,16 @@ function App() {
         )
         if (abortController.signal.aborted) return
         if (adminResult === 'authenticated') {
+          setIsInitialSessionCheck(false)
           setSessionState({ status: 'admin_authenticated' })
           return
         }
-        const hasVerificationError = clientResult.status === 'error' || adminResult === 'error'
-        setShowLanding(!hasVerificationError)
-        setSessionState({ status: hasVerificationError ? 'error' : 'unauthenticated' })
+        setIsInitialSessionCheck(false)
+        setSessionState({
+          status: clientResult.status === 'error' || adminResult === 'error'
+            ? 'error'
+            : 'unauthenticated',
+        })
       },
     )
     return abortController
@@ -842,7 +848,7 @@ function App() {
     const wasLoggedOut = await deleteAdminSession(apiBaseUrl)
     if (wasLoggedOut) {
       setLoginMode(selectLoginMode('admin'))
-      setShowLanding(true)
+      setIsLoginOpen(false)
       setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
@@ -852,7 +858,7 @@ function App() {
     const wasLoggedOut = await deleteClientSession(apiBaseUrl)
     if (wasLoggedOut) {
       setLoginMode(selectLoginMode('client'))
-      setShowLanding(true)
+      setIsLoginOpen(false)
       setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
@@ -860,11 +866,94 @@ function App() {
 
   const handleSessionExpired = useCallback(() => {
     setLoginMode(selectLoginMode('admin'))
-    setShowLanding(true)
+    setIsLoginOpen(false)
     setSessionState({ status: 'unauthenticated' })
   }, [])
 
-  if (sessionState.status === 'loading') {
+  useEffect(() => {
+    if (!isLoginOpen) return
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsLoginOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isLoginOpen])
+
+  function renderLoginPanel() {
+    if (sessionState.status === 'loading') {
+      return (
+        <main aria-live="polite" className="session-loading">
+          <span className="session-loading__indicator" aria-hidden="true" />
+          <p>Vérification de la session…</p>
+        </main>
+      )
+    }
+
+    if (loginMode === 'client') {
+      return (
+        <ClientLoginPage
+          initialError={sessionState.status === 'error'
+            ? 'Impossible de vérifier la session client.'
+            : undefined}
+          onAuthenticated={loadClientSession}
+          onRetrySession={loadClientSession}
+          onSelectMode={(mode) => setLoginMode(selectLoginMode(mode))}
+        />
+      )
+    }
+
+    return (
+      <AdminLoginPage
+        initialError={sessionState.status === 'error'
+          ? 'Impossible de vérifier la session administrateur.'
+          : undefined}
+        onAuthenticated={() => setSessionState({ status: 'admin_authenticated' })}
+        onRetrySession={loadAdminSession}
+        onSelectMode={(mode) => setLoginMode(selectLoginMode(mode))}
+      />
+    )
+  }
+
+  function renderPublicShell() {
+    return (
+      <>
+        <LandingPage onLogin={() => {
+          setLoginMode(selectLoginMode('client'))
+          setIsLoginOpen(true)
+        }} />
+        {isLoginOpen && (
+          <div
+            aria-label="Connexion Syncoria"
+            aria-modal="true"
+            className="login-overlay"
+            onMouseDown={() => setIsLoginOpen(false)}
+            role="dialog"
+          >
+            <div
+              className="login-overlay__panel"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <button
+                aria-label="Fermer la connexion"
+                className="login-overlay__close"
+                onClick={() => setIsLoginOpen(false)}
+                type="button"
+              >
+                ×
+              </button>
+              {renderLoginPanel()}
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  if (sessionState.status === 'loading' && isInitialSessionCheck) {
     return (
       <main aria-live="polite" className="session-loading">
         <span className="session-loading__indicator" aria-hidden="true" />
@@ -882,39 +971,12 @@ function App() {
     )
   }
 
-  if (sessionState.status !== 'admin_authenticated') {
-    if (sessionState.status === 'unauthenticated' && showLanding) {
-      return (
-        <LandingPage
-          onLogin={() => {
-            setLoginMode(selectLoginMode('client'))
-            setShowLanding(false)
-          }}
-        />
-      )
-    }
-    if (loginMode === 'client') {
-      return (
-        <ClientLoginPage
-          initialError={sessionState.status === 'error'
-            ? 'Impossible de vérifier la session client.'
-            : undefined}
-          onAuthenticated={loadClientSession}
-          onRetrySession={loadClientSession}
-          onSelectMode={(mode) => setLoginMode(selectLoginMode(mode))}
-        />
-      )
-    }
-    return (
-      <AdminLoginPage
-        initialError={sessionState.status === 'error'
-          ? 'Impossible de vérifier la session administrateur.'
-          : undefined}
-        onAuthenticated={() => setSessionState({ status: 'admin_authenticated' })}
-        onRetrySession={loadAdminSession}
-        onSelectMode={(mode) => setLoginMode(selectLoginMode(mode))}
-      />
-    )
+  if (sessionState.status === 'unauthenticated' || sessionState.status === 'error') {
+    return renderPublicShell()
+  }
+
+  if (sessionState.status === 'loading') {
+    return renderPublicShell()
   }
 
   return (
