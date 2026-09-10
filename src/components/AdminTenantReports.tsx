@@ -61,19 +61,30 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
   }
 
   function renderReport(report: AdminTenantReport) {
+    const isArchived = report.status === 'archived'
     return (
-      <article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className="tenant-audit__report" key={report.id}>
-        <h4>{report.title}</h4>
-        <p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p>
-        <p>État : <strong>{report.status === 'archived' ? 'Archivé' : 'Terminé'}</strong></p>
-        <dl>
-          <div><dt>Sources analysées</dt><dd>{report.sources_analyzed}</dd></div>
-          <div><dt>Sources retenues</dt><dd>{report.sources_retained}</dd></div>
-          <div><dt>Sources écartées</dt><dd>{report.sources_excluded}</dd></div>
-          <div><dt>Enregistrements retenus</dt><dd>{report.records_retained}</dd></div>
-          {report.decisions_required !== null && <div><dt>Décisions nécessaires</dt><dd>{report.decisions_required}</dd></div>}
-        </dl>
-        <p>{report.status === 'archived'
+      <article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'} key={report.id}>
+        <div className="tenant-audit__report-heading">
+          <h4>{report.title}</h4>
+          <div className="tenant-audit__report-meta">
+            <p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p>
+            <p>État : <strong>{isArchived ? 'Archivé' : 'Terminé'}</strong></p>
+          </div>
+        </div>
+        {!isArchived && (
+          <div className="tenant-audit__report-details">
+            <dl>
+              <div><dt>Sources analysées</dt><dd>{report.sources_analyzed}</dd></div>
+              <div><dt>Sources retenues</dt><dd>{report.sources_retained}</dd></div>
+              <div><dt>Sources écartées</dt><dd>{report.sources_excluded}</dd></div>
+            </dl>
+            <dl>
+              <div><dt>Enregistrements retenus</dt><dd>{report.records_retained}</dd></div>
+              {report.decisions_required !== null && <div><dt>Décisions nécessaires</dt><dd>{report.decisions_required}</dd></div>}
+            </dl>
+          </div>
+        )}
+        <p className="tenant-audit__summary">{isArchived
           ? 'Ce rapport est conservé dans l’historique et reste consultable.'
           : 'L’état Terminé concerne l’audit, pas la validation métier ni l’intégration des données.'}</p>
         <div className="tenant-audit__actions">

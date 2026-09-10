@@ -291,7 +291,7 @@ export function AdminTenantIngestion({
       <div className="tenant-ingestion__heading">
         <div>
           <h3 id="tenant-ingestion-title">Ingestion</h3>
-          <p>Copie brute initiale des sources retenues, pilotée par le backend.</p>
+          <p>Copie brute initiale des sources retenues vers Syncoria.</p>
         </div>
         {selectedProvider !== null ? (
           <button

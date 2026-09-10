@@ -46,3 +46,12 @@ test('keeps the dashboard responsive on mobile widths', () => {
   assert.match(styles, /\.ingestion-source-grid/)
   assert.match(styles, /\.ingestion-operation__summary,[\s\S]*?grid-template-columns: 1fr/)
 })
+
+test('keeps the ingestion heading compact and formats providers without repetition', () => {
+  assert.match(component, /Copie brute initiale des sources retenues vers Syncoria\./)
+  assert.match(component, /provider\.name === provider\.provider/)
+  assert.match(component, /\? provider\.provider/)
+  assert.match(component, /`\$\{provider\.name\} · \$\{provider\.provider\}`/)
+  assert.match(styles, /\.tenant-ingestion__heading,[\s\S]*?align-items: center/)
+  assert.match(styles, /\.tenant-workspace__integration-content \.tenant-ingestion__heading > div h3/)
+})
