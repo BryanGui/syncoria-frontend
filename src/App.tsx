@@ -40,6 +40,7 @@ import {
 import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
+import { LandingPage } from './pages/LandingPage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
@@ -766,6 +767,7 @@ function App() {
     status: 'loading',
   })
   const [loginMode, setLoginMode] = useState<LoginMode>('client')
+  const [showLanding, setShowLanding] = useState(true)
 
   function loadSessions() {
     setSessionState({ status: 'loading' })
@@ -790,11 +792,9 @@ function App() {
           setSessionState({ status: 'admin_authenticated' })
           return
         }
-        setSessionState({
-          status: clientResult.status === 'error' || adminResult === 'error'
-            ? 'error'
-            : 'unauthenticated',
-        })
+        const hasVerificationError = clientResult.status === 'error' || adminResult === 'error'
+        setShowLanding(!hasVerificationError)
+        setSessionState({ status: hasVerificationError ? 'error' : 'unauthenticated' })
       },
     )
     return abortController
@@ -842,6 +842,7 @@ function App() {
     const wasLoggedOut = await deleteAdminSession(apiBaseUrl)
     if (wasLoggedOut) {
       setLoginMode(selectLoginMode('admin'))
+      setShowLanding(true)
       setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
@@ -851,6 +852,7 @@ function App() {
     const wasLoggedOut = await deleteClientSession(apiBaseUrl)
     if (wasLoggedOut) {
       setLoginMode(selectLoginMode('client'))
+      setShowLanding(true)
       setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
@@ -858,6 +860,7 @@ function App() {
 
   const handleSessionExpired = useCallback(() => {
     setLoginMode(selectLoginMode('admin'))
+    setShowLanding(true)
     setSessionState({ status: 'unauthenticated' })
   }, [])
 
@@ -880,6 +883,16 @@ function App() {
   }
 
   if (sessionState.status !== 'admin_authenticated') {
+    if (sessionState.status === 'unauthenticated' && showLanding) {
+      return (
+        <LandingPage
+          onLogin={() => {
+            setLoginMode(selectLoginMode('client'))
+            setShowLanding(false)
+          }}
+        />
+      )
+    }
     if (loginMode === 'client') {
       return (
         <ClientLoginPage
