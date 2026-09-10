@@ -289,10 +289,6 @@ export function AdminTenantIngestion({
   return (
     <section aria-labelledby="tenant-ingestion-title" className="tenant-ingestion">
       <div className="tenant-ingestion__heading">
-        <div>
-          <h3 id="tenant-ingestion-title">Ingestion</h3>
-          <p>Copie brute initiale des sources retenues vers Syncoria.</p>
-        </div>
         {selectedProvider !== null ? (
           <button
             className="primary-button"
@@ -303,6 +299,10 @@ export function AdminTenantIngestion({
             {isLaunching ? 'Lancement…' : 'Lancer l’ingestion'}
           </button>
         ) : null}
+        <div>
+          <h3 id="tenant-ingestion-title">Ingestion</h3>
+          <p>Copie brute initiale des sources retenues vers Syncoria.</p>
+        </div>
       </div>
 
       {providerState === 'loading' ? (

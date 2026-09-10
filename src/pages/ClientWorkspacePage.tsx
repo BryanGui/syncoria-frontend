@@ -7,11 +7,13 @@ import { TenantWorkspace } from '../components/TenantWorkspace'
 interface ClientWorkspacePageProps {
   currentUser: CurrentClientUser
   onLogout: () => Promise<boolean>
+  onShowPublic: () => void
 }
 
 export function ClientWorkspacePage({
   currentUser,
   onLogout,
+  onShowPublic,
 }: ClientWorkspacePageProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
@@ -43,6 +45,9 @@ export function ClientWorkspacePage({
             type="button"
           >
             {isLoggingOut ? 'Déconnexion…' : 'Se déconnecter'}
+          </button>
+          <button className="client-workspace-header__public-link" onClick={onShowPublic} type="button">
+            Site public
           </button>
         </div>
       </header>

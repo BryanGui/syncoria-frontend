@@ -84,15 +84,17 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
             </dl>
           </div>
         )}
-        <p className="tenant-audit__summary">{isArchived
-          ? 'Ce rapport est conservé dans l’historique et reste consultable.'
-          : 'L’état Terminé concerne l’audit, pas la validation métier ni l’intégration des données.'}</p>
-        <div className="tenant-audit__actions">
-          <a className="primary-button" aria-label={`Voir le rapport ${report.title} (nouvel onglet)`} href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} target="_blank" rel="noreferrer">Voir le rapport</a>
-          <a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>
-          {report.status === 'completed' && (
-            <button className="secondary-button" disabled={pendingId !== null} type="button" onClick={() => { setConfirmationId(report.id); setArchiveError(null) }}>Archiver</button>
-          )}
+        <div className="tenant-audit__report-footer">
+          <div className="tenant-audit__actions">
+            <a className="primary-button" aria-label={`Voir le rapport ${report.title} (nouvel onglet)`} href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} target="_blank" rel="noreferrer">Voir le rapport</a>
+            <a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>
+            {report.status === 'completed' && (
+              <button className="secondary-button" disabled={pendingId !== null} type="button" onClick={() => { setConfirmationId(report.id); setArchiveError(null) }}>Archiver</button>
+            )}
+          </div>
+          <p className="tenant-audit__summary">{isArchived
+            ? 'Ce rapport est conservé dans l’historique et reste consultable.'
+            : 'L’état Terminé concerne l’audit, pas la validation métier ni l’intégration des données.'}</p>
         </div>
         {confirmationId === report.id && (
           <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}>

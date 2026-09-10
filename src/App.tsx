@@ -538,9 +538,10 @@ function ClientLoginPage({
 interface DashboardProps {
   onLogout: () => Promise<boolean>
   onSessionExpired: () => void
+  onShowPublic: () => void
 }
 
-function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
+function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
   const [navigationState, dispatchNavigation] = useReducer(
@@ -618,6 +619,9 @@ function Dashboard({ onLogout, onSessionExpired }: DashboardProps) {
             <p>Environnement</p>
             <strong>Démonstration</strong>
           </div>
+          <button className="sidebar__public-link" onClick={onShowPublic} type="button">
+            Site public
+          </button>
         </div>
       </aside>
 
@@ -768,6 +772,7 @@ function App() {
   })
   const [loginMode, setLoginMode] = useState<LoginMode>('client')
   const [isLoginOpen, setIsLoginOpen] = useState(false)
+  const [isPublicPreviewOpen, setIsPublicPreviewOpen] = useState(false)
   const [isInitialSessionCheck, setIsInitialSessionCheck] = useState(true)
 
   function loadSessions() {
@@ -849,6 +854,7 @@ function App() {
     if (wasLoggedOut) {
       setLoginMode(selectLoginMode('admin'))
       setIsLoginOpen(false)
+      setIsPublicPreviewOpen(false)
       setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
@@ -859,6 +865,7 @@ function App() {
     if (wasLoggedOut) {
       setLoginMode(selectLoginMode('client'))
       setIsLoginOpen(false)
+      setIsPublicPreviewOpen(false)
       setSessionState({ status: 'unauthenticated' })
     }
     return wasLoggedOut
@@ -867,6 +874,7 @@ function App() {
   const handleSessionExpired = useCallback(() => {
     setLoginMode(selectLoginMode('admin'))
     setIsLoginOpen(false)
+    setIsPublicPreviewOpen(false)
     setSessionState({ status: 'unauthenticated' })
   }, [])
 
@@ -953,6 +961,48 @@ function App() {
     )
   }
 
+  function renderConnectedPublicShell() {
+    return (
+      <>
+        <button
+          className="public-preview__return secondary-button"
+          onClick={() => setIsPublicPreviewOpen(false)}
+          type="button"
+        >
+          Revenir à l’espace connecté
+        </button>
+        <LandingPage onLogin={() => {
+          setLoginMode(selectLoginMode('client'))
+          setIsLoginOpen(true)
+        }} />
+        {isLoginOpen && (
+          <div
+            aria-label="Connexion Syncoria"
+            aria-modal="true"
+            className="login-overlay"
+            onMouseDown={() => setIsLoginOpen(false)}
+            role="dialog"
+          >
+            <div
+              className="login-overlay__panel"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <button
+                aria-label="Fermer la connexion"
+                className="login-overlay__close"
+                onClick={() => setIsLoginOpen(false)}
+                type="button"
+              >
+                ×
+              </button>
+              {renderLoginPanel()}
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
   if (sessionState.status === 'loading' && isInitialSessionCheck) {
     return (
       <main aria-live="polite" className="session-loading">
@@ -962,11 +1012,19 @@ function App() {
     )
   }
 
+  if (isPublicPreviewOpen && (
+    sessionState.status === 'admin_authenticated'
+    || sessionState.status === 'client_authenticated'
+  )) {
+    return renderConnectedPublicShell()
+  }
+
   if (sessionState.status === 'client_authenticated') {
     return (
       <ClientWorkspacePage
         currentUser={sessionState.currentUser}
         onLogout={handleClientLogout}
+        onShowPublic={() => setIsPublicPreviewOpen(true)}
       />
     )
   }
@@ -983,6 +1041,7 @@ function App() {
     <Dashboard
       onLogout={handleLogout}
       onSessionExpired={handleSessionExpired}
+      onShowPublic={() => setIsPublicPreviewOpen(true)}
     />
   )
 }

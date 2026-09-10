@@ -21,8 +21,7 @@ test('active audit reports are full width with desktop columns and mobile stacki
 test('archived audit reports keep a compact history summary and existing actions', () => {
   assert.match(reportSource, /tenant-audit__report--archived/)
   assert.match(reportSource, /Ce rapport est conservé dans l’historique et reste consultable\./)
-  assert.match(appStyles, /\.tenant-audit__report--archived \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) auto;/)
-  assert.match(appStyles, /\.tenant-audit__report--archived \.tenant-audit__actions \{[^}]*grid-column: 2;[^}]*grid-row: 2;/)
-  assert.match(appStyles, /\.tenant-audit__report--archived \{ display: block; \}/)
+  assert.match(appStyles, /\.tenant-audit__report-footer \{[^}]*display: flex;[^}]*justify-content: space-between;/)
+  assert.match(appStyles, /\.tenant-audit__report--archived \.tenant-audit__actions \{ order: 2; \}/)
   assert.match(reportSource, /tenant-audit__actions/)
 })

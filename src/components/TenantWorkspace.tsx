@@ -127,9 +127,11 @@ export function TenantWorkspace({
             ))}
           </nav>
           <div className="tenant-workspace__integration-content">
-            <header className="tenant-workspace__integration-section-heading">
+            <header
+              aria-label={getIntegrationSectionDescription(activeIntegrationSection)}
+              className="tenant-workspace__integration-section-heading visually-hidden"
+            >
               <h3>{activeIntegrationSection}</h3>
-              <p>{getIntegrationSectionDescription(activeIntegrationSection)}</p>
             </header>
             {activeIntegrationSection === 'Audit & cartographie' ? (
               adminReports
@@ -144,12 +146,12 @@ export function TenantWorkspace({
         </section>
       ) : activeSection === 'Synchronisation' ? (
         <div className="tenant-workspace__empty">
-          <h3>Synchronisation</h3>
+          <h3 className="visually-hidden">Synchronisation</h3>
           <p>Cette étape préparera plus tard les mises à jour récurrentes après l’intégration des données.</p>
         </div>
       ) : (
         <div className="tenant-workspace__empty">
-          <h3>{activeSection}</h3>
+          <h3 className="visually-hidden">{activeSection}</h3>
           <p>Aucune donnée n’est affichée dans cette section pour le moment.</p>
         </div>
       )}
