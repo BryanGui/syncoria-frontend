@@ -85,10 +85,18 @@ test('uses audit by default and keeps integration placeholders scoped to their w
 
 test('renders the active integration section header without tenant-specific fixtures', () => {
   assert.match(tenantWorkspaceSource, /tenant-workspace__integration-section-heading/)
+  assert.match(tenantWorkspaceSource, /className="tenant-workspace__integration-section-heading visually-hidden"/)
   assert.match(tenantWorkspaceSource, /Sources auditées, décisions retained\/excluded et rapports disponibles\./)
   assert.match(tenantWorkspaceSource, /Copie brute initiale des sources retenues vers Syncoria\./)
   assert.match(tenantWorkspaceSource, /Transformation future des données brutes en données métier Syncoria\./)
   assert.doesNotMatch(tenantWorkspaceSource, /Novalia|90|raw_payload/)
+})
+
+test('adds breathing room between workspace levels and hides repeated section headings visually', () => {
+  assert.match(workspaceStyles, /\.tenant-workspace__heading \{[\s\S]*?padding: 28px 28px 20px;/)
+  assert.match(workspaceStyles, /\.tenant-workspace__subtabs \{[\s\S]*?margin: 28px 24px 0;/)
+  assert.match(workspaceStyles, /\.visually-hidden \{[\s\S]*?clip: rect\(0, 0, 0, 0\)/)
+  assert.match(tenantWorkspaceSource, /className="visually-hidden">Synchronisation/)
 })
 
 test('starting another tenant load clears the previous tenant immediately', () => {

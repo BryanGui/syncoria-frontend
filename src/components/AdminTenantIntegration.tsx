@@ -630,7 +630,7 @@ export function AdminTenantIntegration({
     <section aria-labelledby="tenant-integration-title" className="tenant-integration">
       <div className="tenant-integration__heading">
         <div>
-          <h3 id="tenant-integration-title">Intégration</h3>
+          <h3 className="visually-hidden" id="tenant-integration-title">Intégration</h3>
           <p>Configurez les connexions externes et vérifiez leur authentification.</p>
         </div>
         {tenantStatus === 'active' && loadState === 'loaded' && !isAddingProvider ? (

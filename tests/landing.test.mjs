@@ -62,6 +62,15 @@ test('session errors keep the public shell and login remains retryable', () => {
   assert.match(appStyles, /\.login-overlay__panel/)
 })
 
+test('authenticated users can open the public landing without logging out', () => {
+  assert.match(appSource, /isPublicPreviewOpen/)
+  assert.match(appSource, /Site public/)
+  assert.match(appSource, /Revenir à l’espace connecté/)
+  assert.match(appSource, /setIsPublicPreviewOpen\(true\)/)
+  assert.match(appSource, /sessionState\.status === 'admin_authenticated'[\s\S]*?renderConnectedPublicShell/)
+  assert.match(appStyles, /\.public-preview__return/)
+})
+
 test('landing palette and responsive layouts are defined', () => {
   for (const value of ['#f8f7fb', '#ffffff', '#7657e8', '#ece8fa', '#35333d', '#77727f', '#e5e2ea']) {
     assert.match(`${indexStyles}\n${appStyles}`, new RegExp(value, 'i'))
