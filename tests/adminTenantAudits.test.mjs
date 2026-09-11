@@ -13,6 +13,7 @@ const providerRecordId = '22222222-2222-4222-8222-222222222222'
 const correlationId = '33333333-3333-4333-8333-333333333333'
 
 function operation(status = 'pending') {
+  const phase = status === 'pending' ? 'preparing' : status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'collecting'
   return {
     tenant_id: tenantId,
     tenant_provider_record_id: providerRecordId,
@@ -31,6 +32,10 @@ function operation(status = 'pending') {
     sources_pending: 0,
     records_retained: 7,
     decisions_required: 0,
+    phase,
+    progress_current: phase === 'collecting' ? 2 : null,
+    progress_total: phase === 'collecting' ? 3 : null,
+    progress_unit: phase === 'collecting' ? 'source' : null,
   }
 }
 
@@ -38,12 +43,47 @@ test('strictly parses every backend audit state and rejects malformed payloads',
   for (const status of ['pending', 'running', 'completed', 'failed']) {
     assert.equal(parseAdminProviderAuditResponse(operation(status)).status, status)
   }
+  for (const phase of ['preparing', 'collecting', 'analyzing', 'generating_report', 'publishing', 'completed', 'failed']) {
+    const parsed = parseAdminProviderAuditResponse({
+      ...operation(phase === 'completed' ? 'completed' : phase === 'failed' ? 'failed' : 'running'),
+      phase,
+      progress_current: phase === 'collecting' ? 2 : null,
+      progress_total: phase === 'collecting' ? 3 : null,
+      progress_unit: phase === 'collecting' ? 'source' : null,
+    })
+    assert.equal(parsed?.phase, phase)
+  }
+  for (const progress of [
+    { progress_current: 1, progress_total: null, progress_unit: null },
+    { progress_current: null, progress_total: 3, progress_unit: 'source' },
+    { progress_current: null, progress_total: null, progress_unit: 'item' },
+    { progress_current: 2, progress_total: 3, progress_unit: 'source' },
+  ]) {
+    const parsed = parseAdminProviderAuditResponse({
+      ...operation('running'),
+      ...progress,
+    })
+    assert.deepEqual(
+      parsed && {
+        progress_current: parsed.progress_current,
+        progress_total: parsed.progress_total,
+        progress_unit: parsed.progress_unit,
+      },
+      progress,
+    )
+  }
   for (const invalid of [
     { ...operation(), provider: 'n8n' },
     { ...operation(), sources_total: 4 },
     { ...operation(), created_at: 'not-a-date' },
     { ...operation(), unexpected: 'payload' },
+    { ...operation(), secret: 'must-not-enter-client-state' },
     { ...operation(), correlation_id: '../other' },
+    { ...operation(), phase: 'unknown' },
+    { ...operation(), progress_current: -1 },
+    { ...operation(), progress_total: -1 },
+    { ...operation(), progress_current: 4, progress_total: 3 },
+    { ...operation(), progress_unit: 'percent' },
   ]) {
     assert.equal(parseAdminProviderAuditResponse(invalid), null)
   }

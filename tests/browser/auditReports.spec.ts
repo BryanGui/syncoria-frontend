@@ -10,8 +10,12 @@ const report = {
 }
 
 const auditCorrelationId = '33333333-3333-4333-8333-333333333333'
-const auditPrefix = `${prefix}/providers/22222222-2222-4222-8222-222222222222/audits`
+const notionAId = '22222222-2222-4222-8222-222222222222'
+const notionBId = '44444444-4444-4444-8444-444444444444'
+const unsupportedProviderId = '55555555-5555-4555-8555-555555555555'
+const auditPrefix = `${prefix}/providers/${notionAId}/audits`
 const auditOperation = (status: 'pending' | 'running' | 'completed' | 'failed') => ({
+  phase: status === 'pending' ? 'preparing' : status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'collecting',
   tenant_id: tenantId,
   tenant_provider_record_id: '22222222-2222-4222-8222-222222222222',
   provider: 'notion',
@@ -29,11 +33,29 @@ const auditOperation = (status: 'pending' | 'running' | 'completed' | 'failed') 
   sources_pending: 0,
   records_retained: 9,
   decisions_required: 1,
+  progress_current: status === 'running' ? 5 : null,
+  progress_total: status === 'running' ? 11 : null,
+  progress_unit: status === 'running' ? 'source' : null,
 })
 
-type AuditScenario = 'launch' | 'resume' | 'failed' | 'conflict'
+type AuditScenario = 'launch' | 'resume' | 'failed' | 'conflict' | 'v2' | 'network' | 'timer' | 'abort'
 
-async function openAudit(page: Page, options: { archivedTenant?: boolean; archiveStatus?: number; client?: boolean; auditScenario?: AuditScenario } = {}) {
+async function openAudit(page: Page, options: {
+  archivedTenant?: boolean
+  archiveStatus?: number
+  client?: boolean
+  auditScenario?: AuditScenario
+  reportsRefreshFails?: boolean
+} = {}) {
+  await page.addInitScript(() => {
+    const originalAbort = AbortController.prototype.abort
+    let abortCount = 0
+    Object.defineProperty(window, '__auditAbortCount', { get: () => abortCount })
+    AbortController.prototype.abort = function trackedAbort(reason?: unknown) {
+      abortCount += 1
+      return originalAbort.call(this, reason)
+    }
+  })
   const tenant = { id: tenantId, name: 'Client synthétique', slug: 'synthetic', status: options.archivedTenant ? 'archived' : 'active' }
   const reports = [
     { ...report },
@@ -43,6 +65,7 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
   ]
   let auditPollCount = 0
   let latestCallCount = 0
+  let reportCallCount = 0
   const requests: { path: string; method: string }[] = []
   await page.context().route('**/*', async (route) => {
     const url = new URL(route.request().url())
@@ -58,11 +81,11 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
     if (url.pathname === '/admin/tenants') return route.fulfill({ json: [tenant] })
     if (url.pathname === prefix) return route.fulfill({ json: tenant })
     if (url.pathname === prefix + '/providers') return route.fulfill({ json: [{
-      id: '22222222-2222-4222-8222-222222222222',
+      id: notionAId,
       tenant_id: tenantId,
       provider: 'notion',
       credential_type: 'integration_token',
-      name: 'Notion synthétique',
+      name: 'Notion A',
       status: 'active',
       configuration: {},
       credential_configured: true,
@@ -73,14 +96,37 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
       last_verification_http_status: null,
       last_verification_code: null,
       last_verification_message: null,
+    }, {
+      id: notionBId, tenant_id: tenantId, provider: 'notion',
+      credential_type: 'integration_token', name: 'Notion B', status: 'active', configuration: {},
+      credential_configured: true, created_at: '2026-08-14T08:00:00Z', updated_at: '2026-08-14T08:00:00Z',
+      last_verified_at: null, last_verification_status: null, last_verification_http_status: null,
+      last_verification_code: null, last_verification_message: null,
+    }, {
+      id: unsupportedProviderId, tenant_id: tenantId, provider: 'n8n',
+      credential_type: 'api_key', name: 'n8n synthétique', status: 'active',
+      configuration: { base_url: 'https://automation.example.test' }, credential_configured: true,
+      created_at: '2026-08-15T08:00:00Z', updated_at: '2026-08-15T08:00:00Z',
+      last_verified_at: null, last_verification_status: null, last_verification_http_status: null,
+      last_verification_code: null, last_verification_message: null,
     }] })
     if (url.pathname.endsWith('/audits/latest')) {
       latestCallCount += 1
+      if (options.auditScenario === 'abort' && url.pathname.includes(notionAId)) {
+        await new Promise((resolve) => setTimeout(resolve, 1200))
+      }
       if (options.auditScenario === 'conflict' && latestCallCount === 2) await new Promise((resolve) => setTimeout(resolve, 1000))
       const hasActiveLatest = options.auditScenario === 'resume'
+        || options.auditScenario === 'timer'
         || options.auditScenario === 'conflict' && latestCallCount === 2
       return route.fulfill({
-        json: hasActiveLatest ? auditOperation('running') : {},
+        json: hasActiveLatest ? {
+          ...auditOperation('running'),
+          phase: options.auditScenario === 'timer' ? 'analyzing' : 'collecting',
+          progress_current: options.auditScenario === 'timer' ? null : 5,
+          progress_total: options.auditScenario === 'timer' ? null : 11,
+          progress_unit: options.auditScenario === 'timer' ? null : 'source',
+        } : {},
         status: hasActiveLatest ? 200 : 404,
       })
     }
@@ -90,9 +136,19 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
     }
     if (url.pathname.endsWith(`/audits/${auditCorrelationId}`)) {
       auditPollCount += 1
+      const v2Phases = ['collecting', 'collecting', 'analyzing', 'generating_report', 'publishing', 'completed'] as const
+      if (options.auditScenario === 'v2' && auditPollCount === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 350))
+      }
+      if (options.auditScenario === 'network' && auditPollCount === 2) {
+        return route.abort('connectionfailed')
+      }
       const status = options.auditScenario === 'failed'
-        ? 'failed'
-        : options.auditScenario === 'resume' || options.auditScenario === 'conflict' || auditPollCount > 1 ? 'completed' : 'running'
+        ? auditPollCount > 1 ? 'failed' : 'running'
+        : options.auditScenario === 'timer' ? 'running'
+          : options.auditScenario === 'network' ? auditPollCount > 2 ? 'completed' : 'running'
+        : options.auditScenario === 'v2' ? auditPollCount >= v2Phases.length ? 'completed' : 'running'
+          : options.auditScenario === 'resume' || options.auditScenario === 'conflict' || auditPollCount > 1 ? 'completed' : 'running'
       if (status === 'completed' && !reports.some((entry) => entry.id === 'audit-notion-2026-09-11')) {
         reports.unshift({
           ...report,
@@ -106,9 +162,34 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
           decisions_required: 1,
         })
       }
-      return route.fulfill({ json: auditOperation(status) })
+      const operation = auditOperation(status)
+      if (options.auditScenario === 'failed' && status === 'running') {
+        operation.phase = 'collecting'
+        operation.progress_current = 5
+        operation.progress_total = 11
+        operation.progress_unit = 'source'
+      }
+      if (options.auditScenario === 'network' || options.auditScenario === 'timer') {
+        operation.phase = 'analyzing'
+        operation.progress_current = null
+        operation.progress_total = null
+        operation.progress_unit = null
+      }
+      if (options.auditScenario === 'v2') {
+        operation.phase = v2Phases[Math.min(auditPollCount - 1, v2Phases.length - 1)]
+        operation.progress_current = operation.phase === 'collecting' ? auditPollCount === 1 ? 5 : 11 : null
+        operation.progress_total = operation.phase === 'collecting' ? 11 : null
+        operation.progress_unit = operation.phase === 'collecting' ? 'source' : null
+      }
+      return route.fulfill({ json: operation })
     }
-    if (url.pathname === `${prefix}/reports`) return route.fulfill({ json: reports })
+    if (url.pathname === `${prefix}/reports`) {
+      reportCallCount += 1
+      if (options.reportsRefreshFails && reportCallCount > 1) {
+        return route.fulfill({ status: 503, json: { detail: 'Temporary failure' } })
+      }
+      return route.fulfill({ json: reports })
+    }
     if (url.pathname.endsWith('/archive') && method === 'POST') {
       if (options.archiveStatus) return route.fulfill({ status: options.archiveStatus, json: { detail: 'Unavailable' } })
       const selected = reports.find((entry) => url.pathname === `${prefix}/reports/${entry.id}/archive`)
@@ -130,6 +211,9 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
     await page.getByRole('button', { name: 'Client synthétique', exact: true }).click()
     await page.getByRole('button', { name: 'Intégration', exact: true }).click()
     await page.getByRole('button', { name: 'Audit & cartographie', exact: true }).click()
+    if (!options.archivedTenant) {
+      await page.getByLabel('Connexion à auditer').selectOption(notionAId)
+    }
   }
   return requests
 }
@@ -227,6 +311,7 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
+  await expect(launcher.getByLabel('Connexion à auditer')).toBeDisabled()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
   await expect(launcher).toContainText('Sources analysées5')
   await expect(launcher).toContainText('Sources retenues3')
@@ -237,6 +322,95 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   expect(requests.filter((request) => request.path === auditPrefix && request.method === 'POST')).toHaveLength(1)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(2)
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
+})
+
+test('lets an administrator choose a provider and renders the real V2 progression', async ({ page }) => {
+  test.setTimeout(60000)
+  const requests = await openAudit(page, { auditScenario: 'v2' })
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  const selector = launcher.getByLabel('Connexion à auditer')
+  await expect(selector).toHaveValue('22222222-2222-4222-8222-222222222222')
+  await expect(selector.locator('option')).toHaveText([
+    'Sélectionner une connexion', 'Notion — Notion A', 'Notion — Notion B',
+    'n8n — n8n synthétique · Audit indisponible',
+  ])
+  await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Préparation')
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Collecte des sources')
+  await expect(launcher).toContainText('5 / 11')
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Collecte des sources')
+  await expect(launcher).toContainText('11 / 11')
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Analyse des données')
+  await expect(launcher).not.toContainText('5 / 11')
+  await expect(launcher).not.toContainText('11 / 11')
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Génération du rapport')
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Publication')
+  await expect(launcher).toContainText('État : Terminé')
+  await expect(launcher).toContainText('Temps écoulé')
+  await expect(launcher).not.toContainText('%')
+  await expect(page.getByRole('region', { name: 'Rapports actifs', exact: true }).getByRole('article', { name: /Audit Notion récent/ })).toBeVisible()
+  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
+})
+
+test('shows unsupported active providers without allowing an audit launch', async ({ page }) => {
+  await openAudit(page)
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  await launcher.getByLabel('Connexion à auditer').selectOption(unsupportedProviderId)
+  await expect(launcher).toContainText('Audit indisponible pour cette connexion.')
+  await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeDisabled()
+  await expect(page.locator('body')).not.toContainText('https://automation.example.test')
+  await expect(page.locator('body')).not.toContainText('api_key')
+})
+
+test('loads latest for each explicit Notion selection and aborts the previous request', async ({ page }) => {
+  const requests = await openAudit(page, { auditScenario: 'abort' })
+  const selector = page.getByLabel('Connexion à auditer')
+  const abortCount = await page.evaluate(
+    () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
+  )
+  await selector.selectOption(notionBId)
+  await expect.poll(() => page.evaluate(
+    () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
+  )).toBeGreaterThan(abortCount)
+  await expect.poll(() => requests.filter((request) => request.path === `${prefix}/providers/${notionBId}/audits/latest`).length).toBe(1)
+  expect(requests.filter((request) => request.path === `${prefix}/providers/${notionAId}/audits/latest`)).toHaveLength(1)
+  await expect(page.locator('.tenant-audit__launcher-status')).toHaveCount(0)
+})
+
+test('keeps the last valid phase through a temporary polling error', async ({ page }) => {
+  test.setTimeout(30000)
+  await openAudit(page, { auditScenario: 'network' })
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Analyse des données')
+  await expect(launcher.getByRole('alert')).toContainText('Réessai automatique')
+  await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Analyse des données')
+  await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
+})
+
+test('updates elapsed time without placing the timer in a live region', async ({ page }) => {
+  await openAudit(page, { auditScenario: 'timer' })
+  const elapsed = page.locator('.tenant-audit__elapsed')
+  await expect(elapsed).toBeVisible()
+  await expect(elapsed).not.toHaveAttribute('aria-live')
+  const initial = await elapsed.textContent()
+  await page.waitForTimeout(1100)
+  await expect.poll(() => elapsed.textContent()).not.toBe(initial)
+})
+
+test('stops active polling when leaving the audit view', async ({ page }) => {
+  const requests = await openAudit(page, { auditScenario: 'timer' })
+  await expect(page.locator('.tenant-audit__step--current')).toContainText('Analyse des données')
+  const pollCount = requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}`).length
+  const abortCount = await page.evaluate(
+    () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
+  )
+  await page.getByRole('button', { name: 'Ingestion', exact: true }).click()
+  await expect.poll(() => page.evaluate(
+    () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
+  )).toBeGreaterThan(abortCount)
+  await page.waitForTimeout(2700)
+  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}`)).toHaveLength(pollCount)
 })
 
 test('resumes a running audit on mount and stops after completion', async ({ page }) => {
@@ -253,10 +427,29 @@ test('failed audit stops polling and allows a new launch', async ({ page }) => {
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.getByText('Échec de l’audit', { exact: true })).toBeVisible()
+  await expect(launcher).toContainText('5 / 11')
+  await expect(launcher.locator('.tenant-audit__step--complete', {
+    hasText: 'Collecte des sources',
+  })).toBeVisible()
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   const pollCount = requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET').length
   await page.waitForTimeout(2700)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(pollCount)
+})
+
+test('keeps report history visible when the post-completion refresh fails', async ({ page }) => {
+  const requests = await openAudit(page, {
+    auditScenario: 'launch',
+    reportsRefreshFails: true,
+  })
+  const activeReports = page.getByRole('region', { name: 'Rapports actifs', exact: true })
+  const archivedReports = page.getByRole('region', { name: 'Rapports archivés', exact: true })
+  await expect(activeReports.getByRole('article')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
+  await expect(page.getByText('La mise à jour des rapports est temporairement indisponible.')).toBeVisible()
+  await expect(activeReports.getByRole('article')).toHaveCount(3)
+  await expect(archivedReports.getByRole('article')).toHaveCount(1)
+  expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })
 
 test('409 keeps launch locked while latest is recovered and then resumes polling', async ({ page }) => {
@@ -267,7 +460,7 @@ test('409 keeps launch locked while latest is recovered and then resumes polling
   await expect(button).toBeDisabled()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
   expect(requests.filter((request) => request.path === auditPrefix && request.method === 'POST')).toHaveLength(1)
-  expect(requests.filter((request) => request.path === `${prefix}/providers/22222222-2222-4222-8222-222222222222/audits/latest`)).toHaveLength(2)
+  expect(requests.filter((request) => request.path === `${prefix}/providers/${notionAId}/audits/latest`)).toHaveLength(2)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(1)
 })
 
