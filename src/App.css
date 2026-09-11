@@ -2086,7 +2086,7 @@ button.navigation__link {
 .tenant-audit__report--archived { padding: .85rem 1rem; }
 .tenant-audit__report--archived .tenant-audit__report-footer { margin-top: .45rem; }
 .tenant-audit__report--archived .tenant-audit__actions { order: 2; }
-.tenant-audit__actions { display: flex; flex-wrap: wrap; align-items: stretch; gap: .75rem; }
+.tenant-audit__actions { display: flex; flex-wrap: nowrap; align-items: stretch; gap: .75rem; }
 .tenant-audit__actions a { text-decoration: none; }
 
 .tenant-audit__actions > a,
@@ -2114,6 +2114,7 @@ button.navigation__link {
   .tenant-audit__report-meta { justify-content: flex-start; }
   .tenant-audit__report-details { grid-template-columns: 1fr; gap: 0; }
   .tenant-audit__report-footer { align-items: flex-start; flex-direction: column; gap: .8rem; }
+  .tenant-audit__actions { flex-wrap: wrap; }
   .tenant-audit__report--archived .tenant-audit__actions { order: 2; }
   .tenant-audit__actions > a,
   .tenant-audit__actions > button { flex: 1 1 100%; width: 100%; }

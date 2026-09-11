@@ -63,6 +63,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
         return
       }
       if (result.status === 'loaded') {
+        setAuditError(null)
         setAuditOperation(result.operation)
         if (result.operation.status === 'completed') {
           stopPolling()
@@ -147,7 +148,8 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     void loadAuditState()
     return () => {
       controller.abort()
-      if (auditRequest.current === controller) auditRequest.current = null
+      auditRequest.current?.abort()
+      auditRequest.current = null
       stopPolling()
     }
   }, [apiBaseUrl, beginPolling, onSessionExpired, stopPolling, tenantId])
@@ -176,9 +178,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       apiBaseUrl, tenantId, notionProvider.id, controller.signal,
     )
     if (controller.signal.aborted) return
-    auditRequest.current = null
-    setIsLaunching(false)
     if (result.status === 'unauthenticated') {
+      auditRequest.current = null
+      setIsLaunching(false)
       onSessionExpired()
       return
     }
@@ -186,6 +188,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       const latest = await fetchLatestAdminTenantProviderAudit(
         apiBaseUrl, tenantId, notionProvider.id, controller.signal,
       )
+      if (controller.signal.aborted) return
+      auditRequest.current = null
+      setIsLaunching(false)
       if (latest.status === 'loaded') {
         setAuditOperation(latest.operation)
         if (latest.operation.status === 'pending' || latest.operation.status === 'running') {
@@ -198,6 +203,8 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       }
       return
     }
+    auditRequest.current = null
+    setIsLaunching(false)
     if (result.status !== 'loaded') {
       setAuditError(result.status === 'invalid'
         ? 'L’audit Notion est indisponible ou mal configuré.'
