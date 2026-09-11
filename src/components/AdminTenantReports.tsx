@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchAdminTenantProviderAudit,
   fetchLatestAdminTenantProviderAudit,
@@ -21,20 +21,117 @@ interface AdminTenantReportsProps {
   onSessionExpired: () => void
 }
 
+const auditPhases = [
+  ['preparing', 'Préparation'],
+  ['collecting', 'Collecte des sources'],
+  ['analyzing', 'Analyse des données'],
+  ['generating_report', 'Génération du rapport'],
+  ['publishing', 'Publication'],
+] as const
+
+function formatElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return minutes === 0 ? `${remainder} s` : `${minutes} min ${String(remainder).padStart(2, '0')} s`
+}
+
+function AuditElapsedTime({ operation }: { operation: AdminProviderAuditOperation }) {
+  const [now, setNow] = useState(() => Date.now())
+  const active = operation.status === 'pending' || operation.status === 'running'
+  useEffect(() => {
+    if (!active) return undefined
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [active])
+  const start = Date.parse(operation.started_at ?? operation.created_at)
+  const end = operation.completed_at === null ? now : Date.parse(operation.completed_at)
+  const elapsed = Number.isFinite(start) && Number.isFinite(end)
+    ? Math.max(0, Math.floor((end - start) / 1000)) : 0
+  return <p className="tenant-audit__elapsed">Temps écoulé : {formatElapsed(elapsed)}</p>
+}
+
+function AuditProgress({
+  operation,
+  lastActiveOperation,
+}: {
+  operation: AdminProviderAuditOperation
+  lastActiveOperation: AdminProviderAuditOperation | null
+}) {
+  const retainedOperation = operation.status === 'failed'
+    && lastActiveOperation?.correlation_id === operation.correlation_id
+    ? lastActiveOperation
+    : operation
+  const currentIndex = operation.status === 'completed'
+    ? auditPhases.length
+    : auditPhases.findIndex(([phase]) => phase === retainedOperation.phase)
+  const currentLabel = operation.status === 'completed'
+    ? 'Terminé'
+    : operation.status === 'failed'
+      ? 'Échec'
+      : auditPhases[currentIndex]?.[1] ?? 'En attente'
+  return (
+    <div className="tenant-audit__progress" aria-label="Progression de l’audit">
+      <p aria-atomic="true" aria-live="polite" className="visually-hidden">
+        Phase actuelle : {currentLabel}
+      </p>
+      <ol>
+        {auditPhases.map(([phase, label], index) => {
+          const state = operation.status === 'failed' && index <= currentIndex
+            ? 'complete'
+            : index < currentIndex
+              ? 'complete'
+              : index === currentIndex
+                ? 'current'
+                : 'upcoming'
+          return (
+            <li className={`tenant-audit__step tenant-audit__step--${state}`} key={phase}>
+              <span aria-hidden="true">{state === 'complete' ? '✓' : state === 'current' ? '●' : '○'}</span>
+              <span>{label}</span>
+              {phase === retainedOperation.phase
+                && retainedOperation.progress_current !== null
+                && retainedOperation.progress_total !== null ? (
+                <strong>{retainedOperation.progress_current} / {retainedOperation.progress_total}</strong>
+              ) : null}
+            </li>
+          )
+        })}
+        {operation.status === 'failed' ? (
+          <li className="tenant-audit__step tenant-audit__step--failed">
+            <span aria-hidden="true">●</span><span>Échec</span>
+          </li>
+        ) : null}
+      </ol>
+      <AuditElapsedTime operation={operation} />
+    </div>
+  )
+}
+
 export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: AdminTenantReportsProps) {
   const [state, setState] = useState<AdminTenantReportsResult | { status: 'loading' }>({ status: 'loading' })
+  const [reportsError, setReportsError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [confirmationId, setConfirmationId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [archiveError, setArchiveError] = useState<string | null>(null)
   const [providerState, setProviderState] = useState<'loading' | 'loaded' | 'error'>('loading')
-  const [notionProvider, setNotionProvider] = useState<AdminProviderRecord | null>(null)
+  const [providers, setProviders] = useState<AdminProviderRecord[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState('')
   const [auditOperation, setAuditOperation] = useState<AdminProviderAuditOperation | null>(null)
   const [auditError, setAuditError] = useState<string | null>(null)
   const [isLaunching, setIsLaunching] = useState(false)
   const archiveRequest = useRef<AbortController | null>(null)
   const auditRequest = useRef<AbortController | null>(null)
   const polling = useRef<{ controller: AbortController; timer: number | null } | null>(null)
+  const reportsTenant = useRef<string | null>(null)
+  const lastActiveAudit = useRef<AdminProviderAuditOperation | null>(null)
+  const selectedProvider = useMemo(
+    () => providers.find((provider) => provider.id === selectedProviderId) ?? null,
+    [providers, selectedProviderId],
+  )
+  const activeProviders = useMemo(
+    () => providers.filter((provider) => provider.status === 'active'),
+    [providers],
+  )
 
   const stopPolling = useCallback(() => {
     const active = polling.current
@@ -42,6 +139,15 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     active.controller.abort()
     if (active.timer !== null) window.clearTimeout(active.timer)
     polling.current = null
+  }, [])
+
+  const applyAuditOperation = useCallback((operation: AdminProviderAuditOperation) => {
+    if (operation.status === 'pending' || operation.status === 'running') {
+      lastActiveAudit.current = operation
+    } else if (operation.status === 'completed') {
+      lastActiveAudit.current = null
+    }
+    setAuditOperation(operation)
   }, [])
 
   const beginPolling = useCallback((providerRecordId: string, correlationId: string) => {
@@ -64,7 +170,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       }
       if (result.status === 'loaded') {
         setAuditError(null)
-        setAuditOperation(result.operation)
+        applyAuditOperation(result.operation)
         if (result.operation.status === 'completed') {
           stopPolling()
           setReloadKey((key) => key + 1)
@@ -81,18 +187,35 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     }
 
     void poll()
-  }, [apiBaseUrl, onSessionExpired, stopPolling, tenantId])
+  }, [apiBaseUrl, applyAuditOperation, onSessionExpired, stopPolling, tenantId])
 
   useEffect(() => {
     const controller = new AbortController()
-    setState({ status: 'loading' })
+    const tenantChanged = reportsTenant.current !== tenantId
+    reportsTenant.current = tenantId
+    if (tenantChanged) {
+      setReportsError(null)
+      setState({ status: 'loading' })
+    } else {
+      setState((previous) => previous.status === 'loaded'
+        ? previous : { status: 'loading' })
+    }
     setConfirmationId(null)
     setPendingId(null)
     setArchiveError(null)
     void fetchAdminTenantReports(apiBaseUrl, tenantId, controller.signal).then((result) => {
       if (controller.signal.aborted) return
-      if (result.status === 'unauthenticated') onSessionExpired()
-      setState(result)
+      if (result.status === 'unauthenticated') {
+        setReportsError(null)
+        setState(result)
+        onSessionExpired()
+      } else if (result.status === 'loaded') {
+        setReportsError(null)
+        setState(result)
+      } else {
+        setReportsError('La mise à jour des rapports est temporairement indisponible.')
+        setState((previous) => previous.status === 'loaded' ? previous : result)
+      }
     })
     return () => {
       controller.abort()
@@ -102,10 +225,11 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
 
   useEffect(() => {
     const controller = new AbortController()
-    auditRequest.current = controller
     setProviderState('loading')
-    setNotionProvider(null)
+    setProviders([])
+    setSelectedProviderId('')
     setAuditOperation(null)
+    lastActiveAudit.current = null
     setAuditError(null)
     setIsLaunching(false)
 
@@ -122,27 +246,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
         setProviderState('error')
         return
       }
-      const provider = providers.providers.find(
-        (item) => item.provider === 'notion' && item.status === 'active',
-      ) ?? null
+      const active = providers.providers.filter((provider) => provider.status === 'active')
       setProviderState('loaded')
-      setNotionProvider(provider)
-      if (provider === null) return
-
-      const latest = await fetchLatestAdminTenantProviderAudit(
-        apiBaseUrl, tenantId, provider.id, controller.signal,
-      )
-      if (controller.signal.aborted) return
-      if (latest.status === 'unauthenticated') {
-        onSessionExpired()
-      } else if (latest.status === 'loaded') {
-        setAuditOperation(latest.operation)
-        if (latest.operation.status === 'pending' || latest.operation.status === 'running') {
-          beginPolling(provider.id, latest.operation.correlation_id)
-        }
-      } else if (latest.status !== 'not_found') {
-        setAuditError('L’état de l’audit n’est pas disponible pour le moment.')
-      }
+      setProviders(active)
     }
 
     void loadAuditState()
@@ -154,6 +260,38 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     }
   }, [apiBaseUrl, beginPolling, onSessionExpired, stopPolling, tenantId])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    auditRequest.current?.abort()
+    auditRequest.current = controller
+    stopPolling()
+    setAuditOperation(null)
+    lastActiveAudit.current = null
+    setAuditError(null)
+    if (selectedProvider === null) return () => controller.abort()
+    if (selectedProvider.provider !== 'notion') return () => controller.abort()
+
+    void fetchLatestAdminTenantProviderAudit(
+      apiBaseUrl, tenantId, selectedProvider.id, controller.signal,
+    ).then((latest) => {
+      if (controller.signal.aborted) return
+      if (latest.status === 'unauthenticated') onSessionExpired()
+      else if (latest.status === 'loaded') {
+        applyAuditOperation(latest.operation)
+        if (latest.operation.status === 'pending' || latest.operation.status === 'running') {
+          beginPolling(selectedProvider.id, latest.operation.correlation_id)
+        }
+      } else if (latest.status !== 'not_found') {
+        setAuditError('L’état de l’audit n’est pas disponible pour le moment.')
+      }
+    })
+    return () => {
+      controller.abort()
+      if (auditRequest.current === controller) auditRequest.current = null
+      stopPolling()
+    }
+  }, [apiBaseUrl, applyAuditOperation, beginPolling, onSessionExpired, selectedProvider, stopPolling, tenantId])
+
   function auditFailureMessage(errorCode: string | null): string {
     if (errorCode === 'credential') return 'Vérifiez la configuration du credential Notion.'
     if (errorCode === 'unsupported') return 'Cet audit n’est pas disponible pour cette connexion.'
@@ -163,8 +301,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
 
   async function launchAudit() {
     if (
-      notionProvider === null
-      || !notionProvider.credential_configured
+      selectedProvider === null
+      || selectedProvider.provider !== 'notion'
+      || !selectedProvider.credential_configured
       || isLaunching
       || auditOperation?.status === 'pending'
       || auditOperation?.status === 'running'
@@ -175,7 +314,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     setIsLaunching(true)
     setAuditError(null)
     const result = await launchAdminTenantProviderAudit(
-      apiBaseUrl, tenantId, notionProvider.id, controller.signal,
+      apiBaseUrl, tenantId, selectedProvider.id, controller.signal,
     )
     if (controller.signal.aborted) return
     if (result.status === 'unauthenticated') {
@@ -186,15 +325,15 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     }
     if (result.status === 'conflict') {
       const latest = await fetchLatestAdminTenantProviderAudit(
-        apiBaseUrl, tenantId, notionProvider.id, controller.signal,
+        apiBaseUrl, tenantId, selectedProvider.id, controller.signal,
       )
       if (controller.signal.aborted) return
       auditRequest.current = null
       setIsLaunching(false)
       if (latest.status === 'loaded') {
-        setAuditOperation(latest.operation)
-        if (latest.operation.status === 'pending' || latest.operation.status === 'running') {
-          beginPolling(notionProvider.id, latest.operation.correlation_id)
+        applyAuditOperation(latest.operation)
+          if (latest.operation.status === 'pending' || latest.operation.status === 'running') {
+          beginPolling(selectedProvider.id, latest.operation.correlation_id)
         }
       } else if (latest.status === 'unauthenticated') {
         onSessionExpired()
@@ -211,9 +350,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
         : 'L’audit n’a pas pu être lancé. Réessayez.')
       return
     }
-    setAuditOperation(result.operation)
+    applyAuditOperation(result.operation)
     if (result.operation.status === 'pending' || result.operation.status === 'running') {
-      beginPolling(notionProvider.id, result.operation.correlation_id)
+      beginPolling(selectedProvider.id, result.operation.correlation_id)
     } else if (result.operation.status === 'completed') {
       setReloadKey((key) => key + 1)
     }
@@ -223,18 +362,31 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     const auditActive = auditOperation?.status === 'pending'
       || auditOperation?.status === 'running'
     const disabled = providerState !== 'loaded'
-      || notionProvider === null
-      || !notionProvider.credential_configured
+      || selectedProvider === null
+      || selectedProvider.provider !== 'notion'
+      || !selectedProvider.credential_configured
       || isLaunching
       || auditActive
 
     return (
       <section aria-label="Lancement de l’audit Notion" className="tenant-audit__launcher">
+        <label className="tenant-audit__provider-label" htmlFor="audit-provider">Connexion à auditer</label>
         <div className="tenant-audit__launcher-heading">
-          <div>
-            <p className="tenant-audit__eyebrow">Provider</p>
-            <h4>{notionProvider === null ? 'Notion' : 'Notion · ' + notionProvider.name}</h4>
-          </div>
+          <select
+            aria-label="Connexion à auditer"
+            disabled={auditActive || isLaunching || providerState !== 'loaded'}
+            id="audit-provider"
+            onChange={(event) => setSelectedProviderId(event.target.value)}
+            value={selectedProviderId}
+          >
+            <option value="">Sélectionner une connexion</option>
+            {activeProviders.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.provider === 'notion' ? 'Notion' : provider.provider} — {provider.name}
+                {provider.provider !== 'notion' ? ' · Audit indisponible' : ''}
+              </option>
+            ))}
+          </select>
           <button
             className="primary-button"
             disabled={disabled}
@@ -244,26 +396,34 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
             {isLaunching ? 'Lancement…' : auditActive ? 'Audit en cours…' : 'Lancer l’audit'}
           </button>
         </div>
-        {providerState === 'loading' ? <p aria-live="polite">Recherche de la connexion Notion…</p> : null}
+        {providerState === 'loading' ? <p aria-live="polite">Recherche des connexions…</p> : null}
         {providerState === 'error' ? (
           <p role="alert">La connexion Notion ne peut pas être vérifiée pour le moment.</p>
         ) : null}
-        {providerState === 'loaded' && notionProvider === null ? (
-          <p role="status">Aucun provider Notion actif n’est disponible pour ce tenant.</p>
+        {providerState === 'loaded' && activeProviders.length === 0 ? (
+          <p role="status">Aucune connexion active n’est disponible pour ce tenant.</p>
         ) : null}
-        {notionProvider !== null && !notionProvider.credential_configured ? (
+        {selectedProvider?.provider !== 'notion' && selectedProvider !== null ? (
+          <p role="status">Audit indisponible pour cette connexion.</p>
+        ) : null}
+        {selectedProvider?.provider === 'notion' && !selectedProvider.credential_configured ? (
           <p role="status">Configurez d’abord le credential Notion pour lancer l’audit.</p>
         ) : null}
         {auditOperation !== null ? (
-          <div aria-live="polite" className="tenant-audit__launcher-status">
+          <div className="tenant-audit__launcher-status">
             {auditOperation.status === 'failed' ? (
               <>
                 <strong>Échec de l’audit</strong>
                 <p>{auditFailureMessage(auditOperation.error_code)}</p>
+                <AuditProgress
+                  lastActiveOperation={lastActiveAudit.current}
+                  operation={auditOperation}
+                />
               </>
             ) : auditOperation.status === 'completed' ? (
               <>
                 <strong>État : Terminé</strong>
+                <AuditProgress lastActiveOperation={null} operation={auditOperation} />
                 <dl>
                   <div><dt>Sources analysées</dt><dd>{auditOperation.sources_total}</dd></div>
                   <div><dt>Sources retenues</dt><dd>{auditOperation.sources_retained}</dd></div>
@@ -273,7 +433,10 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
                 </dl>
               </>
             ) : (
-              <strong>État : En cours</strong>
+              <AuditProgress
+                lastActiveOperation={lastActiveAudit.current}
+                operation={auditOperation}
+              />
             )}
           </div>
         ) : null}
@@ -367,9 +530,15 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
             <p>Les rapports ne sont pas disponibles pour le moment.</p>
             <button className="secondary-button" type="button" onClick={() => setReloadKey((key) => key + 1)}>Réessayer</button>
           </div>
-        ) : state.reports.length === 0 ? <p>Aucun rapport publié pour ce client.</p>
+        ) : state.reports.length === 0 ? (
+          <>
+            {reportsError ? <p role="alert">{reportsError}</p> : null}
+            <p>Aucun rapport publié pour ce client.</p>
+          </>
+        )
           : (
             <>
+              {reportsError ? <p role="alert">{reportsError}</p> : null}
               <section aria-label="Rapports actifs" className="tenant-audit__group">
                 <h3>Rapports actifs</h3>
                 {state.reports.some((report) => report.status === 'completed')

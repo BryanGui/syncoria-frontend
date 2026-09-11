@@ -4,6 +4,15 @@ import {
 } from '../observability/logger.ts'
 
 export type AdminProviderAuditStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type AdminProviderAuditPhase =
+  | 'preparing'
+  | 'collecting'
+  | 'analyzing'
+  | 'generating_report'
+  | 'publishing'
+  | 'completed'
+  | 'failed'
+export type AdminProviderAuditProgressUnit = 'source' | 'item' | null
 
 export interface AdminProviderAuditOperation {
   tenant_id: string
@@ -23,6 +32,10 @@ export interface AdminProviderAuditOperation {
   sources_pending: number
   records_retained: number
   decisions_required: number
+  phase: AdminProviderAuditPhase
+  progress_current: number | null
+  progress_total: number | null
+  progress_unit: AdminProviderAuditProgressUnit
 }
 
 export type AdminProviderAuditResult =
@@ -35,7 +48,8 @@ const operationKeys = new Set([
   'tenant_id', 'tenant_provider_record_id', 'provider', 'correlation_id', 'status',
   'codex_thread_id', 'created_at', 'started_at', 'completed_at', 'error_code',
   'report_id', 'sources_total', 'sources_retained', 'sources_excluded',
-  'sources_pending', 'records_retained', 'decisions_required',
+  'sources_pending', 'records_retained', 'decisions_required', 'phase',
+  'progress_current', 'progress_total', 'progress_unit',
 ])
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -54,6 +68,10 @@ function isDateTime(value: unknown): value is string {
 
 function isCount(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0
+}
+
+function isProgress(value: unknown): value is number | null {
+  return value === null || isCount(value)
 }
 
 export function parseAdminProviderAuditResponse(
@@ -82,6 +100,12 @@ export function parseAdminProviderAuditResponse(
       !isNullableString(value.report_id, 80) || !reportIdPattern.test(value.report_id)
     ))
     || counts.some((count) => !isCount(count))
+    || !['preparing', 'collecting', 'analyzing', 'generating_report', 'publishing', 'completed', 'failed'].includes(String(value.phase))
+    || !isProgress(value.progress_current)
+    || !isProgress(value.progress_total)
+    || (value.progress_current !== null && value.progress_total !== null
+      && value.progress_current > value.progress_total)
+    || (value.progress_unit !== null && value.progress_unit !== 'source' && value.progress_unit !== 'item')
     || value.sources_total !== (value.sources_retained as number)
       + (value.sources_excluded as number) + (value.sources_pending as number)
   ) return null
@@ -104,6 +128,10 @@ export function parseAdminProviderAuditResponse(
     sources_pending: value.sources_pending as number,
     records_retained: value.records_retained as number,
     decisions_required: value.decisions_required as number,
+    phase: value.phase as AdminProviderAuditPhase,
+    progress_current: value.progress_current as number | null,
+    progress_total: value.progress_total as number | null,
+    progress_unit: value.progress_unit as AdminProviderAuditProgressUnit,
   }
 }
 
