@@ -31,6 +31,24 @@ async function openAudit(page: Page, options: { archivedTenant?: boolean; archiv
     if (url.pathname === '/admin/session') return route.fulfill({ json: { authenticated: true } })
     if (url.pathname === '/admin/tenants') return route.fulfill({ json: [tenant] })
     if (url.pathname === prefix) return route.fulfill({ json: tenant })
+    if (url.pathname === prefix + '/providers') return route.fulfill({ json: [{
+      id: '22222222-2222-4222-8222-222222222222',
+      tenant_id: tenantId,
+      provider: 'notion',
+      credential_type: 'integration_token',
+      name: 'Notion synthétique',
+      status: 'active',
+      configuration: {},
+      credential_configured: true,
+      created_at: '2026-08-13T08:00:00Z',
+      updated_at: '2026-08-13T08:00:00Z',
+      last_verified_at: null,
+      last_verification_status: null,
+      last_verification_http_status: null,
+      last_verification_code: null,
+      last_verification_message: null,
+    }] })
+    if (url.pathname.endsWith('/audits/latest')) return route.fulfill({ status: 404, json: {} })
     if (url.pathname === `${prefix}/reports`) return route.fulfill({ json: reports })
     if (url.pathname.endsWith('/archive') && method === 'POST') {
       if (options.archiveStatus) return route.fulfill({ status: options.archiveStatus, json: { detail: 'Unavailable' } })
