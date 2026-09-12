@@ -30,8 +30,7 @@ function parseReport(value: unknown): AdminTenantReport | null {
     || !isReportDate(report.report_date)
     || (report.status !== 'completed' && report.status !== 'archived')
     || counts.some((key) => !Number.isSafeInteger(report[key]) || (report[key] as number) < 0)
-    || (report.decisions_required !== null && (!Number.isSafeInteger(report.decisions_required) || (report.decisions_required as number) < 0))
-    || report.sources_analyzed !== (report.sources_retained as number) + (report.sources_excluded as number)) return null
+    || (report.decisions_required !== null && (!Number.isSafeInteger(report.decisions_required) || (report.decisions_required as number) < 0))) return null
   return {
     id: report.id, title: report.title, status: report.status,
     provider: report.provider, report_date: report.report_date,

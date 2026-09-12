@@ -32,6 +32,22 @@ test('loads tenant-scoped metadata using the admin cookie and abort signal', asy
   assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, signal, request), { status: 'loaded', reports: [report] })
 })
 
+test('accepts reports with pending sources absent from list metadata', async () => {
+  const pendingSourcesReport = {
+    ...report,
+    id: 'audit-pending-sources',
+    sources_analyzed: 11,
+    sources_retained: 8,
+    sources_excluded: 0,
+    decisions_required: 3,
+    records_retained: 186,
+  }
+  assert.deepEqual(await fetchAdminTenantReports(
+    'https://api.example.com', tenantId, undefined,
+    async () => Response.json([pendingSourcesReport]),
+  ), { status: 'loaded', reports: [pendingSourcesReport] })
+})
+
 test('distinguishes no reports from failures and expired sessions', async () => {
   for (const [status, expected] of [[401, 'unauthenticated'], [404, 'not_found'], [503, 'error']]) {
     assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => Response.json({ detail: 'internal failure' }, { status })), { status: expected })
@@ -41,8 +57,8 @@ test('distinguishes no reports from failures and expired sessions', async () => 
   assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => { throw new Error('internal failure') }), { status: 'error' })
 })
 
-test('rejects malformed metadata and inconsistent counts', async () => {
-  for (const payload of [{}, [{ ...report, id: '../other' }], [{ ...report, sources_retained: -1 }], [{ ...report, sources_analyzed: 99 }], [{ ...report, status: 'pending' }], [report, report]]) {
+test('rejects malformed metadata and invalid counts', async () => {
+  for (const payload of [{}, [{ ...report, id: '../other' }], [{ ...report, sources_retained: -1 }], [{ ...report, records_retained: 1.5 }], [{ ...report, status: 'pending' }], [report, report]]) {
     assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => Response.json(payload)), { status: 'error' })
   }
 })
