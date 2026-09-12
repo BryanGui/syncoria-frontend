@@ -46,6 +46,7 @@ async function openAudit(page: Page, options: {
   client?: boolean
   auditScenario?: AuditScenario
   reportsRefreshFails?: boolean
+  nullDecision?: boolean
 } = {}) {
   await page.addInitScript(() => {
     const originalAbort = AbortController.prototype.abort
@@ -58,10 +59,10 @@ async function openAudit(page: Page, options: {
   })
   const tenant = { id: tenantId, name: 'Client synthétique', slug: 'synthetic', status: options.archivedTenant ? 'archived' : 'active' }
   const reports = [
-    { ...report },
-    { ...report, id: 'audit-notion-2026-10-15', report_date: '2026-10-15' },
-    { ...report, id: 'audit-drive-2026-10-16', provider: 'drive', title: 'Audit Drive', report_date: '2026-10-16' },
-    { ...report, id: 'audit-notion-2026-08-01', report_date: '2026-08-01', status: 'archived' },
+    { ...report, decisions_required: options.nullDecision ? null : report.decisions_required },
+    { ...report, id: 'audit-notion-2026-10-15', report_date: '2026-10-15', decisions_required: options.nullDecision ? null : report.decisions_required },
+    { ...report, id: 'audit-drive-2026-10-16', provider: 'drive', title: 'Audit Drive', report_date: '2026-10-16', decisions_required: options.nullDecision ? null : report.decisions_required },
+    { ...report, id: 'audit-notion-2026-08-01', report_date: '2026-08-01', status: 'archived', decisions_required: options.nullDecision ? null : report.decisions_required },
   ]
   let auditPollCount = 0
   let latestCallCount = 0
@@ -218,46 +219,58 @@ async function openAudit(page: Page, options: {
   return requests
 }
 
-test('dates, same-provider reports, descending order and archive history', async ({ page }) => {
+test('compact history selects the latest report and shows only one detail', async ({ page }) => {
   await openAudit(page)
-  const active = page.getByRole('region', { name: 'Rapports actifs', exact: true })
-  await expect(active.getByRole('article')).toHaveCount(3)
-  await expect(active.locator('time')).toHaveText(['16/10/2026', '15/10/2026', '07/09/2026'])
-  const archived = page.getByRole('region', { name: 'Rapports archivés', exact: true })
-  await expect(archived.locator('time')).toHaveText(['01/08/2026'])
-  await expect(archived.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(history.locator('time')).toHaveText(['16/10/2026', '15/10/2026', '07/09/2026', '01/08/2026'])
+  await expect(history.getByRole('button', { name: /Audit Drive/ })).toHaveAttribute('aria-pressed', 'true')
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await expect(detail.getByRole('article')).toHaveCount(1)
+  await expect(detail).toContainText('Audit Drive')
+  await expect(detail).toContainText('Actif')
+  await expect(detail.getByText('Sources analysées').locator('..')).toContainText('3')
 })
 
-test('archive requires confirmation, cancellation does not write, refresh moves the card', async ({ page }) => {
+test('selects another report, consults archived history and archives the selected report', async ({ page }) => {
   const requests = await openAudit(page)
-  const active = page.getByRole('region', { name: 'Rapports actifs', exact: true })
-  const card = active.getByRole('article', { name: 'Audit Notion — 07/09/2026', exact: true })
-  await card.getByRole('button', { name: 'Archiver', exact: true }).click()
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  await history.getByRole('button', { name: /Audit Notion.*07\/09\/2026/ }).click()
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await expect(detail.getByRole('article', { name: 'Audit Notion — 07/09/2026', exact: true })).toBeVisible()
+  await detail.getByRole('button', { name: 'Archiver', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
   expect(requests.filter((r) => r.method === 'POST')).toHaveLength(0)
   await page.getByRole('button', { name: 'Annuler', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toHaveLength(0)
-  await card.getByRole('button', { name: 'Archiver', exact: true }).click()
+  await detail.getByRole('button', { name: 'Archiver', exact: true }).click()
   await page.getByRole('button', { name: 'Confirmer l’archivage', exact: true }).click()
-  await expect(active.getByRole('article')).toHaveCount(2)
-  const archived = page.getByRole('region', { name: 'Rapports archivés', exact: true })
-  await expect(archived.getByRole('article')).toHaveCount(2)
-  await expect(archived.locator('time')).toHaveText(['07/09/2026', '01/08/2026'])
+  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(history.getByRole('button', { name: /Audit Notion.*07\/09\/2026/ })).toContainText('Archivé')
+  await expect(detail).toContainText('Archivé')
+  await expect(detail.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toEqual([{ path: `${prefix}/reports/${report.id}/archive`, method: 'POST' }])
   expect(requests.filter((r) => r.path === `${prefix}/reports`)).toHaveLength(2)
-  const archivedCard = archived.getByRole('article', { name: 'Audit Notion — 07/09/2026', exact: true })
-  await expect(archivedCard.getByRole('link', { name: /Voir le rapport/ })).toHaveAttribute('href', `https://api.bryanlab.ovh${prefix}/reports/${report.id}/pdf`)
+  await expect(detail.getByRole('link', { name: /Voir le rapport/ })).toHaveAttribute('href', `https://api.bryanlab.ovh${prefix}/reports/${report.id}/pdf`)
   const download = page.waitForEvent('download')
-  await archivedCard.getByRole('link', { name: 'Télécharger PDF' }).click()
+  await detail.getByRole('link', { name: 'Télécharger PDF' }).click()
   expect((await download).suggestedFilename()).toBe('synthetic.pdf')
+})
+
+test('keeps decisions neutral when the backend does not provide them', async ({ page }) => {
+  await openAudit(page, { nullDecision: true })
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await expect(detail.locator('.tenant-audit__kpi--neutral dd')).toHaveText('—')
+  await expect(detail).not.toContainText('Décisions nécessaires0')
 })
 
 for (const width of [1280, 390]) {
   test(`buttons are centered and aligned at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 })
     await openAudit(page)
-    const card = page.getByRole('region', { name: 'Rapports actifs', exact: true }).getByRole('article').first()
+    const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+    const card = detail.getByRole('article')
     await expect(card).toBeVisible()
     const layout = await card.locator('.tenant-audit__actions > *').evaluateAll((buttons) => buttons.map((button) => {
       const style = getComputedStyle(button)
@@ -298,12 +311,12 @@ test('expired session during archive returns to login', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Se connecter', exact: true }).first()).toBeVisible()
 })
 
-test('failed archive keeps the card active and shows a sanitized retry message', async ({ page }) => {
+test('failed archive keeps the selected report active and shows a sanitized retry message', async ({ page }) => {
   await openAudit(page, { archiveStatus: 503 })
   await page.getByRole('button', { name: 'Archiver', exact: true }).first().click()
   await page.getByRole('button', { name: 'Confirmer l’archivage', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('Le rapport n’a pas pu être archivé. Réessayez.')
-  await expect(page.getByRole('region', { name: 'Rapports actifs', exact: true }).getByRole('article')).toHaveCount(3)
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true }).getByRole('article')).toHaveCount(1)
 })
 
 test('launches an audit, polls it to completion and refreshes active reports', async ({ page }) => {
@@ -318,7 +331,8 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   await expect(launcher).toContainText('Sources écartées2')
   await expect(launcher).toContainText('Décisions nécessaires1')
   await expect(launcher).toContainText('Enregistrements retenus9')
-  await expect(page.getByRole('region', { name: 'Rapports actifs', exact: true }).getByRole('article', { name: /Audit Notion récent/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Drive')
   expect(requests.filter((request) => request.path === auditPrefix && request.method === 'POST')).toHaveLength(1)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(2)
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
@@ -348,7 +362,8 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   await expect(launcher).toContainText('État : Terminé')
   await expect(launcher).toContainText('Temps écoulé')
   await expect(launcher).not.toContainText('%')
-  await expect(page.getByRole('region', { name: 'Rapports actifs', exact: true }).getByRole('article', { name: /Audit Notion récent/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Drive')
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
 })
 
@@ -442,13 +457,14 @@ test('keeps report history visible when the post-completion refresh fails', asyn
     auditScenario: 'launch',
     reportsRefreshFails: true,
   })
-  const activeReports = page.getByRole('region', { name: 'Rapports actifs', exact: true })
-  const archivedReports = page.getByRole('region', { name: 'Rapports archivés', exact: true })
-  await expect(activeReports.getByRole('article')).toHaveCount(3)
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(detail).toContainText('Audit Drive')
   await page.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(page.getByText('La mise à jour des rapports est temporairement indisponible.')).toBeVisible()
-  await expect(activeReports.getByRole('article')).toHaveCount(3)
-  await expect(archivedReports.getByRole('article')).toHaveCount(1)
+  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(detail).toContainText('Audit Drive')
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })
 

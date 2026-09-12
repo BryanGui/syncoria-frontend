@@ -10,18 +10,20 @@ test('internal content uses the full width without changing the public shell', (
   assert.doesNotMatch(appStyles, /\.main-content \{[\s\S]*?max-width: 1440px/)
 })
 
-test('active audit reports are full width with desktop columns and mobile stacking', () => {
+test('audit reports use a compact history and one responsive selected report', () => {
   assert.match(appStyles, /\.tenant-audit__report \{[\s\S]*?width: 100%;/)
-  assert.doesNotMatch(appStyles, /\.tenant-audit__report \{[\s\S]*?max-width: 42rem/)
-  assert.match(appStyles, /\.tenant-audit__report-details \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
-  assert.match(appStyles, /@media \(max-width: 540px\) \{[\s\S]*?\.tenant-audit__report-details \{ grid-template-columns: 1fr;/)
-  assert.match(reportSource, /!isArchived && \([\s\S]*?Sources analysées[\s\S]*?Enregistrements retenus/)
+  assert.match(appStyles, /\.tenant-audit__history-item \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto 1\.5rem;/)
+  assert.match(appStyles, /\.tenant-audit__kpis \{[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)/)
+  assert.match(appStyles, /@media \(max-width: 540px\) \{[\s\S]*?\.tenant-audit__kpis \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)/)
+  assert.match(reportSource, /Rapports d’audit/)
+  assert.match(reportSource, /selectedReport/)
+  assert.match(reportSource, /Sources analysées[\s\S]*?Enregistrements retenus[\s\S]*?Décisions nécessaires/)
 })
 
-test('archived audit reports keep a compact history summary and existing actions', () => {
+test('archived audit reports remain selectable and consultable', () => {
   assert.match(reportSource, /tenant-audit__report--archived/)
   assert.match(reportSource, /Ce rapport est conservé dans l’historique et reste consultable\./)
-  assert.match(appStyles, /\.tenant-audit__report-footer \{[^}]*display: flex;[^}]*justify-content: space-between;/)
-  assert.match(appStyles, /\.tenant-audit__report--archived \.tenant-audit__actions \{ order: 2; \}/)
+  assert.match(reportSource, /reportStatusLabel\(report\.status\)/)
+  assert.match(reportSource, /setSelectedReportId\(report\.id\)/)
   assert.match(reportSource, /tenant-audit__actions/)
 })

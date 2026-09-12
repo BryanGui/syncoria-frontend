@@ -35,6 +35,10 @@ function formatElapsed(seconds: number): string {
   return minutes === 0 ? `${remainder} s` : `${minutes} min ${String(remainder).padStart(2, '0')} s`
 }
 
+function reportStatusLabel(status: AdminTenantReport['status']): string {
+  return status === 'archived' ? 'Archivé' : 'Actif'
+}
+
 function AuditElapsedTime({ operation }: { operation: AdminProviderAuditOperation }) {
   const [now, setNow] = useState(() => Date.now())
   const active = operation.status === 'pending' || operation.status === 'running'
@@ -109,6 +113,7 @@ function AuditProgress({
 export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: AdminTenantReportsProps) {
   const [state, setState] = useState<AdminTenantReportsResult | { status: 'loading' }>({ status: 'loading' })
   const [reportsError, setReportsError] = useState<string | null>(null)
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [confirmationId, setConfirmationId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -132,6 +137,10 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     () => providers.filter((provider) => provider.status === 'active'),
     [providers],
   )
+  const selectedReport = useMemo(() => {
+    if (state.status !== 'loaded') return null
+    return state.reports.find((report) => report.id === selectedReportId) ?? state.reports[0] ?? null
+  }, [selectedReportId, state])
 
   const stopPolling = useCallback(() => {
     const active = polling.current
@@ -196,6 +205,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     if (tenantChanged) {
       setReportsError(null)
       setState({ status: 'loading' })
+      setSelectedReportId(null)
     } else {
       setState((previous) => previous.status === 'loaded'
         ? previous : { status: 'loading' })
@@ -212,6 +222,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       } else if (result.status === 'loaded') {
         setReportsError(null)
         setState(result)
+        setSelectedReportId((previous) => previous !== null
+          && result.reports.some((report) => report.id === previous)
+          ? previous : result.reports[0]?.id ?? null)
       } else {
         setReportsError('La mise à jour des rapports est temporairement indisponible.')
         setState((previous) => previous.status === 'loaded' ? previous : result)
@@ -469,54 +482,99 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
     }
   }
 
-  function renderReport(report: AdminTenantReport) {
+  function renderReportHistory(reports: AdminTenantReport[]) {
+    return (
+      <section aria-label="Historique des rapports d’audit" className="tenant-audit__history">
+        <div className="tenant-audit__section-heading">
+          <div>
+            <p className="tenant-audit__eyebrow">Historique</p>
+            <h4>Rapports d’audit</h4>
+          </div>
+          <p>{reports.length} rapport{reports.length > 1 ? 's' : ''}</p>
+        </div>
+        <ul>
+          {reports.map((report) => {
+            const isSelected = selectedReport?.id === report.id
+            return (
+              <li key={report.id}>
+                <button
+                  aria-pressed={isSelected}
+                  className={isSelected
+                    ? 'tenant-audit__history-item tenant-audit__history-item--selected'
+                    : 'tenant-audit__history-item'}
+                  onClick={() => setSelectedReportId(report.id)}
+                  type="button"
+                >
+                  <span className="tenant-audit__history-main">
+                    <strong>{report.title}</strong>
+                    <span><time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time> · {report.provider}</span>
+                  </span>
+                  <span className="tenant-audit__history-stat">
+                    <strong className={report.status === 'archived' ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>
+                      {reportStatusLabel(report.status)}
+                    </strong>
+                    <span>{report.sources_analyzed} sources · Décisions nécessaires : {report.decisions_required ?? '—'}</span>
+                  </span>
+                  <span aria-hidden="true" className="tenant-audit__history-chevron">→</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+    )
+  }
+
+  function renderSelectedReport(report: AdminTenantReport) {
     const isArchived = report.status === 'archived'
     return (
-      <article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'} key={report.id}>
-        <div className="tenant-audit__report-heading">
-          <h4>{report.title}</h4>
-          <div className="tenant-audit__report-meta">
-            <p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p>
-            <p>État : <strong>{isArchived ? 'Archivé' : 'Terminé'}</strong></p>
-          </div>
-        </div>
-        {!isArchived && (
-          <div className="tenant-audit__report-details">
-            <dl>
-              <div><dt>Sources analysées</dt><dd>{report.sources_analyzed}</dd></div>
-              <div><dt>Sources retenues</dt><dd>{report.sources_retained}</dd></div>
-              <div><dt>Sources écartées</dt><dd>{report.sources_excluded}</dd></div>
-            </dl>
-            <dl>
-              <div><dt>Enregistrements retenus</dt><dd>{report.records_retained}</dd></div>
-              {report.decisions_required !== null && <div><dt>Décisions nécessaires</dt><dd>{report.decisions_required}</dd></div>}
-            </dl>
-          </div>
-        )}
-        <div className="tenant-audit__report-footer">
-          <div className="tenant-audit__actions">
-            <a className="primary-button" aria-label={`Voir le rapport ${report.title} (nouvel onglet)`} href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} target="_blank" rel="noreferrer">Voir le rapport</a>
-            <a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>
-            {report.status === 'completed' && (
-              <button className="secondary-button" disabled={pendingId !== null} type="button" onClick={() => { setConfirmationId(report.id); setArchiveError(null) }}>Archiver</button>
-            )}
-          </div>
-          <p className="tenant-audit__summary">{isArchived
-            ? 'Ce rapport est conservé dans l’historique et reste consultable.'
-            : 'L’état Terminé concerne l’audit, pas la validation métier ni l’intégration des données.'}</p>
-        </div>
-        {confirmationId === report.id && (
-          <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}>
-            <strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong>
-            <p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p>
-            <div className="tenant-audit__actions">
-              <button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button>
-              <button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button>
+      <section aria-label="Rapport sélectionné" className="tenant-audit__selected-report">
+        <article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'}>
+          <div className="tenant-audit__report-heading">
+            <div>
+              <p className="tenant-audit__eyebrow">Rapport sélectionné</p>
+              <h4>{report.title}</h4>
             </div>
-            {archiveError && <p role="alert">{archiveError}</p>}
+            <div className="tenant-audit__report-meta">
+              <p>Provider : <strong>{report.provider}</strong></p>
+              <p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p>
+              <p>État : <strong className={isArchived ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{reportStatusLabel(report.status)}</strong></p>
+            </div>
           </div>
-        )}
-      </article>
+          <dl className="tenant-audit__kpis">
+            <div><dt>Sources analysées</dt><dd>{report.sources_analyzed}</dd></div>
+            <div><dt>Sources retenues</dt><dd>{report.sources_retained}</dd></div>
+            <div><dt>Sources écartées</dt><dd>{report.sources_excluded}</dd></div>
+            <div><dt>Enregistrements retenus</dt><dd>{report.records_retained}</dd></div>
+            <div className={report.decisions_required === null ? 'tenant-audit__kpi tenant-audit__kpi--neutral' : 'tenant-audit__kpi tenant-audit__kpi--attention'}>
+              <dt>Décisions nécessaires</dt><dd>{report.decisions_required ?? '—'}</dd>
+            </div>
+          </dl>
+          <div className="tenant-audit__report-footer">
+            <div className="tenant-audit__actions">
+              <a className="primary-button" aria-label={`Voir le rapport ${report.title} (nouvel onglet)`} href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} target="_blank" rel="noreferrer">Voir le rapport</a>
+              <a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>
+              {report.status === 'completed' && (
+                <button className="secondary-button" disabled={pendingId !== null} type="button" onClick={() => { setConfirmationId(report.id); setArchiveError(null) }}>Archiver</button>
+              )}
+            </div>
+            <p className="tenant-audit__summary">{isArchived
+              ? 'Ce rapport est conservé dans l’historique et reste consultable.'
+              : 'L’état Terminé concerne l’audit, pas la validation métier ni l’intégration des données.'}</p>
+          </div>
+          {confirmationId === report.id && (
+            <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}>
+              <strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong>
+              <p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p>
+              <div className="tenant-audit__actions">
+                <button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button>
+                <button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button>
+              </div>
+              {archiveError && <p role="alert">{archiveError}</p>}
+            </div>
+          )}
+        </article>
+      </section>
     )
   }
 
@@ -539,18 +597,8 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
           : (
             <>
               {reportsError ? <p role="alert">{reportsError}</p> : null}
-              <section aria-label="Rapports actifs" className="tenant-audit__group">
-                <h3>Rapports actifs</h3>
-                {state.reports.some((report) => report.status === 'completed')
-                  ? state.reports.filter((report) => report.status === 'completed').map(renderReport)
-                  : <p>Aucun rapport actif.</p>}
-              </section>
-              <section aria-label="Rapports archivés" className="tenant-audit__group">
-                <h3>Rapports archivés</h3>
-                {state.reports.some((report) => report.status === 'archived')
-                  ? state.reports.filter((report) => report.status === 'archived').map(renderReport)
-                  : <p>Aucun rapport archivé.</p>}
-              </section>
+              {renderReportHistory(state.reports)}
+              {selectedReport ? renderSelectedReport(selectedReport) : null}
             </>
           )}
     </section>
