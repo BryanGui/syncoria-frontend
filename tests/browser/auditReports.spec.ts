@@ -4,6 +4,8 @@ const tenantId = '11111111-1111-4111-8111-111111111111'
 const prefix = `/admin/tenants/${tenantId}`
 const report = {
   id: 'audit-notion-2026-09-07', title: 'Audit Notion', provider: 'notion',
+  correlation_id: '33333333-3333-4333-8333-333333333333',
+  tenant_provider_record_id: '22222222-2222-4222-8222-222222222222',
   report_date: '2026-09-07', status: 'completed',
   sources_analyzed: 3, sources_retained: 2, sources_excluded: 1,
   records_retained: 7, decisions_required: 1,
@@ -17,10 +19,11 @@ const auditPrefix = `${prefix}/providers/${notionAId}/audits`
 const auditOperation = (status: 'pending' | 'running' | 'completed' | 'failed') => ({
   phase: status === 'pending' ? 'preparing' : status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'collecting',
   tenant_id: tenantId,
-  tenant_provider_record_id: '22222222-2222-4222-8222-222222222222',
   provider: 'notion',
+  tenant_provider_record_id: notionAId,
   correlation_id: auditCorrelationId,
   status,
+  display_title: 'Audit Notion — 2026-09-11',
   codex_thread_id: status === 'pending' ? null : 'thread-synthetic',
   created_at: '2026-09-11T10:00:00Z',
   started_at: status === 'pending' ? null : '2026-09-11T10:00:01Z',
@@ -38,11 +41,27 @@ const auditOperation = (status: 'pending' | 'running' | 'completed' | 'failed') 
   progress_unit: status === 'running' ? 'source' : null,
 })
 
+const structuredReport = {
+  metrics: {
+    sources_analyzed: 3, sources_retained: 2, sources_excluded: 1,
+    sources_pending: 0, records_retained: 7, decisions_required: 1,
+  },
+  summary: ['Une synthèse client-ready.'], scope: ['Périmètre Notion synthétique.'], source_map: [],
+  sources: [{ source_name: 'Missions', source_type: 'data_source', volume: 7, decision: 'retained', reason: 'Structure observée' }],
+  retained: [{ source_name: 'Missions', source_type: 'data_source', volume: 7, decision: 'retained', reason: 'Structure observée' }],
+  excluded: [], pending: [], volumes: ['7 éléments observés'], relationships: ['Missions → Collaborateurs'],
+  inconsistencies: ['Un identifiant est à confirmer.'], risks: ['Risque de doublon lors de l’intégration.'],
+  decisions: ['Confirmer le périmètre des missions.'], blockers: ['BLOCKER : confirmer le périmètre.'],
+  recommendations: ['Préparer une clé d’intégration stable.'], integration_plan: ['Valider le périmètre.', 'Configurer la transformation.'],
+  technical_appendix: ['Provider : Notion.'],
+}
+
 type AuditScenario = 'launch' | 'resume' | 'failed' | 'conflict' | 'v2' | 'network' | 'timer' | 'abort'
 
 async function openAudit(page: Page, options: {
   archivedTenant?: boolean
   archiveStatus?: number
+  renameStatus?: number
   client?: boolean
   auditScenario?: AuditScenario
   reportsRefreshFails?: boolean
@@ -67,6 +86,7 @@ async function openAudit(page: Page, options: {
   let auditPollCount = 0
   let latestCallCount = 0
   let reportCallCount = 0
+  let launchedTitle = 'Audit Notion — 2026-09-11'
   const requests: { path: string; method: string }[] = []
   await page.context().route('**/*', async (route) => {
     const url = new URL(route.request().url())
@@ -133,7 +153,9 @@ async function openAudit(page: Page, options: {
     }
     if (url.pathname.endsWith('/audits') && method === 'POST') {
       if (options.auditScenario === 'conflict') return route.fulfill({ status: 409, json: {} })
-      return route.fulfill({ status: 202, json: auditOperation('pending') })
+      const payload = route.request().postDataJSON() as { display_title?: string } | null
+      launchedTitle = payload?.display_title ?? launchedTitle
+      return route.fulfill({ status: 202, json: { ...auditOperation('pending'), display_title: launchedTitle } })
     }
     if (url.pathname.endsWith(`/audits/${auditCorrelationId}`)) {
       auditPollCount += 1
@@ -154,7 +176,7 @@ async function openAudit(page: Page, options: {
         reports.unshift({
           ...report,
           id: 'audit-notion-2026-09-11',
-          title: 'Audit Notion récent',
+          title: launchedTitle,
           report_date: '2026-10-17',
           sources_analyzed: 5,
           sources_retained: 3,
@@ -163,7 +185,7 @@ async function openAudit(page: Page, options: {
           decisions_required: 1,
         })
       }
-      const operation = auditOperation(status)
+      const operation = { ...auditOperation(status), display_title: launchedTitle }
       if (options.auditScenario === 'failed' && status === 'running') {
         operation.phase = 'collecting'
         operation.progress_current = 5
@@ -183,6 +205,16 @@ async function openAudit(page: Page, options: {
         operation.progress_unit = operation.phase === 'collecting' ? 'source' : null
       }
       return route.fulfill({ json: operation })
+    }
+    if (url.pathname.endsWith('/report') && method === 'GET') return route.fulfill({ json: {
+      tenant_id: tenantId, tenant_provider_record_id: notionAId, correlation_id: auditCorrelationId,
+      report_id: 'audit-notion-2026-09-07', display_title: 'Audit Notion', provider: 'notion',
+      report_date: '2026-09-07', status: 'completed', structured_report: structuredReport,
+    } })
+    if (url.pathname.endsWith('/title') && method === 'PATCH') {
+      if (options.renameStatus) return route.fulfill({ status: options.renameStatus, json: { detail: 'Rename unavailable' } })
+      const payload = route.request().postDataJSON() as { display_title: string }
+      return route.fulfill({ json: { ...auditOperation('completed'), display_title: payload.display_title, report_id: 'audit-notion-2026-09-07' } })
     }
     if (url.pathname === `${prefix}/reports`) {
       reportCallCount += 1
@@ -222,20 +254,20 @@ async function openAudit(page: Page, options: {
 test('compact history selects the latest report and shows only one detail', async ({ page }) => {
   await openAudit(page)
   const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
-  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(history.locator('.tenant-audit__history-item')).toHaveCount(4)
   await expect(history.locator('time')).toHaveText(['16/10/2026', '15/10/2026', '07/09/2026', '01/08/2026'])
-  await expect(history.getByRole('button', { name: /Audit Drive/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })).toHaveAttribute('aria-pressed', 'true')
   const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
   await expect(detail.getByRole('article')).toHaveCount(1)
   await expect(detail).toContainText('Audit Drive')
-  await expect(detail).toContainText('Actif')
+  await expect(detail).toContainText('Terminé')
   await expect(detail.getByText('Sources analysées').locator('..')).toContainText('3')
 })
 
 test('selects another report, consults archived history and archives the selected report', async ({ page }) => {
   const requests = await openAudit(page)
   const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
-  await history.getByRole('button', { name: /Audit Notion.*07\/09\/2026/ }).click()
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).click()
   const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
   await expect(detail.getByRole('article', { name: 'Audit Notion — 07/09/2026', exact: true })).toBeVisible()
   await detail.getByRole('button', { name: 'Archiver', exact: true }).click()
@@ -246,13 +278,13 @@ test('selects another report, consults archived history and archives the selecte
   expect(requests.filter((r) => r.method === 'POST')).toHaveLength(0)
   await detail.getByRole('button', { name: 'Archiver', exact: true }).click()
   await page.getByRole('button', { name: 'Confirmer l’archivage', exact: true }).click()
-  await expect(history.getByRole('button')).toHaveCount(4)
-  await expect(history.getByRole('button', { name: /Audit Notion.*07\/09\/2026/ })).toContainText('Archivé')
+  await expect(history.locator('.tenant-audit__history-item')).toHaveCount(4)
+  await expect(history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })).toContainText('Archivé')
   await expect(detail).toContainText('Archivé')
   await expect(detail.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toEqual([{ path: `${prefix}/reports/${report.id}/archive`, method: 'POST' }])
   expect(requests.filter((r) => r.path === `${prefix}/reports`)).toHaveLength(2)
-  await expect(detail.getByRole('link', { name: /Voir le rapport/ })).toHaveAttribute('href', `https://api.bryanlab.ovh${prefix}/reports/${report.id}/pdf`)
+  await expect(detail.getByRole('button', { name: 'Voir le rapport', exact: true })).toBeVisible()
   const download = page.waitForEvent('download')
   await detail.getByRole('link', { name: 'Télécharger PDF' }).click()
   expect((await download).suggestedFilename()).toBe('synthetic.pdf')
@@ -301,7 +333,7 @@ test('an archived tenant has no report links or archive calls', async ({ page })
   const requests = await openAudit(page, { archivedTenant: true })
   await expect(page.getByText('Client archivé : les rapports ne sont pas disponibles.')).toBeVisible()
   expect(requests.some((r) => r.path.includes('/reports'))).toBe(false)
-  await expect(page.getByRole('link', { name: /Voir le rapport/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Voir le rapport/ })).toHaveCount(0)
 })
 
 test('expired session during archive returns to login', async ({ page }) => {
@@ -322,6 +354,7 @@ test('failed archive keeps the selected report active and shows a sanitized retr
 test('launches an audit, polls it to completion and refreshes active reports', async ({ page }) => {
   const requests = await openAudit(page, { auditScenario: 'launch' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  await launcher.getByLabel('Titre de l’audit').fill('Audit recrutement Novalia')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.getByLabel('Connexion à auditer')).toBeDisabled()
@@ -331,24 +364,68 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   await expect(launcher).toContainText('Sources écartées2')
   await expect(launcher).toContainText('Décisions nécessaires1')
   await expect(launcher).toContainText('Enregistrements retenus9')
-  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Notion récent')
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).locator('.tenant-audit__history-item', { hasText: 'Audit recrutement Novalia' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit recrutement Novalia')
   expect(requests.filter((request) => request.path === auditPrefix && request.method === 'POST')).toHaveLength(1)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(2)
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
+})
+
+test('renders the structured report with blockers, decisions and integration steps', async ({ page }) => {
+  const requests = await openAudit(page)
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).click()
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await expect(detail.getByRole('heading', { name: 'Blockers', exact: true })).toBeVisible()
+  await expect(detail).toContainText('BLOCKER : confirmer le périmètre.')
+  await expect(detail.locator('.tenant-audit__source-table')).toContainText('Retenue')
+  await expect(detail).toContainText('Sources retenues')
+  await expect(detail).toContainText('Relations principales')
+  await expect(detail).toContainText('Incohérences')
+  await expect(detail).toContainText('Risques')
+  await expect(detail).toContainText('Recommandations Syncoria')
+  await expect(detail).toContainText('Plan d’intégration')
+  await expect(detail).toContainText('Annexe technique')
+  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}/report` && request.method === 'GET').length).toBeGreaterThan(0)
+})
+
+test('renames a report in place and keeps its report actions available', async ({ page }) => {
+  const requests = await openAudit(page)
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).click()
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await detail.getByRole('button', { name: 'Renommer', exact: true }).click()
+  await detail.getByLabel('Titre de l’audit').fill('Audit recrutement — phase 1')
+  await detail.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+  await expect(detail).toContainText('Audit recrutement — phase 1')
+  await expect(history.locator('.tenant-audit__history-item', { hasText: 'Audit recrutement — phase 1' })).toBeVisible()
+  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}/title` && request.method === 'PATCH')).toHaveLength(1)
+  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(0)
+})
+
+test('shows a sanitized rename error and keeps the existing title', async ({ page }) => {
+  await openAudit(page, { renameStatus: 503 })
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).click()
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await detail.getByRole('button', { name: 'Renommer', exact: true }).click()
+  await detail.getByLabel('Titre de l’audit').fill('Titre non sauvegardé')
+  await detail.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+  await expect(detail.getByRole('alert')).toHaveText('Le titre n’a pas pu être enregistré. Réessayez.')
+  await expect(detail).toContainText('Audit Notion')
 })
 
 test('keeps an explicitly selected report after a new audit is published', async ({ page }) => {
   const requests = await openAudit(page, { auditScenario: 'launch' })
   const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
   const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
-  await history.getByRole('button', { name: /Audit Notion.*07\/09\/2026/ }).click()
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).click()
   await expect(detail).toContainText('Audit Notion')
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
   await expect(detail).toContainText('07/09/2026')
-  await expect(history.getByRole('button', { name: /Audit Notion récent/ })).toHaveAttribute('aria-pressed', 'false')
+  await expect(history.locator('.tenant-audit__history-item', { hasText: /Audit Notion —/ })).toHaveAttribute('aria-pressed', 'false')
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })
 
@@ -376,8 +453,8 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   await expect(launcher).toContainText('État : Terminé')
   await expect(launcher).toContainText('Temps écoulé')
   await expect(launcher).not.toContainText('%')
-  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Notion récent')
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).locator('.tenant-audit__history-item', { hasText: /Audit Notion —/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Notion —')
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
 })
 
@@ -473,11 +550,11 @@ test('keeps report history visible when the post-completion refresh fails', asyn
   })
   const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
   const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
-  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(history.locator('.tenant-audit__history-item')).toHaveCount(4)
   await expect(detail).toContainText('Audit Drive')
   await page.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(page.getByText('La mise à jour des rapports est temporairement indisponible.')).toBeVisible()
-  await expect(history.getByRole('button')).toHaveCount(4)
+  await expect(history.locator('.tenant-audit__history-item')).toHaveCount(4)
   await expect(detail).toContainText('Audit Drive')
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })

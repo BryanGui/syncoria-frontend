@@ -160,6 +160,7 @@ export function AdminTenantWorkspacePage({
           key={pageState.tenant.id}
           apiBaseUrl={apiBaseUrl}
           tenantId={pageState.tenant.id}
+          tenantLabel={pageState.tenant.slug}
           onSessionExpired={onSessionExpired}
         />
       ) : <p className="tenant-audit">Client archivé : les rapports ne sont pas disponibles.</p>}
