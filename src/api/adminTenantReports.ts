@@ -11,6 +11,8 @@ export interface AdminTenantReport {
   sources_excluded: number
   records_retained: number
   decisions_required: number | null
+  correlation_id?: string
+  tenant_provider_record_id?: string
 }
 
 export type AdminTenantReportsResult =
@@ -31,6 +33,8 @@ function parseReport(value: unknown): AdminTenantReport | null {
     || (report.status !== 'completed' && report.status !== 'archived')
     || counts.some((key) => !Number.isSafeInteger(report[key]) || (report[key] as number) < 0)
     || (report.decisions_required !== null && (!Number.isSafeInteger(report.decisions_required) || (report.decisions_required as number) < 0))) return null
+  if (report.correlation_id !== undefined && typeof report.correlation_id !== 'string') return null
+  if (report.tenant_provider_record_id !== undefined && typeof report.tenant_provider_record_id !== 'string') return null
   return {
     id: report.id, title: report.title, status: report.status,
     provider: report.provider, report_date: report.report_date,
@@ -39,6 +43,9 @@ function parseReport(value: unknown): AdminTenantReport | null {
     sources_excluded: report.sources_excluded as number,
     records_retained: report.records_retained as number,
     decisions_required: report.decisions_required as number | null,
+    ...(typeof report.correlation_id === 'string' ? { correlation_id: report.correlation_id } : {}),
+    ...(typeof report.tenant_provider_record_id === 'string'
+      ? { tenant_provider_record_id: report.tenant_provider_record_id } : {}),
   }
 }
 
