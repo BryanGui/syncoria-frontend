@@ -17,6 +17,7 @@ test('audit reports use a compact history and one responsive selected report', (
   assert.match(appStyles, /@media \(max-width: 540px\) \{[\s\S]*?\.tenant-audit__kpis \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)/)
   assert.match(reportSource, /Rapports d’audit/)
   assert.match(reportSource, /selectedReport/)
+  assert.match(reportSource, /userSelectedReportId/)
   assert.match(reportSource, /Sources analysées[\s\S]*?Enregistrements retenus[\s\S]*?Décisions nécessaires/)
 })
 

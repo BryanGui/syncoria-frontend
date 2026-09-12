@@ -155,7 +155,7 @@ async function openAudit(page: Page, options: {
           ...report,
           id: 'audit-notion-2026-09-11',
           title: 'Audit Notion récent',
-          report_date: '2026-09-11',
+          report_date: '2026-10-17',
           sources_analyzed: 5,
           sources_retained: 3,
           sources_excluded: 2,
@@ -331,10 +331,24 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   await expect(launcher).toContainText('Sources écartées2')
   await expect(launcher).toContainText('Décisions nécessaires1')
   await expect(launcher).toContainText('Enregistrements retenus9')
-  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Drive')
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Notion récent')
   expect(requests.filter((request) => request.path === auditPrefix && request.method === 'POST')).toHaveLength(1)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(2)
+  expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
+})
+
+test('keeps an explicitly selected report after a new audit is published', async ({ page }) => {
+  const requests = await openAudit(page, { auditScenario: 'launch' })
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await history.getByRole('button', { name: /Audit Notion.*07\/09\/2026/ }).click()
+  await expect(detail).toContainText('Audit Notion')
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
+  await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
+  await expect(detail).toContainText('07/09/2026')
+  await expect(history.getByRole('button', { name: /Audit Notion récent/ })).toHaveAttribute('aria-pressed', 'false')
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })
 
@@ -362,8 +376,8 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   await expect(launcher).toContainText('État : Terminé')
   await expect(launcher).toContainText('Temps écoulé')
   await expect(launcher).not.toContainText('%')
-  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Drive')
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true }).getByRole('button', { name: /Audit Notion récent/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toContainText('Audit Notion récent')
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
 })
 

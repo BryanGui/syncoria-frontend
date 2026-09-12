@@ -128,6 +128,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
   const auditRequest = useRef<AbortController | null>(null)
   const polling = useRef<{ controller: AbortController; timer: number | null } | null>(null)
   const reportsTenant = useRef<string | null>(null)
+  const userSelectedReportId = useRef<string | null>(null)
   const lastActiveAudit = useRef<AdminProviderAuditOperation | null>(null)
   const selectedProvider = useMemo(
     () => providers.find((provider) => provider.id === selectedProviderId) ?? null,
@@ -206,6 +207,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       setReportsError(null)
       setState({ status: 'loading' })
       setSelectedReportId(null)
+      userSelectedReportId.current = null
     } else {
       setState((previous) => previous.status === 'loaded'
         ? previous : { status: 'loading' })
@@ -222,9 +224,12 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
       } else if (result.status === 'loaded') {
         setReportsError(null)
         setState(result)
-        setSelectedReportId((previous) => previous !== null
-          && result.reports.some((report) => report.id === previous)
-          ? previous : result.reports[0]?.id ?? null)
+        const manualSelection = userSelectedReportId.current
+        const manualSelectionStillExists = manualSelection !== null
+          && result.reports.some((report) => report.id === manualSelection)
+        if (!manualSelectionStillExists) userSelectedReportId.current = null
+        setSelectedReportId(manualSelectionStillExists
+          ? manualSelection : result.reports[0]?.id ?? null)
       } else {
         setReportsError('La mise à jour des rapports est temporairement indisponible.')
         setState((previous) => previous.status === 'loaded' ? previous : result)
@@ -502,7 +507,10 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, onSessionExpired }: A
                   className={isSelected
                     ? 'tenant-audit__history-item tenant-audit__history-item--selected'
                     : 'tenant-audit__history-item'}
-                  onClick={() => setSelectedReportId(report.id)}
+                  onClick={() => {
+                    userSelectedReportId.current = report.id
+                    setSelectedReportId(report.id)
+                  }}
                   type="button"
                 >
                   <span className="tenant-audit__history-main">
