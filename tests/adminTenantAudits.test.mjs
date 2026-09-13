@@ -3,9 +3,11 @@ import test from 'node:test'
 
 import {
   fetchAdminTenantProviderAudit,
+  fetchAdminTenantProviderAuditReport,
   fetchLatestAdminTenantProviderAudit,
   launchAdminTenantProviderAudit,
   parseAdminProviderAuditResponse,
+  updateAdminTenantProviderAuditTitle,
 } from '../src/api/adminTenantAudits.ts'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
@@ -20,6 +22,7 @@ function operation(status = 'pending') {
     provider: 'notion',
     correlation_id: correlationId,
     status,
+    display_title: 'Audit Notion — 2026-09-11',
     codex_thread_id: status === 'pending' ? null : 'thread-1',
     created_at: '2026-09-11T10:00:00Z',
     started_at: status === 'pending' ? null : '2026-09-11T10:00:01Z',
@@ -36,6 +39,19 @@ function operation(status = 'pending') {
     progress_current: phase === 'collecting' ? 2 : null,
     progress_total: phase === 'collecting' ? 3 : null,
     progress_unit: phase === 'collecting' ? 'source' : null,
+  }
+}
+
+function structuredReport() {
+  const source = {
+    source_name: 'Missions', source_type: 'data_source', volume: 7,
+    decision: 'retained', reason: 'Structure observée',
+  }
+  return {
+    metrics: { sources_analyzed: 1, sources_retained: 1, sources_excluded: 0, sources_pending: 0, records_retained: 7, decisions_required: 0 },
+    summary: [], scope: [], source_map: [], sources: [source], retained: [source], excluded: [], pending: [],
+    volumes: [], relationships: [], inconsistencies: [], risks: [], decisions: [], blockers: [], recommendations: [],
+    integration_plan: [], technical_appendix: [],
   }
 }
 
@@ -104,6 +120,47 @@ test('launches the tenant-scoped audit with the admin cookie and validates its r
   assert.equal(captured.options.method, 'POST')
   assert.equal(captured.options.credentials, 'include')
   assert.equal(captured.options.signal, signal)
+})
+
+test('sends the trimmed display title when launching an audit', async () => {
+  let captured
+  const result = await launchAdminTenantProviderAudit(
+    'https://api.example.com', tenantId, providerRecordId,
+    { displayTitle: 'Audit recrutement Novalia', signal: new AbortController().signal },
+    async (url, options) => {
+      captured = { url, options }
+      return Response.json(operation('pending'), { status: 202 })
+    },
+  )
+  assert.equal(result.status, 'loaded')
+  assert.deepEqual(JSON.parse(captured.options.body), { display_title: 'Audit recrutement Novalia' })
+  assert.equal(captured.options.headers['Content-Type'], 'application/json')
+})
+
+test('loads the structured report and renames it through the audit contract', async () => {
+  const report = {
+    tenant_id: tenantId, tenant_provider_record_id: providerRecordId,
+    correlation_id: correlationId, report_id: 'audit-notion-2026-09-11',
+    display_title: 'Audit Notion', provider: 'notion', report_date: '2026-09-11',
+    status: 'completed', structured_report: structuredReport(),
+  }
+  let reportRequest
+  const loaded = await fetchAdminTenantProviderAuditReport(
+    'https://api.example.com', tenantId, providerRecordId, correlationId, undefined,
+    async (url, options) => { reportRequest = { url, options }; return Response.json(report) },
+  )
+  assert.equal(loaded.status, 'loaded')
+  assert.equal(reportRequest.url, `https://api.example.com/admin/tenants/${tenantId}/providers/${providerRecordId}/audits/${correlationId}/report`)
+  assert.equal(reportRequest.options.method, 'GET')
+  let renameRequest
+  const renamed = await updateAdminTenantProviderAuditTitle(
+    'https://api.example.com', tenantId, providerRecordId, correlationId, 'Nouveau titre', undefined,
+    async (url, options) => { renameRequest = { url, options }; return Response.json({ ...operation('completed'), display_title: 'Nouveau titre' }) },
+  )
+  assert.equal(renamed.status, 'loaded')
+  assert.equal(renameRequest.url, `https://api.example.com/admin/tenants/${tenantId}/providers/${providerRecordId}/audits/${correlationId}/title`)
+  assert.equal(renameRequest.options.method, 'PATCH')
+  assert.deepEqual(JSON.parse(renameRequest.options.body), { display_title: 'Nouveau titre' })
 })
 
 test('maps auth, latest-not-found, conflict, invalid and generic HTTP failures', async () => {

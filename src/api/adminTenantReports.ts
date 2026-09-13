@@ -11,6 +11,8 @@ export interface AdminTenantReport {
   sources_excluded: number
   records_retained: number
   decisions_required: number | null
+  correlation_id?: string
+  tenant_provider_record_id?: string
 }
 
 export type AdminTenantReportsResult =
@@ -19,6 +21,12 @@ export type AdminTenantReportsResult =
 
 const reportIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const tenantIdPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i
+const uuidPattern = tenantIdPattern
+
+function isOptionalUuid(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null
+    || (typeof value === 'string' && uuidPattern.test(value))
+}
 
 function parseReport(value: unknown): AdminTenantReport | null {
   if (typeof value !== 'object' || value === null) return null
@@ -31,6 +39,10 @@ function parseReport(value: unknown): AdminTenantReport | null {
     || (report.status !== 'completed' && report.status !== 'archived')
     || counts.some((key) => !Number.isSafeInteger(report[key]) || (report[key] as number) < 0)
     || (report.decisions_required !== null && (!Number.isSafeInteger(report.decisions_required) || (report.decisions_required as number) < 0))) return null
+  if (!isOptionalUuid(report.correlation_id) || !isOptionalUuid(report.tenant_provider_record_id)) return null
+  const hasCorrelationId = typeof report.correlation_id === 'string'
+  const hasProviderRecordId = typeof report.tenant_provider_record_id === 'string'
+  if (hasCorrelationId !== hasProviderRecordId) return null
   return {
     id: report.id, title: report.title, status: report.status,
     provider: report.provider, report_date: report.report_date,
@@ -39,6 +51,9 @@ function parseReport(value: unknown): AdminTenantReport | null {
     sources_excluded: report.sources_excluded as number,
     records_retained: report.records_retained as number,
     decisions_required: report.decisions_required as number | null,
+    ...(typeof report.correlation_id === 'string' ? { correlation_id: report.correlation_id } : {}),
+    ...(typeof report.tenant_provider_record_id === 'string'
+      ? { tenant_provider_record_id: report.tenant_provider_record_id } : {}),
   }
 }
 

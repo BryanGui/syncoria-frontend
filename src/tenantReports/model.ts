@@ -11,6 +11,13 @@ export function formatReportDate(value: string): string {
   return `${day}/${month}/${year}`
 }
 
+export function formatLocalCalendarDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function sortTenantReports(reports: AdminTenantReport[]): AdminTenantReport[] {
   return [...reports].sort((first, second) => {
     const firstKey = `${first.report_date}:${first.id}`
