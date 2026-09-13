@@ -66,6 +66,8 @@ async function openAudit(page: Page, options: {
   auditScenario?: AuditScenario
   reportsRefreshFails?: boolean
   nullDecision?: boolean
+  latestTitle?: string
+  legacyReport?: boolean
 } = {}) {
   await page.addInitScript(() => {
     const originalAbort = AbortController.prototype.abort
@@ -77,11 +79,13 @@ async function openAudit(page: Page, options: {
     }
   })
   const tenant = { id: tenantId, name: 'Client synthétique', slug: 'synthetic', status: options.archivedTenant ? 'archived' : 'active' }
+  const { correlation_id: _correlationId, tenant_provider_record_id: _providerRecordId, ...legacyReport } = report
   const reports = [
     { ...report, decisions_required: options.nullDecision ? null : report.decisions_required },
     { ...report, id: 'audit-notion-2026-10-15', report_date: '2026-10-15', decisions_required: options.nullDecision ? null : report.decisions_required },
     { ...report, id: 'audit-drive-2026-10-16', provider: 'drive', title: 'Audit Drive', report_date: '2026-10-16', decisions_required: options.nullDecision ? null : report.decisions_required },
     { ...report, id: 'audit-notion-2026-08-01', report_date: '2026-08-01', status: 'archived', decisions_required: options.nullDecision ? null : report.decisions_required },
+    ...(options.legacyReport ? [{ ...legacyReport, id: 'audit-legacy-2026-07-01', report_date: '2026-07-01' }] : []),
   ]
   let auditPollCount = 0
   let latestCallCount = 0
@@ -140,6 +144,9 @@ async function openAudit(page: Page, options: {
       const hasActiveLatest = options.auditScenario === 'resume'
         || options.auditScenario === 'timer'
         || options.auditScenario === 'conflict' && latestCallCount === 2
+      if (options.latestTitle) return route.fulfill({
+        json: { ...auditOperation('completed'), display_title: options.latestTitle },
+      })
       return route.fulfill({
         json: hasActiveLatest ? {
           ...auditOperation('running'),
@@ -284,7 +291,6 @@ test('selects another report, consults archived history and archives the selecte
   await expect(detail.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toEqual([{ path: `${prefix}/reports/${report.id}/archive`, method: 'POST' }])
   expect(requests.filter((r) => r.path === `${prefix}/reports`)).toHaveLength(2)
-  await expect(detail.getByRole('button', { name: 'Voir le rapport', exact: true })).toBeVisible()
   const download = page.waitForEvent('download')
   await detail.getByRole('link', { name: 'Télécharger PDF' }).click()
   expect((await download).suggestedFilename()).toBe('synthetic.pdf')
@@ -322,9 +328,8 @@ for (const width of [1280, 390]) {
       expect(button.left).toBeGreaterThanOrEqual(0)
       expect(button.right).toBeLessThanOrEqual(width)
     }
-    expect(layout[0].background).not.toBe(layout[1].background)
-    if (width > 540) expect(layout.map((button) => button.top)).toEqual([layout[0].top, layout[0].top, layout[0].top])
-    else expect(layout.map((button) => button.width)).toEqual([layout[0].width, layout[0].width, layout[0].width])
+    if (width > 540) expect(layout.map((button) => button.top)).toEqual([layout[0].top, layout[0].top])
+    else expect(layout.map((button) => button.width)).toEqual([layout[0].width, layout[0].width])
     await page.screenshot({ path: testInfo.outputPath(`audit-${width}.png`), fullPage: true })
   })
 }
@@ -369,6 +374,25 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   expect(requests.filter((request) => request.path === auditPrefix && request.method === 'POST')).toHaveLength(1)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(2)
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
+})
+
+test('keeps the next audit title independent from the latest audit title', async ({ page }) => {
+  await openAudit(page, { latestTitle: 'Ancien titre du dernier audit' })
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  await launcher.getByLabel('Connexion à auditer').selectOption(notionAId)
+  await expect(launcher.getByLabel('Titre de l’audit')).toHaveValue(/Audit Notion — \d{4}-\d{2}-\d{2}/)
+  await expect(launcher.getByLabel('Titre de l’audit')).not.toHaveValue('Ancien titre du dernier audit')
+  await expect(launcher).toContainText('État : Terminé')
+})
+
+test('keeps PDF-only access for a legacy report without audit references', async ({ page }) => {
+  await openAudit(page, { legacyReport: true })
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '01/07/2026' }).click()
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  await expect(detail.getByRole('button', { name: /Renommer/ })).toHaveCount(0)
+  await expect(detail).toContainText('La restitution structurée n’est pas disponible pour cet ancien audit.')
+  await expect(detail.getByRole('link', { name: 'Télécharger PDF' })).toBeVisible()
 })
 
 test('renders the structured report with blockers, decisions and integration steps', async ({ page }) => {

@@ -48,6 +48,28 @@ test('accepts reports with pending sources absent from list metadata', async () 
   ), { status: 'loaded', reports: [pendingSourcesReport] })
 })
 
+test('keeps the paired runtime audit references and accepts legacy null references', async () => {
+  const referenced = {
+    ...report,
+    correlation_id: '33333333-3333-4333-8333-333333333333',
+    tenant_provider_record_id: '22222222-2222-4222-8222-222222222222',
+  }
+  const legacy = { ...report, id: 'audit-legacy', report_date: '2026-09-06', correlation_id: null, tenant_provider_record_id: null }
+  assert.deepEqual(await fetchAdminTenantReports(
+    'https://api.example.com', tenantId, undefined,
+    async () => Response.json([referenced, legacy]),
+  ), { status: 'loaded', reports: [referenced, { ...report, id: 'audit-legacy', report_date: '2026-09-06' }] })
+  for (const invalid of [
+    { ...report, correlation_id: 'not-a-uuid', tenant_provider_record_id: null },
+    { ...report, correlation_id: '33333333-3333-4333-8333-333333333333' },
+  ]) {
+    assert.deepEqual(await fetchAdminTenantReports(
+      'https://api.example.com', tenantId, undefined,
+      async () => Response.json([invalid]),
+    ), { status: 'error' })
+  }
+})
+
 test('distinguishes no reports from failures and expired sessions', async () => {
   for (const [status, expected] of [[401, 'unauthenticated'], [404, 'not_found'], [503, 'error']]) {
     assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => Response.json({ detail: 'internal failure' }, { status })), { status: expected })
