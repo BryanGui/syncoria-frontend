@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { archiveAdminTenantReport, buildAdminTenantReportPdfUrl, fetchAdminTenantReports } from '../src/api/adminTenantReports.ts'
+import { formatLocalCalendarDate } from '../src/tenantReports/model.ts'
 import { TENANT_WORKSPACE_SECTIONS, ADMIN_TENANT_WORKSPACE_SECTIONS } from '../src/tenantWorkspace/model.ts'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
@@ -106,6 +107,10 @@ test('reports remain available through the admin integration audit step', () => 
   assert.match(adminWorkspaceSource, /adminReports=\{/)
   assert.match(adminWorkspaceSource, /<AdminTenantReports/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
+})
+
+test('formats the calendar date from the browser local time', () => {
+  assert.equal(formatLocalCalendarDate(new Date(2026, 8, 7)), '2026-09-07')
 })
 
 

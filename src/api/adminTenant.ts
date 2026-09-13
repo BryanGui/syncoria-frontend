@@ -2,27 +2,29 @@ import {
   technicalLogger,
   type TechnicalLogger,
 } from '../observability/logger.ts'
-import type { TenantWorkspaceTenant } from '../tenantWorkspace/model.ts'
+import type { AdminTenant } from './adminTenants.ts'
 
 export type AdminTenantResult =
-  | { status: 'loaded'; tenant: TenantWorkspaceTenant }
+  | { status: 'loaded'; tenant: AdminTenant }
   | { status: 'unauthenticated' }
   | { status: 'not_found' }
   | { status: 'error' }
 
 export type AdminTenantLifecycleResult =
-  | { status: 'updated'; tenant: TenantWorkspaceTenant }
+  | { status: 'updated'; tenant: AdminTenant }
   | { status: 'unauthenticated' }
   | { status: 'not_found' }
   | { status: 'conflict' }
   | { status: 'error' }
 
-function isTenantWorkspaceTenant(value: unknown): value is TenantWorkspaceTenant {
+function isAdminTenant(value: unknown): value is AdminTenant {
   return (
     typeof value === 'object'
     && value !== null
     && 'id' in value
     && typeof value.id === 'string'
+    && 'name' in value
+    && typeof value.name === 'string'
     && 'slug' in value
     && typeof value.slug === 'string'
     && 'status' in value
@@ -66,7 +68,7 @@ export async function fetchAdminTenant(
     }
 
     const responsePayload: unknown = await response.json()
-    if (!isTenantWorkspaceTenant(responsePayload)) {
+    if (!isAdminTenant(responsePayload)) {
       logger.warning('Admin tenant endpoint returned an invalid response.', {
         page: 'tenant_workspace',
         action: 'load_admin_tenant',
@@ -76,8 +78,8 @@ export async function fetchAdminTenant(
       return { status: 'error' }
     }
 
-    const { id, slug, status } = responsePayload
-    return { status: 'loaded', tenant: { id, slug, status } }
+    const { id, name, slug, status } = responsePayload
+    return { status: 'loaded', tenant: { id, name, slug, status } }
   } catch (error: unknown) {
     if (!signal?.aborted) {
       logger.error('Admin tenant request failed.', {
@@ -121,7 +123,7 @@ async function updateAdminTenantLifecycle(
     }
 
     const responsePayload: unknown = await response.json()
-    if (!isTenantWorkspaceTenant(responsePayload)) {
+    if (!isAdminTenant(responsePayload)) {
       logger.warning('Admin tenant lifecycle returned an invalid response.', {
         page: 'tenant_workspace',
         action: `${operation}_admin_tenant`,
@@ -130,8 +132,8 @@ async function updateAdminTenantLifecycle(
       })
       return { status: 'error' }
     }
-    const { id, slug, status } = responsePayload
-    return { status: 'updated', tenant: { id, slug, status } }
+    const { id, name, slug, status } = responsePayload
+    return { status: 'updated', tenant: { id, name, slug, status } }
   } catch (error: unknown) {
     logger.error('Admin tenant lifecycle request failed.', {
       page: 'tenant_workspace',

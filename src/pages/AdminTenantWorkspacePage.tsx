@@ -4,23 +4,21 @@ import {
   archiveAdminTenant,
   fetchAdminTenant,
   reactivateAdminTenant,
+  type AdminTenantResult,
   type AdminTenantLifecycleResult,
 } from '../api/adminTenant'
 import { AdminTenantReports } from '../components/AdminTenantReports'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { AdminTenantIngestion } from '../components/AdminTenantIngestion'
 import { TenantWorkspace } from '../components/TenantWorkspace'
-import {
-  beginTenantWorkspaceLoad,
-  type TenantWorkspaceLoadState,
-} from '../tenantWorkspace/state'
-
 interface AdminTenantWorkspacePageProps {
   apiBaseUrl: string | null
   tenantId: string
   onBack: () => void
   onSessionExpired: () => void
 }
+
+type AdminTenantPageState = Exclude<AdminTenantResult, { status: 'unauthenticated' }> | { status: 'loading' }
 
 export function AdminTenantWorkspacePage({
   apiBaseUrl,
@@ -29,9 +27,7 @@ export function AdminTenantWorkspacePage({
   onSessionExpired,
 }: AdminTenantWorkspacePageProps) {
   const [reloadKey, setReloadKey] = useState(0)
-  const [pageState, setPageState] = useState<TenantWorkspaceLoadState>(
-    beginTenantWorkspaceLoad,
-  )
+  const [pageState, setPageState] = useState<AdminTenantPageState>({ status: 'loading' })
   const [isArchiveConfirmationOpen, setIsArchiveConfirmationOpen] = useState(false)
   const [isLifecycleSubmitting, setIsLifecycleSubmitting] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
@@ -40,7 +36,7 @@ export function AdminTenantWorkspacePage({
   useEffect(() => {
     const abortController = new AbortController()
     let isActive = true
-    setPageState(beginTenantWorkspaceLoad())
+    setPageState({ status: 'loading' })
 
     void fetchAdminTenant(apiBaseUrl, tenantId, abortController.signal).then(
       (result) => {
@@ -160,7 +156,7 @@ export function AdminTenantWorkspacePage({
           key={pageState.tenant.id}
           apiBaseUrl={apiBaseUrl}
           tenantId={pageState.tenant.id}
-          tenantLabel={pageState.tenant.slug}
+          tenantLabel={pageState.tenant.name}
           onSessionExpired={onSessionExpired}
         />
       ) : <p className="tenant-audit">Client archivé : les rapports ne sont pas disponibles.</p>}
