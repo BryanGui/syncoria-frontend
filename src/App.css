@@ -1573,7 +1573,7 @@ button.navigation__link {
   width: min(100%, 1280px);
   min-height: 100svh;
   margin: 0 auto;
-  padding: 36px 48px 64px;
+  padding: 24px 48px 64px;
   box-sizing: border-box;
 }
 
@@ -1819,7 +1819,7 @@ button.navigation__link {
   }
 
   .client-workspace-page {
-    padding: 28px 20px 40px;
+    padding: 20px 20px 40px;
   }
 
   .client-workspace-header {
