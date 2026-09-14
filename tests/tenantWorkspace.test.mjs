@@ -34,7 +34,7 @@ test('defines the exact admin workflow navigation without changing tenant naviga
   assert.deepEqual(ADMIN_TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
     'Provider credentials',
-    'Intégration',
+    'Audit & intégration',
     'Synchronisation',
     'Automatisations',
     'Logs',
@@ -56,12 +56,14 @@ test('keeps credentials separate and composes integration through its two sub-ta
   )
   assert.match(
     tenantWorkspaceSource,
-    /activeSection === 'Intégration'/,
+    /activeSection === 'Audit & intégration'/,
   )
   assert.match(tenantWorkspaceSource, /aria-label="Étapes d’intégration"/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Ingestion'[\s\S]*?adminIngestion/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
+  assert.doesNotMatch(tenantWorkspaceSource, /<p className="eyebrow">Espace tenant<\/p>/)
+  assert.doesNotMatch(tenantWorkspaceSource, /<h3 id="tenant-workspace-integration-title">Intégration<\/h3>/)
 })
 
 test('keeps distinct active states, focus treatment, and mobile scrolling for both tab levels', () => {

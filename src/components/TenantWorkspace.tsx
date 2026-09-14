@@ -59,7 +59,6 @@ export function TenantWorkspace({
               ← Retour aux clients
             </button>
           )}
-          <p className="eyebrow">Espace tenant</p>
           <h2 id="tenant-workspace-title">{tenant.slug}</h2>
         </div>
         <div className="tenant-workspace__heading-actions">
@@ -105,12 +104,8 @@ export function TenantWorkspace({
         </div>
       ) : activeSection === 'Provider credentials' && adminIntegration !== undefined ? (
         adminIntegration
-      ) : activeSection === 'Intégration' ? (
-        <section aria-labelledby="tenant-workspace-integration-title" className="tenant-workspace__integration">
-          <div className="tenant-workspace__integration-heading">
-            <h3 id="tenant-workspace-integration-title">Intégration</h3>
-            <p>Préparez les données du provider avant leur utilisation dans Syncoria.</p>
-          </div>
+      ) : activeSection === 'Audit & intégration' ? (
+        <section className="tenant-workspace__integration">
           <nav aria-label="Étapes d’intégration" className="tenant-workspace__subtabs">
             {INTEGRATION_WORKSPACE_SECTIONS.map((section) => (
               <button
