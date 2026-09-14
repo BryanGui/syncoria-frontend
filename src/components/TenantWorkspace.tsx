@@ -13,21 +13,12 @@ import {
 
 interface TenantWorkspaceProps {
   tenant: TenantWorkspaceTenant
+  tenantLabel?: string
   onBack?: () => void
   adminReports?: ReactNode
   adminIntegration?: ReactNode
   adminIngestion?: ReactNode
   lifecycleControls?: ReactNode
-}
-
-function getIntegrationSectionDescription(section: IntegrationWorkspaceSection): string {
-  if (section === 'Audit & cartographie') {
-    return 'Sources auditées, décisions retained/excluded et rapports disponibles.'
-  }
-  if (section === 'Ingestion') {
-    return 'Copie brute initiale des sources retenues vers Syncoria.'
-  }
-  return 'Transformation future des données brutes en données métier Syncoria.'
 }
 
 export function TenantWorkspace({
@@ -36,6 +27,7 @@ export function TenantWorkspace({
   adminIngestion,
   lifecycleControls,
   tenant,
+  tenantLabel,
   onBack,
 }: TenantWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<
@@ -59,8 +51,7 @@ export function TenantWorkspace({
               ← Retour aux clients
             </button>
           )}
-          <p className="eyebrow">Espace tenant</p>
-          <h2 id="tenant-workspace-title">{tenant.slug}</h2>
+          <h2 id="tenant-workspace-title">{tenantLabel ?? tenant.slug}</h2>
         </div>
         <div className="tenant-workspace__heading-actions">
           <span className={tenant.status === 'active'
@@ -72,7 +63,7 @@ export function TenantWorkspace({
         </div>
       </div>
 
-      <nav aria-label="Sections de l’espace tenant" className="tenant-workspace__tabs">
+      <nav aria-label="Sections du client" className="tenant-workspace__tabs">
         {sections.map((section) => (
           <button
             aria-current={activeSection === section ? 'page' : undefined}
@@ -105,12 +96,8 @@ export function TenantWorkspace({
         </div>
       ) : activeSection === 'Provider credentials' && adminIntegration !== undefined ? (
         adminIntegration
-      ) : activeSection === 'Intégration' ? (
-        <section aria-labelledby="tenant-workspace-integration-title" className="tenant-workspace__integration">
-          <div className="tenant-workspace__integration-heading">
-            <h3 id="tenant-workspace-integration-title">Intégration</h3>
-            <p>Préparez les données du provider avant leur utilisation dans Syncoria.</p>
-          </div>
+      ) : activeSection === 'Audit & intégration' ? (
+        <section className="tenant-workspace__integration">
           <nav aria-label="Étapes d’intégration" className="tenant-workspace__subtabs">
             {INTEGRATION_WORKSPACE_SECTIONS.map((section) => (
               <button
@@ -127,12 +114,6 @@ export function TenantWorkspace({
             ))}
           </nav>
           <div className="tenant-workspace__integration-content">
-            <header
-              aria-label={getIntegrationSectionDescription(activeIntegrationSection)}
-              className="tenant-workspace__integration-section-heading visually-hidden"
-            >
-              <h3>{activeIntegrationSection}</h3>
-            </header>
             {activeIntegrationSection === 'Audit & cartographie' ? (
               adminReports
             ) : activeIntegrationSection === 'Ingestion' ? (

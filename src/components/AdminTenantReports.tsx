@@ -2,14 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchAdminTenantProviderAudit,
   fetchLatestAdminTenantProviderAudit,
-  fetchAdminTenantProviderAuditReport,
   launchAdminTenantProviderAudit,
   updateAdminTenantProviderAuditTitle,
-  type AdminProviderAuditDecision,
   type AdminProviderAuditOperation,
-  type AdminProviderAuditReport,
-  type AdminProviderAuditSource,
-  type AdminProviderAuditStructuredReport,
 } from '../api/adminTenantAudits'
 import { fetchAdminTenantProviders, type AdminProviderRecord } from '../api/adminTenantProviders'
 import {
@@ -35,10 +30,6 @@ const auditPhases = [
 ] as const
 
 type ReportReference = { providerRecordId: string; correlationId: string }
-type StructuredReportState =
-  | { status: 'idle' | 'loading' }
-  | { status: 'loaded'; report: AdminProviderAuditReport }
-  | { status: 'unavailable' | 'error' }
 
 function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
@@ -66,48 +57,6 @@ function auditStatusLabel(status: AdminProviderAuditOperation['status']): string
   if (status === 'failed') return 'Échec'
   if (status === 'running') return 'En cours'
   return 'En attente'
-}
-
-function decisionLabel(decision: AdminProviderAuditDecision): string {
-  if (decision === 'retained') return 'Retenue'
-  if (decision === 'excluded') return 'Écartée'
-  return 'En attente'
-}
-
-function ReportMetricCards({ metrics }: { metrics: Omit<AdminProviderAuditStructuredReport['metrics'], 'decisions_required'> & { decisions_required: number | null } }) {
-  const items = [
-    ['Sources analysées', metrics.sources_analyzed], ['Sources retenues', metrics.sources_retained],
-    ['Sources écartées', metrics.sources_excluded], ['Enregistrements retenus', metrics.records_retained],
-    ['Décisions nécessaires', metrics.decisions_required],
-  ] as const
-  return <dl className="tenant-audit__kpis">{items.map(([label, value]) => <div className={label === 'Décisions nécessaires' && value !== null && value > 0 ? 'tenant-audit__kpi tenant-audit__kpi--attention' : value === null ? 'tenant-audit__kpi tenant-audit__kpi--neutral' : 'tenant-audit__kpi'} key={label}><dt>{label}</dt><dd>{value ?? '—'}</dd></div>)}</dl>
-}
-
-function ReportSection({ title, items, className = '' }: { title: string; items: string[]; className?: string }) {
-  if (items.length === 0) return null
-  return <section className={`tenant-audit__report-section ${className}`.trim()}><h5>{title}</h5><ul>{items.map((item, index) => <li key={`${title}-${index}`}>{item}</li>)}</ul></section>
-}
-
-function SourceDecisionGroup({ title, sources, decision }: { title: string; sources: AdminProviderAuditSource[]; decision: AdminProviderAuditDecision }) {
-  if (sources.length === 0) return null
-  return <section className={`tenant-audit__source-group tenant-audit__source-group--${decision}`}><div className="tenant-audit__source-group-heading"><h5>{title}</h5><span>{sources.length} source{sources.length > 1 ? 's' : ''}</span></div><ul>{sources.map((source, index) => <li key={`${source.source_name}-${index}`}><strong>{source.source_name}</strong><span>{source.volume ?? '—'} éléments</span><small>{source.reason || 'Aucun motif précisé.'}</small></li>)}</ul></section>
-}
-
-function StructuredReportView({ report }: { report: AdminProviderAuditReport }) {
-  const content = report.structured_report
-  return <div className="tenant-audit__structured-report">
-    <ReportMetricCards metrics={content.metrics} />
-    <section className="tenant-audit__blockers" aria-labelledby="audit-blockers-title"><div><p className="tenant-audit__eyebrow">Décisions / vigilance</p><h5 id="audit-blockers-title">Blockers</h5></div>{content.blockers.length > 0 ? <ul>{content.blockers.map((blocker, index) => <li key={`blocker-${index}`}>{blocker}</li>)}</ul> : <p>Aucun blocker identifié dans le rapport.</p>}</section>
-    <ReportSection title="Résumé exécutif" items={content.summary} />
-    <ReportSection title="Périmètre audité" items={content.scope} />
-    <section className="tenant-audit__source-map" aria-labelledby="audit-source-map-title"><div className="tenant-audit__section-heading"><div><p className="tenant-audit__eyebrow">Cartographie</p><h5 id="audit-source-map-title">Sources auditées</h5></div><span>{content.sources.length} source{content.sources.length > 1 ? 's' : ''}</span></div>{content.sources.length > 0 ? <div className="tenant-audit__source-table-wrap"><table className="tenant-audit__source-table"><thead><tr><th>Source</th><th>Volume</th><th>Décision</th><th>Motif</th></tr></thead><tbody>{content.sources.map((source, index) => <tr key={`${source.source_name}-${index}`}><td><strong>{source.source_name}</strong></td><td>{source.volume ?? '—'}</td><td><span className={`tenant-audit__decision tenant-audit__decision--${source.decision}`}>{decisionLabel(source.decision)}</span></td><td>{source.reason || '—'}</td></tr>)}</tbody></table></div> : <p className="tenant-audit__empty-note">Aucune source détaillée n’est disponible.</p>}<div className="tenant-audit__source-groups"><SourceDecisionGroup title="Sources retenues" sources={content.retained} decision="retained" /><SourceDecisionGroup title="Sources écartées" sources={content.excluded} decision="excluded" /><SourceDecisionGroup title="Sources en attente" sources={content.pending} decision="pending" /></div></section>
-    <ReportSection title="Relations principales" items={content.relationships} />
-    <div className="tenant-audit__report-columns"><ReportSection title="Incohérences" items={content.inconsistencies} /><ReportSection title="Risques" items={content.risks} /></div>
-    <ReportSection title="Recommandations Syncoria" items={content.recommendations} className="tenant-audit__report-section--recommendations" />
-    <ReportSection title="Décisions à prendre" items={content.decisions} className="tenant-audit__report-section--decisions" />
-    {content.integration_plan.length > 0 ? <section className="tenant-audit__report-section tenant-audit__integration-plan"><h5>Plan d’intégration</h5><ol>{content.integration_plan.map((step, index) => <li key={`step-${index}`}><span>{index + 1}</span><p>{step}</p></li>)}</ol></section> : null}
-    {content.technical_appendix.length > 0 ? <details className="tenant-audit__technical-appendix"><summary>Annexe technique</summary><ul>{content.technical_appendix.map((item, index) => <li key={`technical-${index}`}>{item}</li>)}</ul></details> : null}
-  </div>
 }
 
 function AuditElapsedTime({ operation }: { operation: AdminProviderAuditOperation }) {
@@ -143,7 +92,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const [isLaunching, setIsLaunching] = useState(false)
   const [displayTitle, setDisplayTitle] = useState('')
   const [titleError, setTitleError] = useState<string | null>(null)
-  const [structuredReport, setStructuredReport] = useState<StructuredReportState>({ status: 'idle' })
   const [editingReportId, setEditingReportId] = useState<string | null>(null)
   const [titleDraft, setTitleDraft] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
@@ -155,7 +103,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const reportsTenant = useRef<string | null>(null)
   const userSelectedReportId = useRef<string | null>(null)
   const lastActiveAudit = useRef<AdminProviderAuditOperation | null>(null)
-  const titleWasEdited = useRef(false)
   const selectedProvider = useMemo(() => providers.find((provider) => provider.id === selectedProviderId) ?? null, [providers, selectedProviderId])
   const activeProviders = useMemo(() => providers.filter((provider) => provider.status === 'active'), [providers])
   const selectedReport = useMemo(() => { if (state.status !== 'loaded') return null; return state.reports.find((report) => report.id === selectedReportId) ?? state.reports[0] ?? null }, [selectedReportId, state])
@@ -219,21 +166,44 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   }
 
   function renderAuditLauncher() {
-    const auditActive = auditOperation?.status === 'pending' || auditOperation?.status === 'running'; const disabled = providerState !== 'loaded' || selectedProvider === null || selectedProvider.provider !== 'notion' || !selectedProvider.credential_configured || isLaunching || auditActive
-    return <section aria-label="Lancement de l’audit Notion" className="tenant-audit__launcher"><div className="tenant-audit__launcher-title"><div><p className="tenant-audit__eyebrow">Nouvelle restitution</p><h4>Lancer un audit</h4></div><span className="tenant-audit__launcher-note">Le provider reste séparé du titre</span></div><div className="tenant-audit__launcher-fields"><div className="tenant-audit__field"><label className="tenant-audit__provider-label" htmlFor="audit-title">Titre de l’audit</label><input aria-describedby="audit-title-help" aria-invalid={titleError !== null} id="audit-title" maxLength={120} onChange={(event) => { titleWasEdited.current = true; setDisplayTitle(event.target.value); setTitleError(null) }} value={displayTitle} /><small id="audit-title-help">Ce titre sera visible dans l’historique et le rapport.</small>{titleError ? <p role="alert">{titleError}</p> : null}</div><div className="tenant-audit__field"><label className="tenant-audit__provider-label" htmlFor="audit-provider">Connexion à auditer</label><select aria-label="Connexion à auditer" disabled={auditActive || isLaunching || providerState !== 'loaded'} id="audit-provider" onChange={(event) => setSelectedProviderId(event.target.value)} value={selectedProviderId}><option value="">Sélectionner une connexion</option>{activeProviders.map((provider) => <option key={provider.id} value={provider.id}>{providerLabel(provider.provider)} — {provider.name}{provider.provider !== 'notion' ? ' · Audit indisponible' : ''}</option>)}</select></div><button className="primary-button" disabled={disabled} onClick={() => void launchAudit()} type="button">{isLaunching ? 'Lancement…' : auditActive ? 'Audit en cours…' : 'Lancer l’audit'}</button></div>{providerState === 'loading' ? <p aria-live="polite">Recherche des connexions…</p> : null}{providerState === 'error' ? <p role="alert">La connexion Notion ne peut pas être vérifiée pour le moment.</p> : null}{providerState === 'loaded' && activeProviders.length === 0 ? <p role="status">Aucune connexion active n’est disponible pour ce tenant.</p> : null}{selectedProvider?.provider !== 'notion' && selectedProvider !== null ? <p role="status">Audit indisponible pour cette connexion.</p> : null}{selectedProvider?.provider === 'notion' && !selectedProvider.credential_configured ? <p role="status">Configurez d’abord le credential Notion pour lancer l’audit.</p> : null}{auditOperation !== null ? <div className="tenant-audit__launcher-status">{auditOperation.status === 'failed' ? <><strong>Échec de l’audit</strong><p>{auditFailureMessage(auditOperation.error_code)}</p><AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} /></> : auditOperation.status === 'completed' ? <><strong>État : Terminé</strong><AuditProgress lastActiveOperation={null} operation={auditOperation} /><dl><div><dt>Sources analysées</dt><dd>{auditOperation.sources_total}</dd></div><div><dt>Sources retenues</dt><dd>{auditOperation.sources_retained}</dd></div><div><dt>Sources écartées</dt><dd>{auditOperation.sources_excluded}</dd></div><div><dt>Décisions nécessaires</dt><dd>{auditOperation.decisions_required}</dd></div><div><dt>Enregistrements retenus</dt><dd>{auditOperation.records_retained}</dd></div></dl></> : <AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} />}</div> : null}{auditError ? <p role="alert">{auditError}</p> : null}</section>
+    const auditActive = auditOperation?.status === 'pending' || auditOperation?.status === 'running'
+    const disabled = providerState !== 'loaded' || selectedProvider === null
+      || selectedProvider.provider !== 'notion' || !selectedProvider.credential_configured
+      || isLaunching || auditActive
+    return <section aria-label="Lancement de l’audit Notion" className="tenant-audit__launcher">
+      <div className="tenant-audit__launcher-title"><h4>Lancer un audit</h4><span className="tenant-audit__launcher-note">Une connexion par audit</span></div>
+      <div className="tenant-audit__launcher-fields">
+        <div className="tenant-audit__field">
+          <label className="tenant-audit__provider-label" htmlFor="audit-title">Titre de l’audit</label>
+          <input aria-describedby="audit-title-help" aria-invalid={titleError !== null} id="audit-title" maxLength={120} onChange={(event) => { setDisplayTitle(event.target.value); setTitleError(null) }} value={displayTitle} />
+          <small id="audit-title-help">Ce titre sera visible dans l’historique et le rapport.</small>
+          {titleError ? <p role="alert">{titleError}</p> : null}
+        </div>
+        <div className="tenant-audit__field">
+          <span className="tenant-audit__provider-label">Connexion à auditer</span>
+          <div aria-label="Connexion à auditer" aria-disabled={auditActive || isLaunching || providerState !== 'loaded'} className="tenant-audit__provider-options" role="radiogroup">
+            {activeProviders.map((provider) => {
+              const selected = provider.id === selectedProviderId
+              return <button aria-checked={selected} className={selected ? 'tenant-audit__provider-option tenant-audit__provider-option--selected' : 'tenant-audit__provider-option'} disabled={auditActive || isLaunching || providerState !== 'loaded'} key={provider.id} onClick={() => setSelectedProviderId(provider.id)} role="radio" type="button"><strong>{providerLabel(provider.provider)}</strong><span>{provider.name}</span>{provider.provider !== 'notion' ? <small>Audit indisponible</small> : null}</button>
+            })}
+          </div>
+        </div>
+        <button className="primary-button" disabled={disabled} onClick={() => void launchAudit()} type="button">{isLaunching ? 'Lancement…' : auditActive ? 'Audit en cours…' : 'Lancer l’audit'}</button>
+      </div>
+      {providerState === 'loading' ? <p aria-live="polite">Recherche des connexions…</p> : null}
+      {providerState === 'error' ? <p role="alert">La connexion Notion ne peut pas être vérifiée pour le moment.</p> : null}
+      {providerState === 'loaded' && activeProviders.length === 0 ? <p role="status">Aucune connexion active n’est disponible pour ce tenant.</p> : null}
+      {selectedProvider?.provider !== 'notion' && selectedProvider !== null ? <p role="status">Audit indisponible pour cette connexion.</p> : null}
+      {selectedProvider?.provider === 'notion' && !selectedProvider.credential_configured ? <p role="status">Configurez d’abord le credential Notion pour lancer l’audit.</p> : null}
+      {auditOperation !== null ? <div className="tenant-audit__launcher-status">{auditOperation.status === 'failed' ? <><strong>Échec de l’audit</strong><p>{auditFailureMessage(auditOperation.error_code)}</p><AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} /></> : auditOperation.status === 'completed' ? <><strong>État : Terminé</strong><AuditProgress lastActiveOperation={null} operation={auditOperation} /><dl><div><dt>Sources analysées</dt><dd>{auditOperation.sources_total}</dd></div><div><dt>Sources retenues</dt><dd>{auditOperation.sources_retained}</dd></div><div><dt>Sources écartées</dt><dd>{auditOperation.sources_excluded}</dd></div><div><dt>Décisions nécessaires</dt><dd>{auditOperation.decisions_required}</dd></div><div><dt>Enregistrements retenus</dt><dd>{auditOperation.records_retained}</dd></div></dl></> : <AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} />}</div> : null}
+      {auditError ? <p role="alert">{auditError}</p> : null}
+    </section>
   }
 
   const reportReference = useCallback((report: AdminTenantReport): ReportReference | null => {
     if (report.correlation_id && report.tenant_provider_record_id) return { providerRecordId: report.tenant_provider_record_id, correlationId: report.correlation_id }
     return null
   }, [])
-
-  useEffect(() => {
-    const controller = new AbortController(); if (selectedReport === null) { setStructuredReport({ status: 'idle' }); return () => controller.abort() }
-    const reference = reportReference(selectedReport); if (reference === null) { setStructuredReport({ status: 'unavailable' }); return () => controller.abort() }
-    setStructuredReport({ status: 'loading' }); void fetchAdminTenantProviderAuditReport(apiBaseUrl, tenantId, reference.providerRecordId, reference.correlationId, controller.signal).then((result) => { if (controller.signal.aborted) return; if (result.status === 'unauthenticated') { onSessionExpired(); return } setStructuredReport(result.status === 'loaded' ? result : result.status === 'not_found' ? { status: 'unavailable' } : { status: 'error' }) })
-    return () => controller.abort()
-  }, [apiBaseUrl, onSessionExpired, reportReference, selectedReport, tenantId])
 
   async function archiveReport(reportId: string) {
     if (archiveRequest.current && !archiveRequest.current.signal.aborted) return
@@ -250,7 +220,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     if (result.status !== 'loaded') { setRenameError('Le titre n’a pas pu être enregistré. Réessayez.'); return }
     const savedTitle = result.operation.display_title
     setState((previous) => previous.status !== 'loaded' ? previous : { ...previous, reports: previous.reports.map((item) => item.id === report.id ? { ...item, title: savedTitle } : item) })
-    setStructuredReport((previous) => previous.status !== 'loaded' ? previous : { ...previous, report: { ...previous.report, display_title: savedTitle } })
     setAuditOperation((previous) => previous?.correlation_id === reference.correlationId ? { ...previous, display_title: savedTitle } : previous)
     setEditingReportId(null); setRenameError(null)
   }
@@ -260,8 +229,10 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   }
 
   function renderSelectedReport(report: AdminTenantReport) {
-    const isArchived = report.status === 'archived'; const fallbackMetrics = { sources_analyzed: report.sources_analyzed, sources_retained: report.sources_retained, sources_excluded: report.sources_excluded, sources_pending: 0, records_retained: report.records_retained, decisions_required: report.decisions_required }; const structured = structuredReport.status === 'loaded' && structuredReport.report.report_id === report.id ? structuredReport.report : null; const renaming = editingReportId === report.id; const canRename = reportReference(report) !== null
-    return <section aria-label="Rapport sélectionné" className="tenant-audit__selected-report"><article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'}><div className="tenant-audit__report-heading"><div><p className="tenant-audit__eyebrow">Restitution d’audit</p><h4>{report.title}</h4><p className="tenant-audit__report-client">Client : <strong>{tenantLabel}</strong></p></div><div className="tenant-audit__report-meta"><p>Provider : <strong>{providerLabel(structured?.provider ?? report.provider)}</strong></p><p>Date : <time dateTime={structured?.report_date ?? report.report_date}>{formatReportDate(structured?.report_date ?? report.report_date)}</time></p><p>Statut : <strong className={isArchived ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{isArchived ? 'Archivé' : 'Terminé'}</strong></p>{canRename ? <button className="secondary-button tenant-audit__rename-header" disabled={isRenaming} onClick={() => beginRename(report)} type="button">Renommer</button> : null}</div></div>{renaming ? <div className="tenant-audit__header-rename"><label htmlFor={`header-rename-${report.id}`}>Titre de l’audit</label><input id={`header-rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} /><div className="tenant-audit__actions"><button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button><button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button></div>{renameError ? <p role="alert">{renameError}</p> : null}</div> : null}{structured ? <StructuredReportView report={structured} /> : <ReportMetricCards metrics={fallbackMetrics} />}{!structured && structuredReport.status === 'loading' ? <p className="tenant-audit__report-loading" role="status">Chargement de la restitution structurée…</p> : null}{!structured && structuredReport.status === 'unavailable' ? <p className="tenant-audit__report-note">La restitution structurée n’est pas disponible pour cet ancien audit. Le PDF reste disponible.</p> : null}{!structured && structuredReport.status === 'error' ? <p className="tenant-audit__report-note" role="alert">La restitution structurée ne peut pas être chargée pour le moment. Réessayez plus tard ou utilisez le PDF.</p> : null}<div className="tenant-audit__report-footer"><div className="tenant-audit__actions"><a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>{report.status === 'completed' ? <button className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">Archiver</button> : null}</div><p className="tenant-audit__summary">{isArchived ? 'Ce rapport est conservé dans l’historique et reste consultable.' : 'L’état Terminé concerne l’audit, pas la validation métier ni l’intégration des données.'}</p></div>{confirmationId === report.id ? <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}><strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong><p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p><div className="tenant-audit__actions"><button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button><button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button></div>{archiveError && <p role="alert">{archiveError}</p>}</div> : null}</article></section>
+    const isArchived = report.status === 'archived'
+    const renaming = editingReportId === report.id
+    const canRename = reportReference(report) !== null
+    return <section aria-label="Rapport sélectionné" className="tenant-audit__selected-report"><article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'}><div className="tenant-audit__report-heading"><div><p className="tenant-audit__eyebrow">Rapport sélectionné</p><h4>{report.title}</h4><p className="tenant-audit__report-client">Client : <strong>{tenantLabel}</strong></p></div><div className="tenant-audit__report-meta"><p>Provider : <strong>{providerLabel(report.provider)}</strong></p><p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p><p>Statut : <strong className={isArchived ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{isArchived ? 'Archivé' : 'Terminé'}</strong></p>{canRename ? <button className="secondary-button tenant-audit__rename-header" disabled={isRenaming} onClick={() => beginRename(report)} type="button">Renommer</button> : null}</div></div>{renaming ? <div className="tenant-audit__header-rename"><label htmlFor={`header-rename-${report.id}`}>Titre de l’audit</label><input id={`header-rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} /><div className="tenant-audit__actions"><button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button><button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button></div>{renameError ? <p role="alert">{renameError}</p> : null}</div> : null}<div className="tenant-audit__report-footer"><div className="tenant-audit__actions"><a className="primary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} rel="noreferrer" target="_blank">Voir le rapport</a><a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>{report.status === 'completed' ? <button className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">Archiver</button> : null}</div><p className="tenant-audit__summary">{isArchived ? 'Ce rapport est conservé dans l’historique et reste consultable.' : 'L’audit est terminé. Consultez le rapport pour les points à régler et les décisions attendues.'}</p></div>{confirmationId === report.id ? <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}><strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong><p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p><div className="tenant-audit__actions"><button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button><button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button></div>{archiveError && <p role="alert">{archiveError}</p>}</div> : null}</article></section>
   }
 
   return <section aria-label="Audit & cartographie" className="tenant-audit"><h3>Audit & cartographie</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : state.reports.length === 0 ? <><p>{reportsError ?? 'Aucun rapport publié pour ce client.'}</p></> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}{renderReportHistory(state.reports)}{selectedReport ? renderSelectedReport(selectedReport) : null}</>}</section>
