@@ -550,6 +550,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
   )
   const isOverview = navigationState.activePage === 'overview'
   const isClients = navigationState.activePage === 'clients'
+  const isTenant = !isOverview && !isClients
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -626,27 +627,21 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
       </aside>
 
       <main className="main-content" id={navigationState.activePage}>
-        <header className="page-header">
-          <div>
+        <header className={isTenant ? 'page-header page-header--tenant' : 'page-header'}>
+          {!isTenant ? <div>
             <p className="eyebrow">Administration</p>
-            <h1>{isOverview
-              ? 'Vue d’ensemble'
-              : isClients
-                ? 'Clients'
-                : 'Espace tenant'}</h1>
+            <h1>{isOverview ? 'Vue d’ensemble' : 'Clients'}</h1>
             <p className="page-header__description">
               {isOverview
                 ? 'Consultez l’état général des services et les dernières opérations.'
-                : isClients
-                  ? 'Consultez les tenants enregistrés dans Syncoria.'
-                  : 'Consultez les informations et sections du tenant sélectionné.'}
+                : 'Consultez les tenants enregistrés dans Syncoria.'}
             </p>
-          </div>
+          </div> : null}
           <div className="page-header__actions">
-            <div className="context-badge">
+            {!isTenant ? <div className="context-badge">
               <span>Espace</span>
               <strong>Démonstration</strong>
-            </div>
+            </div> : null}
             <button
               className="secondary-button"
               disabled={isLoggingOut}

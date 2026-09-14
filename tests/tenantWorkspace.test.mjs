@@ -62,7 +62,8 @@ test('keeps credentials separate and composes integration through its two sub-ta
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Ingestion'[\s\S]*?adminIngestion/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
-  assert.doesNotMatch(tenantWorkspaceSource, /<p className="eyebrow">Espace tenant<\/p>/)
+  assert.match(tenantWorkspaceSource, /tenantLabel\s*\?\?\s*tenant\.slug/)
+  assert.doesNotMatch(tenantWorkspaceSource, /Espace tenant/)
   assert.doesNotMatch(tenantWorkspaceSource, /<h3 id="tenant-workspace-integration-title">Intégration<\/h3>/)
 })
 
@@ -85,18 +86,18 @@ test('uses audit by default and keeps integration placeholders scoped to their w
   assert.doesNotMatch(tenantWorkspaceSource, /activeSection === 'Sources'|activeSection === 'Rapports'|activeSection === 'Ingestion'/)
 })
 
-test('renders the active integration section header without tenant-specific fixtures', () => {
-  assert.match(tenantWorkspaceSource, /tenant-workspace__integration-section-heading/)
-  assert.match(tenantWorkspaceSource, /className="tenant-workspace__integration-section-heading visually-hidden"/)
-  assert.match(tenantWorkspaceSource, /Sources auditées, décisions retained\/excluded et rapports disponibles\./)
-  assert.match(tenantWorkspaceSource, /Copie brute initiale des sources retenues vers Syncoria\./)
-  assert.match(tenantWorkspaceSource, /Transformation future des données brutes en données métier Syncoria\./)
+test('removes the repeated integration heading and keeps labels in the sub-tabs', () => {
+  assert.doesNotMatch(tenantWorkspaceSource, /tenant-workspace__integration-section-heading/)
+  assert.doesNotMatch(tenantWorkspaceSource, /Préparez les données du provider/)
+  assert.match(tenantWorkspaceSource, /aria-label="Étapes d’intégration"/)
   assert.doesNotMatch(tenantWorkspaceSource, /Novalia|90|raw_payload/)
 })
 
 test('adds breathing room between workspace levels and hides repeated section headings visually', () => {
-  assert.match(workspaceStyles, /\.tenant-workspace__heading \{[\s\S]*?padding: 28px 28px 20px;/)
-  assert.match(workspaceStyles, /\.tenant-workspace__subtabs \{[\s\S]*?margin: 28px 24px 0;/)
+  assert.match(workspaceStyles, /\.tenant-workspace__heading \{[\s\S]*?padding: 20px 24px 14px;/)
+  assert.match(workspaceStyles, /\.tenant-workspace__subtabs \{[\s\S]*?margin: 10px 24px 0;/)
+  assert.match(workspaceStyles, /\.tenant-workspace__subtabs \{[\s\S]*?border-radius: 999px;/)
+  assert.match(workspaceStyles, /\.tenant-workspace__integration-content \{[\s\S]*?padding-top: 8px;/)
   assert.match(workspaceStyles, /\.visually-hidden \{[\s\S]*?clip: rect\(0, 0, 0, 0\)/)
   assert.match(tenantWorkspaceSource, /className="visually-hidden">Synchronisation/)
 })

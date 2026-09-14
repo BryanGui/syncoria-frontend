@@ -240,6 +240,9 @@ async function openAudit(page: Page, options: {
 
 test('compact history selects the latest report and shows only one detail', async ({ page }) => {
   await openAudit(page)
+  await expect(page.getByRole('heading', { name: 'Client synthétique', exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('Espace tenant')
+  await expect(page.locator('body')).not.toContainText('Intégration\nPréparez les données du provider')
   const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
   await expect(history.locator('.tenant-audit__history-item')).toHaveCount(4)
   await expect(history.locator('time')).toHaveText(['16/10/2026', '15/10/2026', '07/09/2026', '01/08/2026'])
@@ -338,6 +341,7 @@ test('failed archive keeps the selected report active and shows a sanitized retr
 test('launches an audit, polls it to completion and refreshes active reports', async ({ page }) => {
   const requests = await openAudit(page, { auditScenario: 'launch' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
+  await expect(launcher).not.toContainText('Nouvelle restitution')
   await launcher.getByLabel('Titre de l’audit').fill('Audit recrutement Novalia')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()

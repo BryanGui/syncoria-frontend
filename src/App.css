@@ -188,6 +188,10 @@ button.navigation__link {
   gap: 10px;
 }
 
+.page-header--tenant {
+  justify-content: flex-end;
+}
+
 .secondary-button,
 .primary-button,
 .danger-button,
@@ -784,7 +788,7 @@ button.navigation__link {
 }
 
 .tenant-workspace {
-  margin-top: 40px;
+  margin-top: 24px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
@@ -792,21 +796,17 @@ button.navigation__link {
 }
 
 .tenant-workspace__heading {
-  padding: 28px 28px 20px;
+  padding: 20px 24px 14px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
 }
 
-.tenant-workspace__heading .eyebrow {
-  margin-top: 24px;
-}
-
 .tenant-workspace__heading h2 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 26px;
+  font-size: 24px;
   letter-spacing: -0.025em;
 }
 
@@ -950,40 +950,23 @@ button.navigation__link {
   min-width: 0;
 }
 
-.tenant-workspace__integration-heading {
-  padding: 28px 24px 0;
-}
-
-.tenant-workspace__integration-heading h3 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 20px;
-}
-
-.tenant-workspace__integration-heading p,
-.tenant-workspace__integration-section-heading p {
-  margin: 6px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
 .tenant-workspace__subtabs {
-  margin: 28px 24px 0;
-  padding: 6px;
+  margin: 10px 24px 0;
+  padding: 4px;
   display: flex;
   flex-wrap: nowrap;
   gap: 4px;
   border: 1px solid #e5e8ed;
-  border-radius: 8px;
+  border-radius: 999px;
   background: #f5f7fa;
   overflow-x: auto;
 }
 
 .tenant-workspace__subtab {
-  min-height: 32px;
-  padding: 0 11px;
+  min-height: 30px;
+  padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 999px;
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -1011,21 +994,11 @@ button.navigation__link {
 }
 
 .tenant-workspace__integration-content {
-  padding-top: 24px;
-}
-
-.tenant-workspace__integration-section-heading {
-  padding: 0 24px;
-}
-
-.tenant-workspace__integration-section-heading h3 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 18px;
+  padding-top: 8px;
 }
 
 .tenant-workspace__integration-content > .tenant-audit {
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .tenant-workspace__integration-content > .tenant-audit > h3,
@@ -1977,18 +1950,10 @@ button.navigation__link {
     gap: 20px;
   }
 
-  .tenant-workspace__integration-heading {
-    padding: 20px 20px 0;
-  }
-
   .tenant-workspace__subtabs {
-    margin-top: 16px;
+    margin-top: 8px;
     margin-inline: 20px;
-    padding: 6px;
-  }
-
-  .tenant-workspace__integration-section-heading {
-    padding: 0 20px;
+    padding: 3px;
   }
 
   .tenant-overview {
@@ -2057,8 +2022,8 @@ button.navigation__link {
   }
 }
 
-.tenant-audit { padding: 1.5rem; }
-.tenant-audit__launcher { margin: 1rem 0 1.5rem; padding: 1rem 1.1rem; border: 1px solid var(--color-border); border-radius: 12px; background: #f7fafb; }
+.tenant-audit { padding: 1.25rem 1.5rem 1.5rem; }
+.tenant-audit__launcher { margin: .5rem 0 1.25rem; padding: 1rem 1.1rem; border: 1px solid var(--color-border); border-radius: 12px; background: #f7fafb; }
 .tenant-audit__provider-label { display: block; margin-bottom: .45rem; color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; }
 .tenant-audit__launcher-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .tenant-audit__launcher select { min-height: 44px; min-width: min(100%, 28rem); padding: .65rem .8rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-body); font: inherit; }

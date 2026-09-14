@@ -102,7 +102,7 @@ export function AdminTenantWorkspacePage({
     return (
       <section aria-live="polite" className="clients-state clients-state--loading">
         <span className="session-loading__indicator" aria-hidden="true" />
-        <p>Chargement de l’espace tenant…</p>
+        <p>Chargement du client…</p>
       </section>
     )
   }
@@ -122,7 +122,7 @@ export function AdminTenantWorkspacePage({
   if (pageState.status === 'error') {
     return (
       <section className="clients-state" role="alert">
-        <h2>Espace tenant indisponible</h2>
+        <h2>Client indisponible</h2>
         <p>Les informations du tenant ne peuvent pas être chargées.</p>
         <div className="tenant-workspace__error-actions">
           <button className="secondary-button" onClick={onBack} type="button">
@@ -238,6 +238,7 @@ export function AdminTenantWorkspacePage({
         </div>
       )}
       onBack={onBack}
+      tenantLabel={pageState.tenant.name}
       tenant={pageState.tenant}
     />
   )

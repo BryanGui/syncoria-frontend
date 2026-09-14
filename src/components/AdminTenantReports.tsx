@@ -171,7 +171,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
       || selectedProvider.provider !== 'notion' || !selectedProvider.credential_configured
       || isLaunching || auditActive
     return <section aria-label="Lancement de l’audit Notion" className="tenant-audit__launcher">
-      <div className="tenant-audit__launcher-title"><div><p className="tenant-audit__eyebrow">Nouvelle restitution</p><h4>Lancer un audit</h4></div><span className="tenant-audit__launcher-note">Une connexion par audit</span></div>
+      <div className="tenant-audit__launcher-title"><h4>Lancer un audit</h4><span className="tenant-audit__launcher-note">Une connexion par audit</span></div>
       <div className="tenant-audit__launcher-fields">
         <div className="tenant-audit__field">
           <label className="tenant-audit__provider-label" htmlFor="audit-title">Titre de l’audit</label>
