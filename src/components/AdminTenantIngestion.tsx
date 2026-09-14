@@ -301,7 +301,6 @@ export function AdminTenantIngestion({
         ) : null}
         <div>
           <h3 id="tenant-ingestion-title">Ingestion</h3>
-          <p>Copie brute initiale des sources retenues vers Syncoria.</p>
         </div>
       </div>
 

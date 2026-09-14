@@ -48,7 +48,7 @@ test('keeps the dashboard responsive on mobile widths', () => {
 })
 
 test('keeps the ingestion heading compact and formats providers without repetition', () => {
-  assert.match(component, /Copie brute initiale des sources retenues vers Syncoria\./)
+  assert.doesNotMatch(component, /Copie brute initiale des sources retenues vers Syncoria\./)
   assert.match(component, /function formatProvider\(tenantSlug: string, providerType: string\)/)
   assert.match(component, /`\$\{tenantSlug\} · \$\{providerType\}`/)
   assert.doesNotMatch(component, /formatProvider\(selectedProvider\)/)

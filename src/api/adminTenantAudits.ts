@@ -296,6 +296,44 @@ export interface AdminProviderAuditSource {
   reason: string
 }
 
+export interface AdminProviderAuditERColumn {
+  name: string
+  external_field_id: string | null
+  provider_type: string
+  postgres_type: string
+  position: number | null
+}
+
+export interface AdminProviderAuditERForeignKey {
+  source_column: string
+  target_table: string
+  target_column: string
+}
+
+export interface AdminProviderAuditERTable {
+  name: string
+  source_name: string
+  external_source_id: string
+  columns: AdminProviderAuditERColumn[]
+  primary_key: string[]
+  foreign_keys: AdminProviderAuditERForeignKey[]
+}
+
+export interface AdminProviderAuditERRelationship {
+  source_table: string
+  source_column: string
+  target_table: string | null
+  target_source_external_id: string | null
+  target_column: string | null
+  cardinality: 'unknown'
+}
+
+export interface AdminProviderAuditERModel {
+  format: 'syncoria-raw-er-v1'
+  tables: AdminProviderAuditERTable[]
+  relationships: AdminProviderAuditERRelationship[]
+}
+
 export interface AdminProviderAuditStructuredReport {
   metrics: AdminProviderAuditMetrics
   summary: string[]
@@ -314,6 +352,10 @@ export interface AdminProviderAuditStructuredReport {
   recommendations: string[]
   integration_plan: string[]
   technical_appendix: string[]
+  raw_ddl: string | null
+  raw_er: AdminProviderAuditERModel | null
+  raw_ddl_invalid: boolean
+  raw_er_invalid: boolean
 }
 
 export interface AdminProviderAuditReport {
@@ -330,6 +372,114 @@ export interface AdminProviderAuditReport {
 
 function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isBoundedString(value: unknown, maximum = 1024): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= maximum
+}
+
+function isNullableBoundedString(value: unknown, maximum = 1024): value is string | null {
+  return value === null || isBoundedString(value, maximum)
+}
+
+function isNullablePosition(value: unknown): value is number | null {
+  return value === null || (Number.isSafeInteger(value) && (value as number) >= 0)
+}
+
+function parseRawER(value: unknown): {
+  artifact: AdminProviderAuditERModel | null
+  invalid: boolean
+} {
+  if (value === undefined || value === null) return { artifact: null, invalid: false }
+  if (!isObject(value) || value.format !== 'syncoria-raw-er-v1'
+    || !Array.isArray(value.tables) || value.tables.length > 500
+    || !Array.isArray(value.relationships) || value.relationships.length > 2000) {
+    return { artifact: null, invalid: true }
+  }
+  const tables: AdminProviderAuditERTable[] = []
+  for (const rawTable of value.tables) {
+    if (!isObject(rawTable)
+      || !isBoundedString(rawTable.name)
+      || !isBoundedString(rawTable.source_name)
+      || !isBoundedString(rawTable.external_source_id)
+      || !Array.isArray(rawTable.columns) || rawTable.columns.length > 256
+      || !isStringList(rawTable.primary_key)
+      || !Array.isArray(rawTable.foreign_keys)) {
+      return { artifact: null, invalid: true }
+    }
+    const columns: AdminProviderAuditERColumn[] = []
+    for (const rawColumn of rawTable.columns) {
+      if (!isObject(rawColumn)
+        || !isBoundedString(rawColumn.name)
+        || !isNullableBoundedString(rawColumn.external_field_id)
+        || !isBoundedString(rawColumn.provider_type)
+        || !isBoundedString(rawColumn.postgres_type, 64)
+        || !isNullablePosition(rawColumn.position)) {
+        return { artifact: null, invalid: true }
+      }
+      columns.push({
+        name: rawColumn.name,
+        external_field_id: rawColumn.external_field_id,
+        provider_type: rawColumn.provider_type,
+        postgres_type: rawColumn.postgres_type,
+        position: rawColumn.position,
+      })
+    }
+    const foreignKeys: AdminProviderAuditERForeignKey[] = []
+    for (const rawForeignKey of rawTable.foreign_keys) {
+      if (!isObject(rawForeignKey)
+        || !isBoundedString(rawForeignKey.source_column)
+        || !isBoundedString(rawForeignKey.target_table)
+        || !isBoundedString(rawForeignKey.target_column)) {
+        return { artifact: null, invalid: true }
+      }
+      foreignKeys.push({
+        source_column: rawForeignKey.source_column,
+        target_table: rawForeignKey.target_table,
+        target_column: rawForeignKey.target_column,
+      })
+    }
+    tables.push({
+      name: rawTable.name,
+      source_name: rawTable.source_name,
+      external_source_id: rawTable.external_source_id,
+      columns,
+      primary_key: rawTable.primary_key,
+      foreign_keys: foreignKeys,
+    })
+  }
+  const relationships: AdminProviderAuditERRelationship[] = []
+  for (const rawRelationship of value.relationships) {
+    if (!isObject(rawRelationship)
+      || !isBoundedString(rawRelationship.source_table)
+      || !isBoundedString(rawRelationship.source_column)
+      || !isNullableBoundedString(rawRelationship.target_table)
+      || !isNullableBoundedString(rawRelationship.target_source_external_id)
+      || !isNullableBoundedString(rawRelationship.target_column)
+      || rawRelationship.cardinality !== 'unknown') {
+      return { artifact: null, invalid: true }
+    }
+    relationships.push({
+      source_table: rawRelationship.source_table,
+      source_column: rawRelationship.source_column,
+      target_table: rawRelationship.target_table,
+      target_source_external_id: rawRelationship.target_source_external_id,
+      target_column: rawRelationship.target_column,
+      cardinality: 'unknown',
+    })
+  }
+  return {
+    artifact: { format: 'syncoria-raw-er-v1', tables, relationships },
+    invalid: false,
+  }
+}
+
+function parseRawDdl(value: unknown): { artifact: string | null; invalid: boolean } {
+  if (value === undefined || value === null) return { artifact: null, invalid: false }
+  if (typeof value !== 'string' || value.length > 1024 * 1024) {
+    return { artifact: null, invalid: true }
+  }
+  return { artifact: value, invalid: false }
 }
 
 function parseStructuredSource(value: unknown): AdminProviderAuditSource | null {
@@ -370,6 +520,8 @@ function parseStructuredReport(value: unknown): AdminProviderAuditStructuredRepo
     Array.isArray(value[key]) ? value[key].map(parseStructuredSource) : [],
   ])) as Record<typeof sourceKeys[number], Array<AdminProviderAuditSource | null>>
   if (sourceKeys.some((key) => parsedSources[key].some((source) => source === null))) return null
+  const rawDdl = parseRawDdl(value.raw_ddl)
+  const rawEr = parseRawER(value.raw_er)
   return {
     metrics: {
       sources_analyzed: metrics.sources_analyzed as number,
@@ -381,6 +533,10 @@ function parseStructuredReport(value: unknown): AdminProviderAuditStructuredRepo
     },
     ...Object.fromEntries(listKeys.map((key) => [key, value[key]])),
     ...Object.fromEntries(sourceKeys.map((key) => [key, parsedSources[key] as AdminProviderAuditSource[]])),
+    raw_ddl: rawDdl.artifact,
+    raw_er: rawEr.artifact,
+    raw_ddl_invalid: rawDdl.invalid,
+    raw_er_invalid: rawEr.invalid,
   } as AdminProviderAuditStructuredReport
 }
 
