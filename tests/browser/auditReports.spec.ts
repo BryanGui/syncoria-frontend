@@ -359,6 +359,16 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })
 
+test('shows the selected report before report history', async ({ page }) => {
+  await openAudit(page)
+  await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })).toBeVisible()
+  await expect(page.locator('.tenant-audit > [aria-label="Rapport sélectionné"]')).toHaveCount(1)
+  await expect(page.locator('.tenant-audit > [aria-label="Historique des rapports d’audit"]')).toHaveCount(1)
+  const order = await page.locator('.tenant-audit > [aria-label="Rapport sélectionné"], .tenant-audit > [aria-label="Historique des rapports d’audit"]').evaluateAll((sections) => sections.map((section) => section.getAttribute('aria-label')))
+  expect(order).toEqual(['Rapport sélectionné', 'Historique des rapports d’audit'])
+})
+
 test('keeps the next audit title independent from the latest audit title', async ({ page }) => {
   await openAudit(page, { latestTitle: 'Ancien titre du dernier audit' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit Notion', exact: true })
