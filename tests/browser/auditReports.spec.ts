@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
 const prefix = `/admin/tenants/${tenantId}`
@@ -41,6 +42,28 @@ const auditOperation = (status: 'pending' | 'running' | 'completed' | 'failed') 
   progress_unit: status === 'running' ? 'source' : null,
 })
 
+function structuredReport(label: string, targetTable: string | null = 'Contacts') {
+  return {
+    metrics: { sources_analyzed: 1, sources_retained: 1, sources_excluded: 0, sources_pending: 0, records_retained: 2, decisions_required: 0 },
+    summary: [], scope: [], source_map: [], sources: [], retained: [], excluded: [], pending: [],
+    volumes: [], relationships: [], inconsistencies: [], risks: [], decisions: [], blockers: [], recommendations: [], integration_plan: [], technical_appendix: [],
+    raw_ddl: `-- ${label}\nCREATE TABLE "${label}" ();\n`,
+    raw_er: {
+      format: 'syncoria-raw-er-v1',
+      tables: [{
+        name: label, source_name: `${label} source`, external_source_id: `${label}-source`,
+        columns: [{ name: 'Observed field', external_field_id: `${label}-field`, provider_type: 'rich_text', postgres_type: 'text', position: 0 }],
+        primary_key: [], foreign_keys: [],
+      }],
+      relationships: [{
+        source_table: label, source_column: 'Related', target_table: targetTable,
+        target_source_external_id: targetTable === null ? 'unresolved-source' : 'target-source',
+        target_column: null, cardinality: 'unknown',
+      }],
+    },
+  }
+}
+
 type AuditScenario = 'launch' | 'resume' | 'failed' | 'conflict' | 'v2' | 'network' | 'timer' | 'abort'
 
 async function openAudit(page: Page, options: {
@@ -67,9 +90,9 @@ async function openAudit(page: Page, options: {
   const { correlation_id: _correlationId, tenant_provider_record_id: _providerRecordId, ...legacyReport } = report
   const reports = [
     { ...report, decisions_required: options.nullDecision ? null : report.decisions_required },
-    { ...report, id: 'audit-notion-2026-10-15', report_date: '2026-10-15', decisions_required: options.nullDecision ? null : report.decisions_required },
-    { ...report, id: 'audit-drive-2026-10-16', provider: 'drive', title: 'Audit Drive', report_date: '2026-10-16', decisions_required: options.nullDecision ? null : report.decisions_required },
-    { ...report, id: 'audit-notion-2026-08-01', report_date: '2026-08-01', status: 'archived', decisions_required: options.nullDecision ? null : report.decisions_required },
+    { ...report, id: 'audit-notion-2026-10-15', correlation_id: '66666666-6666-4666-8666-666666666666', report_date: '2026-10-15', decisions_required: options.nullDecision ? null : report.decisions_required },
+    { ...report, id: 'audit-drive-2026-10-16', provider: 'drive', title: 'Audit Drive', correlation_id: '77777777-7777-4777-8777-777777777777', report_date: '2026-10-16', decisions_required: options.nullDecision ? null : report.decisions_required },
+    { ...report, id: 'audit-notion-2026-08-01', correlation_id: '88888888-8888-4888-8888-888888888888', report_date: '2026-08-01', status: 'archived', decisions_required: options.nullDecision ? null : report.decisions_required },
     ...(options.legacyReport ? [{ ...legacyReport, id: 'audit-legacy-2026-07-01', report_date: '2026-07-01' }] : []),
   ]
   let auditPollCount = 0
@@ -198,6 +221,22 @@ async function openAudit(page: Page, options: {
       }
       return route.fulfill({ json: operation })
     }
+    if (url.pathname.endsWith('/report')) {
+      const correlation = url.pathname.split('/audits/')[1]?.split('/')[0]
+      const selected = reports.find((entry) => entry.correlation_id === correlation)
+      if (!selected) return route.fulfill({ status: 404, json: {} })
+      return route.fulfill({ json: {
+        tenant_id: tenantId,
+        tenant_provider_record_id: selected.tenant_provider_record_id,
+        correlation_id: selected.correlation_id,
+        report_id: selected.id,
+        display_title: selected.title,
+        provider: selected.provider,
+        report_date: selected.report_date,
+        status: 'completed',
+        structured_report: structuredReport(selected.title, selected.provider === 'drive' ? null : 'Contacts'),
+      } })
+    }
     if (url.pathname.endsWith('/title') && method === 'PATCH') {
       if (options.renameStatus) return route.fulfill({ status: options.renameStatus, json: { detail: 'Rename unavailable' } })
       const payload = route.request().postDataJSON() as { display_title: string }
@@ -277,6 +316,43 @@ test('selects another report, consults archived history and archives the selecte
   const download = page.waitForEvent('download')
   await detail.getByRole('link', { name: 'Télécharger PDF' }).click()
   expect((await download).suggestedFilename()).toBe('synthetic.pdf')
+})
+
+test('loads the selected report artifacts and downloads the exact raw DDL', async ({ page }) => {
+  await openAudit(page)
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  const technical = detail.getByRole('region', { name: 'Cartographie technique', exact: true })
+  await expect(technical.getByRole('button', { name: 'Voir le DDL brut', exact: true })).toBeVisible()
+  await expect(technical.getByRole('button', { name: 'Voir le diagramme ER brut', exact: true })).toBeVisible()
+  await technical.getByRole('button', { name: 'Voir le DDL brut', exact: true }).click()
+  await expect(technical.locator('pre')).toHaveText('-- Audit Drive\nCREATE TABLE "Audit Drive" ();\n')
+  const download = page.waitForEvent('download')
+  await technical.getByRole('link', { name: 'Télécharger le DDL brut', exact: true }).click()
+  const downloaded = await (await download).path()
+  expect(downloaded).not.toBeNull()
+  expect(await readFile(downloaded!, 'utf8')).toBe('-- Audit Drive\nCREATE TABLE "Audit Drive" ();\n')
+  await technical.getByRole('button', { name: 'Voir le diagramme ER brut', exact: true }).click()
+  const diagram = technical.locator('.raw-er-diagram')
+  await expect(diagram.locator('.raw-er-node')).toBeVisible()
+  await expect(diagram).toContainText('Observed field')
+  await expect(diagram).toContainText('text')
+  await expect(diagram).toContainText('Relations observées à cible non résolue')
+  await expect(diagram).not.toContainText('Table Contacts')
+})
+
+test('changing the selected report replaces its raw artifacts', async ({ page }) => {
+  await openAudit(page)
+  const history = page.getByRole('region', { name: 'Historique des rapports d’audit', exact: true })
+  const detail = page.getByRole('region', { name: 'Rapport sélectionné', exact: true })
+  let technical = detail.getByRole('region', { name: 'Cartographie technique', exact: true })
+  await technical.getByRole('button', { name: 'Voir le DDL brut', exact: true }).click()
+  await expect(technical.locator('pre')).toContainText('-- Audit Drive')
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).click()
+  technical = detail.getByRole('region', { name: 'Cartographie technique', exact: true })
+  await expect(technical.locator('pre')).toHaveCount(0)
+  await technical.getByRole('button', { name: 'Voir le DDL brut', exact: true }).click()
+  await expect(technical.locator('pre')).toContainText('-- Audit Notion')
+  await expect(technical.locator('pre')).not.toContainText('-- Audit Drive')
 })
 
 test('keeps decisions neutral when the backend does not provide them', async ({ page }) => {
@@ -399,7 +475,7 @@ test('keeps the report tab focused on history and actions', async ({ page }) => 
   await expect(detail.getByRole('link', { name: 'Télécharger PDF', exact: true })).toBeVisible()
   await expect(detail).not.toContainText('BLOCKER : confirmer le périmètre.')
   await expect(detail).not.toContainText('Recommandations Syncoria')
-  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}/report` && request.method === 'GET')).toHaveLength(0)
+  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}/report` && request.method === 'GET')).toHaveLength(1)
 })
 
 test('renames a report in place and keeps its report actions available', async ({ page }) => {

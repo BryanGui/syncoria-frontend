@@ -163,6 +163,58 @@ test('loads the structured report and renames it through the audit contract', as
   assert.deepEqual(JSON.parse(renameRequest.options.body), { display_title: 'Nouveau titre' })
 })
 
+test('parses raw DDL and ER artifacts without changing their observed structure', async () => {
+  const rawDdl = '-- observed\nCREATE TABLE "Missions" ();\n'
+  const rawEr = {
+    format: 'syncoria-raw-er-v1',
+    tables: [{
+      name: 'Missions', source_name: 'Missions', external_source_id: 'source-1',
+      columns: [{ name: 'External ID', external_field_id: 'field-1', provider_type: 'number', postgres_type: 'numeric', position: 0 }],
+      primary_key: [], foreign_keys: [],
+    }],
+    relationships: [{
+      source_table: 'Missions', source_column: 'Contacts', target_table: null,
+      target_source_external_id: 'excluded-source', target_column: null, cardinality: 'unknown',
+    }],
+  }
+  const report = {
+    tenant_id: tenantId, tenant_provider_record_id: providerRecordId,
+    correlation_id: correlationId, report_id: 'audit-notion-2026-09-11',
+    display_title: 'Audit Notion', provider: 'notion', report_date: '2026-09-11',
+    status: 'completed', structured_report: { ...structuredReport(), raw_ddl: rawDdl, raw_er: rawEr },
+  }
+  const loaded = await fetchAdminTenantProviderAuditReport(
+    'https://api.example.com', tenantId, providerRecordId, correlationId, undefined,
+    async () => Response.json(report),
+  )
+  assert.equal(loaded.status, 'loaded')
+  assert.equal(loaded.report.structured_report.raw_ddl, rawDdl)
+  assert.deepEqual(loaded.report.structured_report.raw_er, rawEr)
+  assert.equal(loaded.report.structured_report.raw_ddl_invalid, false)
+  assert.equal(loaded.report.structured_report.raw_er_invalid, false)
+})
+
+test('keeps a report usable when raw ER is missing or invalid', async () => {
+  const baseReport = {
+    tenant_id: tenantId, tenant_provider_record_id: providerRecordId,
+    correlation_id: correlationId, report_id: 'audit-notion-2026-09-11',
+    display_title: 'Audit Notion', provider: 'notion', report_date: '2026-09-11',
+    status: 'completed',
+  }
+  for (const rawEr of [undefined, { format: 'unexpected' }]) {
+    const loaded = await fetchAdminTenantProviderAuditReport(
+      'https://api.example.com', tenantId, providerRecordId, correlationId, undefined,
+      async () => Response.json({
+        ...baseReport,
+        structured_report: { ...structuredReport(), ...(rawEr === undefined ? {} : { raw_er: rawEr }) },
+      }),
+    )
+    assert.equal(loaded.status, 'loaded')
+    assert.equal(loaded.report.structured_report.raw_er, null)
+    assert.equal(loaded.report.structured_report.raw_er_invalid, rawEr !== undefined)
+  }
+})
+
 test('maps auth, latest-not-found, conflict, invalid and generic HTTP failures', async () => {
   const responses = [
     [401, 'unauthenticated'],
