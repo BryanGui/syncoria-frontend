@@ -2050,6 +2050,11 @@ button.navigation__link {
 .tenant-audit__step--failed > span:first-child { color: #a33b3b; }
 .tenant-audit__elapsed { margin: .8rem 0 0; color: var(--color-text-secondary); font-size: .82rem; }
 .tenant-audit__history { margin-top: 1.5rem; }
+.tenant-audit__content { display: grid; grid-template-columns: minmax(15rem, .8fr) minmax(0, 1.6fr); gap: 1.25rem; align-items: start; margin-top: 1.5rem; }
+.tenant-audit__content-history { position: sticky; top: 1rem; align-self: start; min-width: 0; }
+.tenant-audit__content-detail { min-width: 0; }
+.tenant-audit__content .tenant-audit__history,
+.tenant-audit__content .tenant-audit__selected-report { margin-top: 0; }
 .tenant-audit__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: .7rem; }
 .tenant-audit__section-heading h4 { margin: 0; color: var(--color-text-primary); font-size: 1.2rem; }
 .tenant-audit__section-heading > p { margin: 0; color: var(--color-text-secondary); font-size: .8rem; }
@@ -2122,6 +2127,8 @@ button.navigation__link {
 .tenant-audit__provider-option { display: grid; gap: .15rem; min-width: 11rem; min-height: 44px; padding: .55rem .75rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-body); cursor: pointer; font: inherit; text-align: left; }
 .tenant-audit__provider-option:hover,
 .tenant-audit__provider-option:focus-visible { border-color: var(--color-accent); }
+.tenant-audit__provider-option:disabled { border-color: var(--color-border); color: var(--color-text-secondary); cursor: not-allowed; opacity: .72; }
+.tenant-audit__provider-option:disabled:hover { border-color: var(--color-border); }
 .tenant-audit__provider-option--selected { border-color: var(--color-accent); background: var(--color-accent-soft); box-shadow: inset 0 0 0 1px var(--color-accent); }
 .tenant-audit__provider-option span,
 .tenant-audit__provider-option small { color: var(--color-text-secondary); font-size: .78rem; }
@@ -2198,9 +2205,17 @@ button.navigation__link {
 .tenant-audit__report-note,
 .tenant-audit__report-loading { margin: 1rem 0 0; padding: .8rem 1rem; border-radius: 8px; background: #f5f6f8; line-height: 1.45; }
 .tenant-audit__technical { margin-top: 1.35rem; padding-top: 1.1rem; border-top: 1px solid #ebe9ef; }
-.tenant-audit__technical .tenant-audit__section-heading { margin-bottom: .8rem; }
+.tenant-audit__detail-tabs { display: flex; gap: .35rem; overflow-x: auto; border-bottom: 1px solid var(--color-border); }
+.tenant-audit__detail-tab { min-height: 42px; padding: .55rem .85rem; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--color-text-secondary); cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; white-space: nowrap; }
+.tenant-audit__detail-tab:hover,
+.tenant-audit__detail-tab:focus-visible { color: var(--color-text-primary); }
+.tenant-audit__detail-tab--selected { border-bottom-color: var(--color-accent); color: var(--color-text-primary); }
+.tenant-audit__detail-tab:disabled { cursor: not-allowed; opacity: .48; }
+.tenant-audit__detail-view { min-width: 0; }
+.tenant-audit__report-tab { display: grid; gap: 1rem; padding-top: 1rem; }
+.tenant-audit__report-tab .tenant-audit__summary { margin: 0; }
+.tenant-audit__technical .tenant-audit__actions { margin-top: 0; }
 .tenant-audit__technical-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
-.tenant-audit__technical-download-note { color: var(--color-text-secondary); font-size: .78rem; }
 .raw-ddl-viewer { margin-top: .85rem; overflow: hidden; border: 1px solid #cbd8de; border-radius: 9px; background: #f8fafb; }
 .raw-ddl-viewer__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem .8rem; border-bottom: 1px solid #dbe4e8; color: var(--color-text-secondary); font-size: .78rem; }
 .raw-ddl-viewer__toolbar a { text-decoration: none; }
@@ -2262,6 +2277,8 @@ button.navigation__link {
   .tenant-audit__actions > a,
   .tenant-audit__actions > button { flex: 1 1 100%; width: 100%; }
   .tenant-audit__history-row { grid-template-columns: minmax(0, 1fr); }
+  .tenant-audit__content { grid-template-columns: 1fr; gap: 1rem; }
+  .tenant-audit__content-history { position: static; }
   .tenant-audit__rename-button { width: 100%; }
   .tenant-audit__history-item { grid-column: 1; }
   .tenant-audit__report-columns { grid-template-columns: 1fr; }

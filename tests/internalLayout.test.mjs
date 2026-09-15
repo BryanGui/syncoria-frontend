@@ -19,6 +19,10 @@ test('audit reports use a compact history and one responsive selected report', (
   assert.match(reportSource, /selectedReport/)
   assert.match(reportSource, /userSelectedReportId/)
   assert.match(reportSource, /Sources analysées[\s\S]*?Enregistrements retenus[\s\S]*?Décisions nécessaires/)
+  assert.match(appStyles, /\.tenant-audit__content \{[\s\S]*?grid-template-columns: minmax\(15rem, \.8fr\) minmax\(0, 1\.6fr\)/)
+  assert.match(appStyles, /@media \(max-width: 540px\) \{[\s\S]*?\.tenant-audit__content \{ grid-template-columns: 1fr;/)
+  assert.match(reportSource, /activeDetailTab/)
+  assert.match(reportSource, /Détails de l’audit/)
 })
 
 test('archived audit reports remain selectable and consultable', () => {

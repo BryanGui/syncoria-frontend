@@ -33,6 +33,7 @@ const auditPhases = [
 ] as const
 
 type ReportReference = { providerRecordId: string; correlationId: string }
+type AuditDetailTab = 'report' | 'ddl' | 'er'
 
 function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
@@ -146,8 +147,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     | { status: 'unavailable' }
     | { status: 'error' }
   >({ status: 'idle' })
-  const [isDdlVisible, setIsDdlVisible] = useState(false)
-  const [isErVisible, setIsErVisible] = useState(false)
+  const [activeDetailTab, setActiveDetailTab] = useState<AuditDetailTab>('report')
   const archiveRequest = useRef<AbortController | null>(null)
   const auditRequest = useRef<AbortController | null>(null)
   const renameRequest = useRef<AbortController | null>(null)
@@ -199,8 +199,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
 
   useEffect(() => {
     reportDetailRequest.current?.abort()
-    setIsDdlVisible(false)
-    setIsErVisible(false)
+    setActiveDetailTab('report')
     if (selectedReport === null) {
       setReportDetailState({ status: 'idle' })
       return undefined
@@ -236,38 +235,38 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
 
   useEffect(() => {
     const controller = new AbortController(); setProviderState('loading'); setProviders([]); setSelectedProviderId(''); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null); setIsLaunching(false); setDisplayTitle('')
-    async function loadAuditState() { const result = await fetchAdminTenantProviders(apiBaseUrl, tenantId, controller.signal); if (controller.signal.aborted) return; if (result.status === 'unauthenticated') { onSessionExpired(); return } if (result.status !== 'loaded') { setProviderState('error'); return } setProviderState('loaded'); setProviders(result.providers.filter((provider) => provider.status === 'active')) }
+    async function loadAuditState() { const result = await fetchAdminTenantProviders(apiBaseUrl, tenantId, controller.signal); if (controller.signal.aborted) return; if (result.status === 'unauthenticated') { onSessionExpired(); return } if (result.status !== 'loaded') { setProviderState('error'); return } const active = result.providers.filter((provider) => provider.status === 'active'); setProviderState('loaded'); setProviders(active); setSelectedProviderId(active.find((provider) => provider.audit_supported)?.id ?? active[0]?.id ?? '') }
     void loadAuditState()
     return () => { controller.abort(); auditRequest.current?.abort(); auditRequest.current = null; stopPolling() }
   }, [apiBaseUrl, onSessionExpired, stopPolling, tenantId])
 
   useEffect(() => {
     const controller = new AbortController(); auditRequest.current?.abort(); auditRequest.current = controller; stopPolling(); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null)
-    if (selectedProvider === null || selectedProvider.provider !== 'notion') return () => controller.abort()
+    if (selectedProvider === null || !selectedProvider.audit_supported) return () => controller.abort()
     setDisplayTitle(`Audit ${providerLabel(selectedProvider.provider)} — ${formatLocalCalendarDate(new Date())}`); setTitleError(null)
     void fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal).then((latest) => { if (controller.signal.aborted) return; if (latest.status === 'unauthenticated') onSessionExpired(); else if (latest.status === 'loaded') { applyAuditOperation(latest.operation); if (latest.operation.status === 'pending' || latest.operation.status === 'running') beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status !== 'not_found') setAuditError('L’état de l’audit n’est pas disponible pour le moment.') })
     return () => { controller.abort(); if (auditRequest.current === controller) auditRequest.current = null; stopPolling() }
   }, [apiBaseUrl, applyAuditOperation, beginPolling, onSessionExpired, selectedProvider, stopPolling, tenantId])
 
-  function auditFailureMessage(errorCode: string | null): string { if (errorCode === 'credential') return 'Vérifiez la configuration du credential Notion.'; if (errorCode === 'unsupported') return 'Cet audit n’est pas disponible pour cette connexion.'; if (errorCode === 'invalid_context') return 'La configuration de l’audit est invalide.'; return 'L’audit n’a pas pu être terminé. Vous pouvez réessayer.' }
+  function auditFailureMessage(errorCode: string | null): string { if (errorCode === 'credential') return 'Vérifiez la configuration de cette connexion.'; if (errorCode === 'unsupported') return 'Cet audit n’est pas disponible pour cette connexion.'; if (errorCode === 'invalid_context') return 'La configuration de l’audit est invalide.'; return 'L’audit n’a pas pu être terminé. Vous pouvez réessayer.' }
   async function launchAudit() {
-    if (selectedProvider === null || selectedProvider.provider !== 'notion' || !selectedProvider.credential_configured || isLaunching || auditOperation?.status === 'pending' || auditOperation?.status === 'running') return
+    if (selectedProvider === null || !selectedProvider.audit_supported || !selectedProvider.credential_configured || isLaunching || auditOperation?.status === 'pending' || auditOperation?.status === 'running') return
     const normalizedTitle = displayTitle.trim(); if (!normalizedTitle || titleByteLength(normalizedTitle) > 120) { setTitleError('Saisissez un titre de 1 à 120 octets.'); return }
     auditRequest.current?.abort(); const controller = new AbortController(); auditRequest.current = controller; setIsLaunching(true); setAuditError(null); setTitleError(null)
     const result = await launchAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, { signal: controller.signal, displayTitle: normalizedTitle })
     if (controller.signal.aborted) return
     if (result.status === 'unauthenticated') { auditRequest.current = null; setIsLaunching(false); onSessionExpired(); return }
     if (result.status === 'conflict') { const latest = await fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal); if (controller.signal.aborted) return; auditRequest.current = null; setIsLaunching(false); if (latest.status === 'loaded') { applyAuditOperation(latest.operation); if (latest.operation.status === 'pending' || latest.operation.status === 'running') beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status === 'unauthenticated') onSessionExpired(); else setAuditError('Un audit est déjà actif, mais son état ne peut pas être récupéré.'); return }
-    auditRequest.current = null; setIsLaunching(false); if (result.status !== 'loaded') { setAuditError(result.status === 'invalid' ? 'L’audit Notion est indisponible ou mal configuré.' : 'L’audit n’a pas pu être lancé. Réessayez.'); return }
+    auditRequest.current = null; setIsLaunching(false); if (result.status !== 'loaded') { setAuditError(result.status === 'invalid' ? 'L’audit est indisponible ou mal configuré pour cette connexion.' : 'L’audit n’a pas pu être lancé. Réessayez.'); return }
     applyAuditOperation(result.operation); if (result.operation.status === 'pending' || result.operation.status === 'running') beginPolling(selectedProvider.id, result.operation.correlation_id); else if (result.operation.status === 'completed') setReloadKey((key) => key + 1)
   }
 
   function renderAuditLauncher() {
     const auditActive = auditOperation?.status === 'pending' || auditOperation?.status === 'running'
     const disabled = providerState !== 'loaded' || selectedProvider === null
-      || selectedProvider.provider !== 'notion' || !selectedProvider.credential_configured
+      || !selectedProvider.audit_supported || !selectedProvider.credential_configured
       || isLaunching || auditActive
-    return <section aria-label="Lancement de l’audit Notion" className="tenant-audit__launcher">
+    return <section aria-label="Lancement de l’audit" className="tenant-audit__launcher">
       <div className="tenant-audit__launcher-title"><h4>Lancer un audit</h4><span className="tenant-audit__launcher-note">Une connexion par audit</span></div>
       <div className="tenant-audit__launcher-fields">
         <div className="tenant-audit__field">
@@ -281,17 +280,18 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
           <div aria-label="Connexion à auditer" aria-disabled={auditActive || isLaunching || providerState !== 'loaded'} className="tenant-audit__provider-options" role="radiogroup">
             {activeProviders.map((provider) => {
               const selected = provider.id === selectedProviderId
-              return <button aria-checked={selected} className={selected ? 'tenant-audit__provider-option tenant-audit__provider-option--selected' : 'tenant-audit__provider-option'} disabled={auditActive || isLaunching || providerState !== 'loaded'} key={provider.id} onClick={() => setSelectedProviderId(provider.id)} role="radio" type="button"><strong>{providerLabel(provider.provider)}</strong><span>{provider.name}</span>{provider.provider !== 'notion' ? <small>Audit indisponible</small> : null}</button>
+              const unavailable = !provider.audit_supported
+              return <button aria-checked={selected} aria-disabled={unavailable || undefined} className={selected ? 'tenant-audit__provider-option tenant-audit__provider-option--selected' : 'tenant-audit__provider-option'} disabled={unavailable || auditActive || isLaunching || providerState !== 'loaded'} key={provider.id} onClick={() => setSelectedProviderId(provider.id)} role="radio" type="button"><strong>{providerLabel(provider.provider)}</strong><span>{provider.name}</span>{unavailable ? <small>Audit indisponible pour cette connexion</small> : null}</button>
             })}
           </div>
         </div>
         <button className="primary-button" disabled={disabled} onClick={() => void launchAudit()} type="button">{isLaunching ? 'Lancement…' : auditActive ? 'Audit en cours…' : 'Lancer l’audit'}</button>
       </div>
       {providerState === 'loading' ? <p aria-live="polite">Recherche des connexions…</p> : null}
-      {providerState === 'error' ? <p role="alert">La connexion Notion ne peut pas être vérifiée pour le moment.</p> : null}
+      {providerState === 'error' ? <p role="alert">Les connexions ne peuvent pas être vérifiées pour le moment.</p> : null}
       {providerState === 'loaded' && activeProviders.length === 0 ? <p role="status">Aucune connexion active n’est disponible pour ce tenant.</p> : null}
-      {selectedProvider?.provider !== 'notion' && selectedProvider !== null ? <p role="status">Audit indisponible pour cette connexion.</p> : null}
-      {selectedProvider?.provider === 'notion' && !selectedProvider.credential_configured ? <p role="status">Configurez d’abord le credential Notion pour lancer l’audit.</p> : null}
+      {selectedProvider !== null && !selectedProvider.audit_supported ? <p role="status">Audit indisponible pour cette connexion.</p> : null}
+      {selectedProvider?.audit_supported && !selectedProvider.credential_configured ? <p role="status">Configurez d’abord le credential pour lancer l’audit.</p> : null}
       {auditOperation !== null ? <div className="tenant-audit__launcher-status">{auditOperation.status === 'failed' ? <><strong>Échec de l’audit</strong><p>{auditFailureMessage(auditOperation.error_code)}</p><AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} /></> : auditOperation.status === 'completed' ? <><strong>État : Terminé</strong><AuditProgress lastActiveOperation={null} operation={auditOperation} /><dl><div><dt>Sources analysées</dt><dd>{auditOperation.sources_total}</dd></div><div><dt>Sources retenues</dt><dd>{auditOperation.sources_retained}</dd></div><div><dt>Sources écartées</dt><dd>{auditOperation.sources_excluded}</dd></div><div><dt>Décisions nécessaires</dt><dd>{auditOperation.decisions_required}</dd></div><div><dt>Enregistrements retenus</dt><dd>{auditOperation.records_retained}</dd></div></dl></> : <AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} />}</div> : null}
       {auditError ? <p role="alert">{auditError}</p> : null}
     </section>
@@ -332,30 +332,26 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     const hasDdl = rawDdl !== null && rawDdl.length > 0 && !rawDdlInvalid
     const hasEr = rawEr !== null && !rawErInvalid
     const fileName = buildRawDdlFilename(tenantLabel, report.provider, report.title, report.report_date)
+    const tabDisabled = reportDetailState.status !== 'loaded'
     return (
-      <section aria-label="Cartographie technique" className="tenant-audit__technical">
-        <div className="tenant-audit__section-heading">
-          <div>
-            <p className="tenant-audit__eyebrow">Artefacts techniques</p>
-            <h4>Cartographie technique</h4>
-          </div>
-          <p>Lecture seule · photographie de l’existant observé</p>
+      <section aria-label="Détails de l’audit" className="tenant-audit__technical">
+        <nav aria-label="Navigation du détail" className="tenant-audit__detail-tabs" role="tablist">
+          <button aria-selected={activeDetailTab === 'report'} className={activeDetailTab === 'report' ? 'tenant-audit__detail-tab tenant-audit__detail-tab--selected' : 'tenant-audit__detail-tab'} onClick={() => setActiveDetailTab('report')} role="tab" type="button">Rapport</button>
+          {detail && !rawDdlInvalid ? <button aria-selected={activeDetailTab === 'ddl'} className={activeDetailTab === 'ddl' ? 'tenant-audit__detail-tab tenant-audit__detail-tab--selected' : 'tenant-audit__detail-tab'} disabled={!hasDdl || tabDisabled} onClick={() => setActiveDetailTab('ddl')} role="tab" type="button">DDL brut</button> : null}
+          {detail && !rawErInvalid ? <button aria-selected={activeDetailTab === 'er'} className={activeDetailTab === 'er' ? 'tenant-audit__detail-tab tenant-audit__detail-tab--selected' : 'tenant-audit__detail-tab'} disabled={!hasEr || tabDisabled} onClick={() => setActiveDetailTab('er')} role="tab" type="button">ER brut</button> : null}
+        </nav>
+        <div aria-busy={reportDetailState.status === 'loading'} className="tenant-audit__detail-view">
+          {reportDetailState.status === 'loading' ? <p className="tenant-audit__report-loading" role="status">Chargement des artefacts…</p> : null}
+          {reportDetailState.status === 'error' ? <p className="tenant-audit__empty-note" role="alert">Les artefacts techniques ne peuvent pas être chargés pour le moment.</p> : null}
+          {reportDetailState.status === 'unavailable' ? <p className="tenant-audit__empty-note">Les artefacts techniques ne sont pas disponibles pour cet ancien audit.</p> : null}
+          {rawDdlInvalid ? <p className="tenant-audit__empty-note" role="alert">Le DDL brut reçu est invalide et reste masqué.</p> : null}
+          {rawErInvalid ? <p className="tenant-audit__empty-note" role="alert">Le modèle ER brut reçu est invalide et reste masqué.</p> : null}
+          {activeDetailTab === 'report' ? <div className="tenant-audit__report-tab"><p className="tenant-audit__summary">{report.status === 'archived' ? 'Ce rapport est conservé dans l’historique et reste consultable.' : 'Le PDF reste la restitution principale de cet audit.'}</p><div className="tenant-audit__actions"><a className="primary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} rel="noreferrer" target="_blank">Voir le rapport</a><a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>{report.status === 'completed' ? <button className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">Archiver</button> : null}</div></div> : null}
+          {activeDetailTab === 'ddl' && hasDdl ? <RawDdlViewer ddl={rawDdl} fileName={fileName} /> : null}
+          {activeDetailTab === 'er' && hasEr ? <RawAuditERDiagram model={rawEr} /> : null}
+          {detail && activeDetailTab !== 'report' && !hasDdl && activeDetailTab === 'ddl' ? <p className="tenant-audit__empty-note">Aucun DDL brut n’est disponible pour ce rapport.</p> : null}
+          {detail && activeDetailTab !== 'report' && !hasEr && activeDetailTab === 'er' ? <p className="tenant-audit__empty-note">Aucun ER brut n’est disponible pour ce rapport.</p> : null}
         </div>
-        {reportDetailState.status === 'loading' ? <p className="tenant-audit__report-loading" role="status">Chargement des artefacts…</p> : null}
-        {reportDetailState.status === 'error' ? <p className="tenant-audit__empty-note" role="alert">Les artefacts techniques ne peuvent pas être chargés pour le moment.</p> : null}
-        {reportDetailState.status === 'unavailable' ? <p className="tenant-audit__empty-note">Les artefacts techniques ne sont pas disponibles pour cet ancien audit.</p> : null}
-        {rawDdlInvalid ? <p className="tenant-audit__empty-note" role="alert">Le DDL brut reçu est invalide et reste masqué.</p> : null}
-        {rawErInvalid ? <p className="tenant-audit__empty-note" role="alert">Le modèle ER brut reçu est invalide et reste masqué.</p> : null}
-        {detail ? (
-          <div className="tenant-audit__technical-actions">
-            {hasDdl ? <button className="secondary-button" onClick={() => setIsDdlVisible((visible) => !visible)} type="button">{isDdlVisible ? 'Masquer le DDL brut' : 'Voir le DDL brut'}</button> : null}
-            {hasDdl && !isDdlVisible ? <span className="tenant-audit__technical-download-note">Le téléchargement est disponible après ouverture du DDL.</span> : null}
-            {hasEr ? <button className="secondary-button" onClick={() => setIsErVisible((visible) => !visible)} type="button">{isErVisible ? 'Masquer le diagramme ER brut' : 'Voir le diagramme ER brut'}</button> : null}
-            {!hasDdl && !hasEr && !rawDdlInvalid && !rawErInvalid ? <p className="tenant-audit__empty-note">Aucun artefact technique n’est disponible pour ce rapport.</p> : null}
-          </div>
-        ) : null}
-        {hasDdl && isDdlVisible ? <RawDdlViewer ddl={rawDdl} fileName={fileName} /> : null}
-        {hasEr && isErVisible ? <RawAuditERDiagram model={rawEr} /> : null}
       </section>
     )
   }
@@ -364,8 +360,8 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     const isArchived = report.status === 'archived'
     const renaming = editingReportId === report.id
     const canRename = reportReference(report) !== null
-    return <section aria-label="Rapport sélectionné" className="tenant-audit__selected-report"><article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'}><div className="tenant-audit__report-heading"><div><p className="tenant-audit__eyebrow">Rapport sélectionné</p><h4>{report.title}</h4><p className="tenant-audit__report-client">Client : <strong>{tenantLabel}</strong></p></div><div className="tenant-audit__report-meta"><p>Provider : <strong>{providerLabel(report.provider)}</strong></p><p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p><p>Statut : <strong className={isArchived ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{isArchived ? 'Archivé' : 'Terminé'}</strong></p>{canRename ? <button className="secondary-button tenant-audit__rename-header" disabled={isRenaming} onClick={() => beginRename(report)} type="button">Renommer</button> : null}</div></div>{renaming ? <div className="tenant-audit__header-rename"><label htmlFor={`header-rename-${report.id}`}>Titre de l’audit</label><input id={`header-rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} /><div className="tenant-audit__actions"><button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button><button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button></div>{renameError ? <p role="alert">{renameError}</p> : null}</div> : null}<div className="tenant-audit__report-footer"><div className="tenant-audit__actions"><a className="primary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} rel="noreferrer" target="_blank">Voir le rapport</a><a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a>{report.status === 'completed' ? <button className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">Archiver</button> : null}</div><p className="tenant-audit__summary">{isArchived ? 'Ce rapport est conservé dans l’historique et reste consultable.' : 'L’audit est terminé. Consultez le rapport pour les points à régler et les décisions attendues.'}</p></div>{renderTechnicalArtifacts(report)}{confirmationId === report.id ? <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}><strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong><p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p><div className="tenant-audit__actions"><button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button><button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button></div>{archiveError && <p role="alert">{archiveError}</p>}</div> : null}</article></section>
+    return <section aria-label="Rapport sélectionné" className="tenant-audit__selected-report"><article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className={isArchived ? 'tenant-audit__report tenant-audit__report--archived' : 'tenant-audit__report'}><div className="tenant-audit__report-heading"><div><p className="tenant-audit__eyebrow">Audit sélectionné</p><h4>{report.title}</h4><p className="tenant-audit__report-client">Client : <strong>{tenantLabel}</strong></p></div><div className="tenant-audit__report-meta"><p>Provider : <strong>{providerLabel(report.provider)}</strong></p><p>Date : <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></p><p>Statut : <strong className={isArchived ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{isArchived ? 'Archivé' : 'Terminé'}</strong></p>{canRename ? <button className="secondary-button tenant-audit__rename-header" disabled={isRenaming} onClick={() => beginRename(report)} type="button">Renommer</button> : null}</div></div>{renaming ? <div className="tenant-audit__header-rename"><label htmlFor={`header-rename-${report.id}`}>Titre de l’audit</label><input id={`header-rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} /><div className="tenant-audit__actions"><button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button><button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button></div>{renameError ? <p role="alert">{renameError}</p> : null}</div> : null}{renderTechnicalArtifacts(report)}{confirmationId === report.id ? <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}><strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong><p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p><div className="tenant-audit__actions"><button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button><button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button></div>{archiveError && <p role="alert">{archiveError}</p>}</div> : null}</article></section>
   }
 
-  return <section aria-label="Audit & cartographie" className="tenant-audit"><h3>Audit & cartographie</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : state.reports.length === 0 ? <><p>{reportsError ?? 'Aucun rapport publié pour ce client.'}</p></> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}{selectedReport ? renderSelectedReport(selectedReport) : null}{renderReportHistory(state.reports)}</>}</section>
+  return <section aria-label="Audit & cartographie" className="tenant-audit"><h3>Audit & cartographie</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : state.reports.length === 0 ? <><p>{reportsError ?? 'Aucun rapport publié pour ce client.'}</p></> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}<div className="tenant-audit__content"><div className="tenant-audit__content-history">{renderReportHistory(state.reports)}</div><div className="tenant-audit__content-detail">{selectedReport ? renderSelectedReport(selectedReport) : null}</div></div></>}</section>
 }
