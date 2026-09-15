@@ -13,11 +13,12 @@ test('renders the existing dashboard only from the Integration Ingestion sub-tab
   assert.match(workspace, /activeIntegrationSection === 'Ingestion'[\s\S]*?adminIngestion/)
   assert.doesNotMatch(workspace, /activeSection === 'Ingestion'/)
   assert.match(page, /<AdminTenantIngestion/)
-  assert.match(component, /Provider record concerné/)
+  assert.match(component, /Provider à ingérer/)
   assert.match(component, /Lancer l’ingestion/)
 })
 
-test('loads latest state, polls active operations, and cleans up on tab, tenant or unmount', () => {
+test('loads history and latest state, polls active operations, and cleans up on unmount', () => {
+  assert.match(component, /fetchAdminTenantIngestionHistory/)
   assert.match(component, /fetchLatestAdminTenantIngestion/)
   assert.match(component, /fetchAdminTenantIngestion/)
   assert.match(component, /isInitialIngestionActive\(operation\.status\)/)
@@ -28,10 +29,12 @@ test('loads latest state, polls active operations, and cleans up on tab, tenant 
 
 test('renders real global and source counters without data leaks or Novalia fixtures', () => {
   assert.match(component, /getProgressCountLabel\(operation\.items_processed, operation\.items_expected\)/)
-  assert.match(component, /getProgressCountLabel\(source\.items_processed, expected\)/)
+  assert.match(component, /operation\.items_received} lus/)
   assert.match(ingestionModel, /volume attendu indisponible/)
-  assert.match(component, /source\.items_inserted} insérés/)
+  assert.match(component, /operation\.items_inserted} insérés/)
   assert.match(component, /source\.error_code/)
+  assert.match(component, /source\.capture_contract_versions/)
+  assert.match(component, /operation\.error_codes/)
   assert.doesNotMatch(component, /raw_payload|provenance|credential|Novalia|90|localStorage|sessionStorage/)
 })
 
@@ -39,7 +42,7 @@ test('disables unsupported providers and ignores stale launch responses', () => 
   assert.match(component, /!isSelectedProviderSupported/)
   assert.match(component, /disabled=\{isLaunching\}/)
   assert.match(component, /isLaunchResponseCurrent\(selectedProviderIdRef\.current, launchedProviderId\)/)
-  assert.match(component, /ingestion initiale n’est pas encore disponible pour ce provider/)
+  assert.match(component, /Ce provider est visible mais indisponible/)
 })
 
 test('keeps the dashboard responsive on mobile widths', () => {
@@ -47,13 +50,14 @@ test('keeps the dashboard responsive on mobile widths', () => {
   assert.match(styles, /\.ingestion-operation__summary,[\s\S]*?grid-template-columns: 1fr/)
 })
 
-test('keeps the ingestion heading compact and formats providers without repetition', () => {
+test('keeps the launcher compact and displays provider connections generically', () => {
   assert.doesNotMatch(component, /Copie brute initiale des sources retenues vers Syncoria\./)
-  assert.match(component, /function formatProvider\(tenantSlug: string, providerType: string\)/)
-  assert.match(component, /`\$\{tenantSlug\} · \$\{providerType\}`/)
-  assert.doesNotMatch(component, /formatProvider\(selectedProvider\)/)
-  assert.doesNotMatch(component, /provider\.name === provider\.provider/)
-  assert.match(page, /tenantSlug=\{pageState\.tenant\.slug\}/)
-  assert.match(styles, /\.tenant-ingestion__heading,[\s\S]*?align-items: center/)
-  assert.match(styles, /\.tenant-workspace__integration-content \.tenant-ingestion__heading > div h3/)
+  assert.match(component, /function formatProvider\(provider: AdminProviderRecord\)/)
+  assert.match(component, /formatProviderType\(provider\.provider\)/)
+  assert.match(component, /provider\.name/)
+  assert.match(component, /ingestion-history__item/)
+  assert.match(component, /correlation_id/)
+  assert.match(styles, /\.ingestion-launcher/)
+  assert.match(styles, /\.ingestion-history__row/)
+  assert.match(styles, /\.ingestion-history__metadata/)
 })

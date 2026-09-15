@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   fetchAdminTenantIngestion,
+  fetchAdminTenantIngestionHistory,
   fetchLatestAdminTenantIngestion,
   launchAdminTenantIngestion,
   supportsInitialIngestionProvider,
@@ -27,6 +28,7 @@ const source = {
   items_rejected: 0,
   items_not_attempted: 0,
   error_code: null,
+  capture_contract_versions: ['notion-page-properties-v3'],
 }
 const operation = {
   tenant_id: tenantId,
@@ -47,6 +49,9 @@ const operation = {
   sources_completed: 0,
   sources_in_progress: 1,
   sources_error: 0,
+  duration_seconds: null,
+  error_codes: [],
+  capture_contract_versions: ['notion-page-properties-v3'],
   sources: [source],
 }
 
@@ -67,6 +72,22 @@ test('loads the latest tenant-scoped ingestion with the admin session cookie', a
   assert.equal(capturedOptions.method, 'GET')
   assert.equal(capturedOptions.credentials, 'include')
   assert.equal(capturedOptions.signal, signal)
+})
+
+test('loads tenant-scoped ingestion history from newest to oldest', async () => {
+  let capturedUrl
+  const older = { ...operation, correlation_id: '66666666-6666-4666-8666-666666666666' }
+  const result = await fetchAdminTenantIngestionHistory(
+    'https://api.example.com',
+    tenantId,
+    undefined,
+    async (url) => {
+      capturedUrl = url
+      return Response.json([operation, older])
+    },
+  )
+  assert.deepEqual(result, { status: 'loaded', operations: [operation, older] })
+  assert.equal(capturedUrl, `https://api.example.com/admin/tenants/${tenantId}/ingestions`)
 })
 
 test('treats a missing latest operation as an empty state and preserves session failures', async () => {
@@ -139,7 +160,8 @@ test('allowlists ingestion fields and rejects raw or inconsistent payloads', asy
     { ...operation, items_processed: -1 },
     { ...operation, tenant_id: 'other-tenant' },
     { ...operation, sources_total: 2 },
-    { ...operation, sources: [{ ...source, observed_record_count: -1 }] },
+      { ...operation, sources: [{ ...source, observed_record_count: -1 }] },
+    { ...operation, capture_contract_versions: [''] },
   ]) {
     assert.deepEqual(
       await fetchLatestAdminTenantIngestion('https://api.example.com', tenantId, providerRecordId, undefined, async () => Response.json(payload)),
