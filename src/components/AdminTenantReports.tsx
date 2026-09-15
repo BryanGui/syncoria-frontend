@@ -68,6 +68,10 @@ function auditStatusLabel(status: AdminProviderAuditOperation['status']): string
   return 'En attente'
 }
 
+function isActiveAuditOperation(operation: AdminProviderAuditOperation): boolean {
+  return operation.status === 'pending' || operation.status === 'running'
+}
+
 function reportArtifactFilenamePart(value: string): string {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'audit'
@@ -237,7 +241,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
 
   const stopPolling = useCallback(() => { const active = polling.current; if (active === null) return; active.controller.abort(); if (active.timer !== null) window.clearTimeout(active.timer); polling.current = null }, [])
   const applyAuditOperation = useCallback((operation: AdminProviderAuditOperation) => {
-    if (operation.status === 'pending' || operation.status === 'running') lastActiveAudit.current = operation
+    if (isActiveAuditOperation(operation)) lastActiveAudit.current = operation
     else if (operation.status === 'completed') lastActiveAudit.current = null
     setAuditOperation(operation)
   }, [])
@@ -321,7 +325,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     const controller = new AbortController(); auditRequest.current?.abort(); auditRequest.current = controller; stopPolling(); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null)
     if (selectedProvider === null || selectedProvider.status !== 'active' || !selectedProvider.audit_supported) return () => controller.abort()
     setDisplayTitle(`Audit ${providerLabel(selectedProvider.provider)} — ${formatLocalCalendarDate(new Date())}`); setTitleError(null)
-    void fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal).then((latest) => { if (controller.signal.aborted) return; if (latest.status === 'unauthenticated') onSessionExpired(); else if (latest.status === 'loaded') { applyAuditOperation(latest.operation); if (latest.operation.status === 'pending' || latest.operation.status === 'running') beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status !== 'not_found') setAuditError('L’état de l’audit n’est pas disponible pour le moment.') })
+    void fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal).then((latest) => { if (controller.signal.aborted) return; if (latest.status === 'unauthenticated') onSessionExpired(); else if (latest.status === 'loaded' && isActiveAuditOperation(latest.operation)) { applyAuditOperation(latest.operation); beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status !== 'loaded' && latest.status !== 'not_found') setAuditError('L’état de l’audit n’est pas disponible pour le moment.') })
     return () => { controller.abort(); if (auditRequest.current === controller) auditRequest.current = null; stopPolling() }
   }, [apiBaseUrl, applyAuditOperation, beginPolling, onSessionExpired, selectedProvider, stopPolling, tenantId])
 
@@ -333,9 +337,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     const result = await launchAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, { signal: controller.signal, displayTitle: normalizedTitle })
     if (controller.signal.aborted) return
     if (result.status === 'unauthenticated') { auditRequest.current = null; setIsLaunching(false); onSessionExpired(); return }
-    if (result.status === 'conflict') { const latest = await fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal); if (controller.signal.aborted) return; auditRequest.current = null; setIsLaunching(false); if (latest.status === 'loaded') { applyAuditOperation(latest.operation); if (latest.operation.status === 'pending' || latest.operation.status === 'running') beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status === 'unauthenticated') onSessionExpired(); else setAuditError('Un audit est déjà actif, mais son état ne peut pas être récupéré.'); return }
+    if (result.status === 'conflict') { const latest = await fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal); if (controller.signal.aborted) return; auditRequest.current = null; setIsLaunching(false); if (latest.status === 'loaded' && isActiveAuditOperation(latest.operation)) { applyAuditOperation(latest.operation); beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status === 'unauthenticated') onSessionExpired(); else setAuditError('Un audit est déjà actif, mais son état ne peut pas être récupéré.'); return }
     auditRequest.current = null; setIsLaunching(false); if (result.status !== 'loaded') { setAuditError(result.status === 'invalid' ? 'L’audit est indisponible ou mal configuré pour cette connexion.' : 'L’audit n’a pas pu être lancé. Réessayez.'); return }
-    applyAuditOperation(result.operation); if (result.operation.status === 'pending' || result.operation.status === 'running') beginPolling(selectedProvider.id, result.operation.correlation_id); else if (result.operation.status === 'completed') setReloadKey((key) => key + 1)
+    applyAuditOperation(result.operation); if (isActiveAuditOperation(result.operation)) beginPolling(selectedProvider.id, result.operation.correlation_id); else if (result.operation.status === 'completed') setReloadKey((key) => key + 1)
   }
 
   function renderAuditLauncher() {
@@ -348,8 +352,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
       <div className="tenant-audit__launcher-fields">
         <div className="tenant-audit__field">
           <label className="tenant-audit__provider-label" htmlFor="audit-title">Titre de l’audit</label>
-          <input aria-describedby="audit-title-help" aria-invalid={titleError !== null} id="audit-title" maxLength={120} onChange={(event) => { setDisplayTitle(event.target.value); setTitleError(null) }} value={displayTitle} />
-          <small id="audit-title-help">Ce titre sera visible dans l’historique et le rapport.</small>
+          <input aria-invalid={titleError !== null} id="audit-title" maxLength={120} onChange={(event) => { setDisplayTitle(event.target.value); setTitleError(null) }} value={displayTitle} />
           {titleError ? <p role="alert">{titleError}</p> : null}
         </div>
         <fieldset className="tenant-audit__field tenant-audit__provider-list" disabled={auditActive || isLaunching || providerState !== 'loaded'}>
