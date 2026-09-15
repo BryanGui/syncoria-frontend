@@ -35,6 +35,7 @@ export interface AdminInitialIngestion {
   status: InitialIngestionStatus
   started_at: string
   completed_at: string | null
+  archived: boolean
   items_expected: number | null
   items_received: number
   items_processed: number
@@ -151,6 +152,7 @@ function parseOperation(value: unknown): AdminInitialIngestion | null {
     || !isStatus(value.status)
     || typeof value.started_at !== 'string'
     || !isNullableString(value.completed_at)
+    || (value.archived !== undefined && typeof value.archived !== 'boolean')
     || (value.duration_seconds !== null && !isNonNegativeInteger(value.duration_seconds))
     || !isStringArray(value.error_codes)
     || !isStringArray(value.capture_contract_versions)
@@ -165,9 +167,10 @@ function parseOperation(value: unknown): AdminInitialIngestion | null {
     tenant_provider_record_id: value.tenant_provider_record_id,
     provider: value.provider,
     correlation_id: value.correlation_id,
-    status: value.status,
-    started_at: value.started_at,
-    completed_at: value.completed_at,
+  status: value.status,
+  started_at: value.started_at,
+  completed_at: value.completed_at,
+  archived: value.archived === true,
     items_expected: value.items_expected as number | null,
     items_received: value.items_received as number,
     items_processed: value.items_processed as number,
@@ -190,8 +193,9 @@ function ingestionEndpoint(tenantId: string, providerRecordId: string, suffix = 
   return `/admin/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(providerRecordId)}/ingestions${suffix}`
 }
 
-function ingestionHistoryEndpoint(tenantId: string): string {
-  return `/admin/tenants/${encodeURIComponent(tenantId)}/ingestions`
+function ingestionHistoryEndpoint(tenantId: string, archived?: boolean): string {
+  const endpoint = `/admin/tenants/${encodeURIComponent(tenantId)}/ingestions`
+  return archived === undefined ? endpoint : `${endpoint}?archived=${archived}`
 }
 
 function logFailure(
@@ -276,10 +280,11 @@ export async function fetchAdminTenantIngestionHistory(
   signal?: AbortSignal,
   request: typeof fetch = fetch,
   logger: TechnicalLogger = technicalLogger,
+  archived?: boolean,
 ): Promise<AdminInitialIngestionHistoryResult> {
   if (apiBaseUrl === null) return { status: 'error' }
   try {
-    const response = await request(`${apiBaseUrl}${ingestionHistoryEndpoint(tenantId)}`, {
+    const response = await request(`${apiBaseUrl}${ingestionHistoryEndpoint(tenantId, archived)}`, {
       credentials: 'include',
       headers: { Accept: 'application/json' },
       method: 'GET',
@@ -303,6 +308,27 @@ export async function fetchAdminTenantIngestionHistory(
     if (!signal?.aborted) logFailure(logger, 'load_initial_ingestion_history', undefined, error)
     return { status: 'error' }
   }
+}
+
+export function archiveAdminTenantIngestion(
+  apiBaseUrl: string | null,
+  tenantId: string,
+  providerRecordId: string,
+  correlationId: string,
+  signal?: AbortSignal,
+  request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminInitialIngestionResult> {
+  return requestOperation(
+    apiBaseUrl,
+    tenantId,
+    providerRecordId,
+    'POST',
+    `/${encodeURIComponent(correlationId)}/archive`,
+    signal,
+    request,
+    logger,
+  )
 }
 
 export function launchAdminTenantIngestion(

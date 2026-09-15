@@ -558,7 +558,7 @@ test('lets an administrator choose a provider and renders the real V2 progressio
 test('shows unsupported active providers without allowing an audit launch', async ({ page }) => {
   await openAudit(page)
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  await expect(launcher.getByRole('option', { name: /n8n synthétique — indisponible/ })).toBeDisabled()
+  await expect(launcher.getByRole('option', { name: /n8n synthétique — indisponible/ })).toHaveAttribute('disabled', '')
   await expect(launcher).toContainText('non auditables')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await expect(page.locator('body')).not.toContainText('https://automation.example.test')

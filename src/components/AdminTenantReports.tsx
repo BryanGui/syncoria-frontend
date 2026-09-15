@@ -230,6 +230,8 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const lastActiveAudit = useRef<AdminProviderAuditOperation | null>(null)
   const selectedProvider = useMemo(() => providers.find((provider) => provider.id === selectedProviderId) ?? null, [providers, selectedProviderId])
   const activeProviders = useMemo(() => providers.filter((provider) => provider.status === 'active'), [providers])
+  const auditableProviders = useMemo(() => activeProviders.filter((provider) => provider.audit_supported), [activeProviders])
+  const shouldSelectAuditProvider = auditableProviders.length > 1
   const visibleReports = useMemo(() => {
     if (state.status !== 'loaded') return []
     return state.reports.filter((report) => showArchives ? report.status === 'archived' : report.status === 'completed')
@@ -353,21 +355,32 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
           {titleError ? <p role="alert">{titleError}</p> : null}
         </div>
         <div className="tenant-audit__field">
-          <label className="tenant-audit__provider-label" htmlFor="audit-provider">Provider à auditer</label>
-          <select
-            aria-describedby="audit-provider-help"
-            disabled={auditActive || isLaunching || providerState !== 'loaded'}
-            id="audit-provider"
-            onChange={(event) => setSelectedProviderId(event.target.value)}
-            value={selectedProviderId}
-          >
-            {activeProviders.map((provider) => (
-              <option disabled={!provider.audit_supported} key={provider.id} value={provider.id}>
-                {providerLabel(provider.provider)} — {provider.name}{!provider.audit_supported ? ' — indisponible' : ''}
-              </option>
-            ))}
-          </select>
-          <small id="audit-provider-help">Les connexions non auditables restent visibles mais ne peuvent pas être sélectionnées.</small>
+          {shouldSelectAuditProvider ? (
+            <label className="tenant-audit__provider-label" htmlFor="audit-provider">
+              Provider à auditer
+              <select
+                aria-describedby="audit-provider-help"
+                disabled={auditActive || isLaunching || providerState !== 'loaded'}
+                id="audit-provider"
+                onChange={(event) => setSelectedProviderId(event.target.value)}
+                value={selectedProviderId}
+              >
+                {activeProviders.map((provider) => (
+                  <option aria-disabled={!provider.audit_supported} disabled={!provider.audit_supported} key={provider.id} value={provider.id}>
+                    {providerLabel(provider.provider)} — {provider.name}{!provider.audit_supported ? ' — indisponible' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <>
+              <span className="tenant-audit__provider-label">Provider à auditer</span>
+              <div aria-describedby="audit-provider-help" className="tenant-audit__provider-static">
+                {auditableProviders[0] === undefined ? 'Aucun provider auditable' : `${providerLabel(auditableProviders[0].provider)} — ${auditableProviders[0].name}`}
+              </div>
+            </>
+          )}
+          <small id="audit-provider-help">{shouldSelectAuditProvider ? 'Les connexions non auditables restent visibles mais ne peuvent pas être sélectionnées.' : 'La connexion auditable est sélectionnée automatiquement.'}</small>
         </div>
         <button className="primary-button" disabled={disabled} onClick={() => void launchAudit()} type="button">{isLaunching ? 'Lancement…' : auditActive ? 'Audit en cours…' : 'Lancer l’audit'}</button>
       </div>

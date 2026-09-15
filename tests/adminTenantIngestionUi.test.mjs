@@ -29,6 +29,15 @@ test('loads history and latest state, polls active operations, and cleans up on 
   assert.match(component, /abortController\.abort\(\)/)
 })
 
+test('keeps current and archived ingestion runs in separate views and archives by real run scope', () => {
+  assert.match(component, /fetchAdminTenantIngestionHistory\([\s\S]*?false\)/)
+  assert.match(component, /fetchAdminTenantIngestionHistory\([\s\S]*?true\)/)
+  assert.match(component, /archiveAdminTenantIngestion/)
+  assert.match(component, /Voir les archives/)
+  assert.match(component, /tenant_provider_record_id/)
+  assert.doesNotMatch(component, /localStorage|sessionStorage/)
+})
+
 test('renders real global and source counters without data leaks or Novalia fixtures', () => {
   assert.match(component, /getProgressCountLabel\(operation\.items_processed, operation\.items_expected\)/)
   assert.match(component, /operation\.items_received} lus/)

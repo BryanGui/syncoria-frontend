@@ -56,6 +56,7 @@ const operation = (
   status: 'pending' | 'completed' | 'failed',
   providerRecordId = notionId,
   providerType = 'notion',
+  archived = false,
 ) => ({
   tenant_id: tenantId,
   tenant_provider_record_id: providerRecordId,
@@ -64,6 +65,7 @@ const operation = (
   status,
   started_at: '2026-09-15T08:00:00Z',
   completed_at: status === 'completed' ? '2026-09-15T08:00:33Z' : null,
+  archived,
   items_expected: 10,
   items_received: 10,
   items_processed: 10,
@@ -100,10 +102,16 @@ async function openIngestion(page: Page): Promise<{ requests: string[] }> {
       ] })
     }
     if (url.pathname === `${prefix}/ingestions` && route.request().method() === 'GET') {
+      if (url.searchParams.get('archived') === 'true') {
+        return route.fulfill({ json: [operation(secondCorrelationId, 'completed', notionId, 'notion', true)] })
+      }
       return route.fulfill({ json: [
         operation(firstCorrelationId, 'completed'),
         operation(secondCorrelationId, 'failed'),
       ] })
+    }
+    if (url.pathname === `${prefix}/providers/${notionId}/ingestions/${firstCorrelationId}/archive` && route.request().method() === 'POST') {
+      return route.fulfill({ status: 200, json: operation(firstCorrelationId, 'completed', notionId, 'notion', true) })
     }
     if (url.pathname === `${prefix}/providers/${notionId}/ingestions/latest`) {
       return route.fulfill({ status: 404, json: {} })
@@ -129,11 +137,11 @@ test('displays multi-provider ingestion history and opens each run detail under 
   const { requests } = await openIngestion(page)
 
   await expect(page.getByText('Ingestion Notion — Notion Novalia')).toHaveCount(2)
-  await expect(page.getByText('33 s')).toBeVisible()
+  await expect(page.getByText('Durée : 33 s').first()).toBeVisible()
   await expect(page.getByText('Terminé')).toBeVisible()
   await expect(page.getByText('Erreur')).toBeVisible()
   await expect(page.getByRole('option', { name: 'N8n — Automatisation' })).toHaveAttribute('disabled', '')
-  await expect(page.getByRole('button', { name: /Archiver (une ingestion|l’ingestion)/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(2)
 
   const details = page.getByRole('button', { name: 'Voir détail' })
   await details.first().click()
@@ -146,6 +154,20 @@ test('displays multi-provider ingestion history and opens each run detail under 
   await expect(page.getByRole('heading', { name: 'Companies', exact: true })).toHaveCount(0)
 
   expect(requests).toContain(`GET ${prefix}/ingestions`)
+})
+
+test('archives a completed run logically and keeps its detail in the separate archive view', async ({ page }) => {
+  await openIngestion(page)
+  await expect(page.getByText('Ingestion Notion — Notion Novalia')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Archiver', exact: true }).first().click()
+  await expect(page.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Voir les archives' })).toBeVisible()
+  await page.getByRole('button', { name: 'Voir les archives' }).click()
+  await expect(page.getByText('Durée : 33 s').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Voir détail' }).first().click()
+  await expect(page.getByText(firstCorrelationId)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Companies', exact: true })).toBeVisible()
 })
 
 test('keeps the launcher functional and avoids horizontal overflow on mobile', async ({ page }) => {
