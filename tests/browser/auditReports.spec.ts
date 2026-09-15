@@ -288,9 +288,11 @@ test('history is the primary entry point and exposes direct actions per audit', 
   const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
   await expect(drive).toContainText('Provider : Drive')
   await expect(drive).toContainText('Terminé')
-  for (const action of ['Voir rapport', 'Télécharger PDF', 'DDL brut', 'ER brut', 'Renommer', 'Archiver']) {
-    await expect(drive.getByRole(action === 'Voir rapport' || action === 'Télécharger PDF' ? 'link' : 'button', { name: action, exact: action !== 'Renommer' })).toBeVisible()
+  await expect(history).not.toContainText(/\d+ audits?\b/)
+  for (const action of ['Voir rapport', 'Télécharger PDF', 'DDL brut', 'ER brut']) {
+    await expect(drive.locator('.tenant-audit__history-actions--primary').getByRole(action === 'Voir rapport' || action === 'Télécharger PDF' ? 'link' : 'button', { name: action, exact: true })).toBeVisible()
   }
+  for (const action of ['Renommer', 'Archiver']) await expect(drive.locator('.tenant-audit__history-actions--secondary').getByRole('button', { name: action, exact: action === 'Archiver' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toHaveCount(0)
 })
 
@@ -315,7 +317,12 @@ test('separates archives and removes an archived audit from the main history', a
   await expect(history.locator('.tenant-audit__history-item')).toHaveCount(2)
   await expect(history).not.toContainText('07/09/2026')
   await history.getByRole('button', { name: 'Voir les archives', exact: true }).click()
-  await expect(history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })).toContainText('Archivé')
+  const archived = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
+  await expect(archived).toContainText('Archivé')
+  await expect(archived.locator('.tenant-audit__history-actions--primary').getByRole('link', { name: 'Voir rapport', exact: true })).toBeVisible()
+  await expect(archived.locator('.tenant-audit__history-actions--primary').getByRole('link', { name: 'Télécharger PDF', exact: true })).toBeVisible()
+  await expect(archived.locator('.tenant-audit__history-actions--secondary').getByRole('button', { name: /^Renommer/ })).toBeVisible()
+  await expect(archived.locator('.tenant-audit__history-actions--secondary').getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toEqual([{ path: `${prefix}/reports/${report.id}/archive`, method: 'POST' }])
   expect(requests.filter((r) => r.path === `${prefix}/reports`)).toHaveLength(2)
   const download = page.waitForEvent('download')
@@ -343,6 +350,19 @@ test('opens exact DDL and ER artifacts under their audit row', async ({ page }) 
   await expect(diagram).toContainText('text')
   await expect(diagram).toContainText('Relations observées à cible non résolue')
   await expect(diagram).not.toContainText('Table Contacts')
+  const erJsonDownload = page.waitForEvent('download')
+  await artifacts.getByRole('link', { name: 'Télécharger l’ER brut (JSON)', exact: true }).click()
+  const erJsonPath = await (await erJsonDownload).path()
+  expect(erJsonPath).not.toBeNull()
+  expect(JSON.parse(await readFile(erJsonPath!, 'utf8'))).toEqual(structuredReport('Audit Drive', null).raw_er)
+  const erMermaidDownload = page.waitForEvent('download')
+  await artifacts.getByRole('link', { name: 'Télécharger l’ER brut (Mermaid)', exact: true }).click()
+  const erMermaidPath = await (await erMermaidDownload).path()
+  expect(erMermaidPath).not.toBeNull()
+  const erMermaid = await readFile(erMermaidPath!, 'utf8')
+  expect(erMermaid).toContain('flowchart LR')
+  expect(erMermaid).toContain('Audit Drive')
+  expect(erMermaid).toContain('Relation observée non résolue')
 })
 
 test('opening another audit replaces the previous row artifacts', async ({ page }) => {
@@ -413,7 +433,7 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   await launcher.getByLabel('Titre de l’audit').fill('Audit recrutement Novalia')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
-  await expect(launcher.getByRole('radio', { name: /Notion A/ })).toBeDisabled()
+  await expect(launcher.getByRole('combobox', { name: 'Provider à auditer' })).toBeDisabled()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
   await expect(launcher).toContainText('Sources analysées5')
   await expect(launcher).toContainText('Sources retenues3')
@@ -436,7 +456,7 @@ test('does not render a permanent selected-report panel', async ({ page }) => {
 test('keeps the next audit title independent from the latest audit title', async ({ page }) => {
   await openAudit(page, { latestTitle: 'Ancien titre du dernier audit' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  await launcher.getByRole('radio', { name: /Notion A/ }).click()
+  await launcher.getByRole('combobox', { name: 'Provider à auditer' }).selectOption(notionBId)
   await expect(launcher.getByLabel('Titre de l’audit')).toHaveValue(/Audit Notion — \d{4}-\d{2}-\d{2}/)
   await expect(launcher.getByLabel('Titre de l’audit')).not.toHaveValue('Ancien titre du dernier audit')
   await expect(launcher).toContainText('État : Terminé')
@@ -507,9 +527,11 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   test.setTimeout(60000)
   const requests = await openAudit(page, { auditScenario: 'v2' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  const selector = launcher.getByRole('radiogroup', { name: 'Connexion à auditer' })
-  await expect(selector.getByRole('radio', { name: /Notion A/ })).toHaveAttribute('aria-checked', 'true')
-  await expect(selector.getByRole('radio')).toHaveCount(3)
+  const selector = launcher.getByRole('combobox', { name: 'Provider à auditer' })
+  await expect(selector).toHaveValue(notionAId)
+  await expect(selector.locator('option')).toHaveCount(3)
+  await selector.selectOption(notionBId)
+  await expect(selector).toHaveValue(notionBId)
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Préparation')
   await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Collecte des sources')
@@ -525,14 +547,16 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   await expect(launcher).toContainText('Temps écoulé')
   await expect(launcher).not.toContainText('%')
   await expect(page.getByRole('region', { name: 'Historique des audits', exact: true }).locator('.tenant-audit__history-item', { hasText: /Audit Notion —/ })).toBeVisible()
-  expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
+  const selectedAuditPrefix = `${prefix}/providers/${notionBId}/audits`
+  expect(requests.filter((request) => request.path === selectedAuditPrefix && request.method === 'POST')).toHaveLength(1)
+  expect(requests.filter((request) => request.path === `${selectedAuditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
 })
 
 test('shows unsupported active providers without allowing an audit launch', async ({ page }) => {
   await openAudit(page)
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  await expect(launcher.getByRole('radio', { name: /n8n synthétique/ })).toBeDisabled()
-  await expect(launcher).toContainText('Audit indisponible pour cette connexion')
+  await expect(launcher.getByRole('option', { name: /n8n synthétique — indisponible/ })).toBeDisabled()
+  await expect(launcher).toContainText('non auditables')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await expect(page.locator('body')).not.toContainText('https://automation.example.test')
   await expect(page.locator('body')).not.toContainText('api_key')
@@ -540,11 +564,11 @@ test('shows unsupported active providers without allowing an audit launch', asyn
 
 test('loads latest for each explicit Notion selection and aborts the previous request', async ({ page }) => {
   const requests = await openAudit(page, { auditScenario: 'abort' })
-  const selector = page.getByRole('radiogroup', { name: 'Connexion à auditer' })
+  const selector = page.getByRole('combobox', { name: 'Provider à auditer' })
   const abortCount = await page.evaluate(
     () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
   )
-  await selector.getByRole('radio', { name: /Notion B/ }).click()
+  await selector.selectOption(notionBId)
   await expect.poll(() => page.evaluate(
     () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
   )).toBeGreaterThan(abortCount)

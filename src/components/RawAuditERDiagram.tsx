@@ -20,9 +20,9 @@ import type {
 } from '../api/adminTenantAudits'
 import '@xyflow/react/dist/style.css'
 
-const NODE_WIDTH = 292
-const NODE_GAP_X = 76
-const NODE_GAP_Y = 76
+const NODE_WIDTH = 320
+const NODE_GAP_X = 112
+const NODE_GAP_Y = 120
 const GRID_COLUMNS = 3
 
 type RawERNodeData = {
@@ -83,7 +83,7 @@ function buildNodes(model: AdminProviderAuditERModel): RawERNode[] {
       type: 'rawErTable',
       position: {
         x: column * (NODE_WIDTH + NODE_GAP_X),
-        y: row * (NODE_GAP_Y + 220),
+        y: row * (NODE_GAP_Y + 260),
       },
       data: { table },
     }
