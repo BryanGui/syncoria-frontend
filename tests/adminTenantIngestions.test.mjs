@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  archiveAdminTenantIngestion,
   fetchAdminTenantIngestion,
   fetchAdminTenantIngestionHistory,
   fetchLatestAdminTenantIngestion,
@@ -37,6 +38,7 @@ const operation = {
   status: 'running',
   started_at: '2026-09-09T08:00:00Z',
   completed_at: null,
+  archived: false,
   items_expected: 10,
   items_received: 8,
   items_processed: 8,
@@ -87,6 +89,42 @@ test('loads tenant-scoped ingestion history from newest to oldest', async () => 
   )
   assert.deepEqual(result, { status: 'loaded', operations: [operation, older] })
   assert.equal(capturedUrl, `https://api.example.com/admin/tenants/${tenantId}/ingestions`)
+})
+
+test('loads current and archived histories through an explicit archive filter', async () => {
+  let capturedUrl
+  const result = await fetchAdminTenantIngestionHistory(
+    'https://api.example.com',
+    tenantId,
+    undefined,
+    async (url) => {
+      capturedUrl = url
+      return Response.json([operation])
+    },
+    undefined,
+    true,
+  )
+  assert.equal(capturedUrl, `https://api.example.com/admin/tenants/${tenantId}/ingestions?archived=true`)
+  assert.deepEqual(result, { status: 'loaded', operations: [operation] })
+})
+
+test('archives only the tenant/provider/correlation scope and preserves the returned metrics', async () => {
+  let capturedUrl
+  const archivedOperation = { ...operation, status: 'completed', completed_at: '2026-09-09T08:00:33Z', archived: true }
+  const result = await archiveAdminTenantIngestion(
+    'https://api.example.com',
+    tenantId,
+    providerRecordId,
+    correlationId,
+    undefined,
+    async (url, options) => {
+      capturedUrl = url
+      assert.equal(options.method, 'POST')
+      return Response.json(archivedOperation)
+    },
+  )
+  assert.equal(capturedUrl, `https://api.example.com/admin/tenants/${tenantId}/providers/${providerRecordId}/ingestions/${correlationId}/archive`)
+  assert.deepEqual(result, { status: 'loaded', operation: archivedOperation })
 })
 
 test('treats a missing latest operation as an empty state and preserves session failures', async () => {

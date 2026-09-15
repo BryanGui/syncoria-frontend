@@ -1452,8 +1452,19 @@ button.navigation__link {
 }
 
 .ingestion-history__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--color-border);
+}
+
+.ingestion-history__archive-toggle {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 11px;
+  font-size: 12px;
 }
 
 .ingestion-history__heading h4,
@@ -1485,6 +1496,13 @@ button.navigation__link {
   grid-template-columns: minmax(180px, 1.15fr) minmax(0, 2fr) auto;
   align-items: center;
   gap: 18px;
+}
+
+.ingestion-history__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .ingestion-history__identity,
@@ -2166,6 +2184,15 @@ button.navigation__link {
     width: 100%;
   }
 
+  .ingestion-history__actions {
+    justify-content: stretch;
+  }
+
+  .ingestion-history__actions .secondary-button {
+    flex: 1 1 10rem;
+    width: auto;
+  }
+
   .ingestion-history__metadata {
     grid-template-columns: 1fr;
   }
@@ -2244,6 +2271,7 @@ button.navigation__link {
 .tenant-audit__history-actions--secondary { flex: 0 0 auto; justify-content: flex-end; margin-left: auto; padding-left: 1rem; border-left: 1px solid #ebe9ef; }
 .tenant-audit__history-actions > a,
 .tenant-audit__history-actions > button { min-height: 40px; padding: .5rem .7rem; font-size: .78rem; }
+.tenant-audit__history-actions--primary > a:nth-child(2) { margin-right: .35rem; }
 .tenant-audit__history-actions a { text-decoration: none; }
 .tenant-audit__artifact-panel { padding-top: .85rem; border-top: 1px solid #ebe9ef; }
 .tenant-audit__report { width: 100%; padding: 1.35rem; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
@@ -2291,10 +2319,11 @@ button.navigation__link {
 .tenant-audit__report-note,
 .tenant-audit__report-loading,
 .tenant-audit__empty-note { color: var(--color-text-secondary); font-size: .82rem; }
-.tenant-audit__launcher-fields { align-items: end; margin-top: 1rem; }
+.tenant-audit__launcher-fields { align-items: end; margin-top: 1rem; display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, .8fr) auto; }
 .tenant-audit__field { flex: 1 1 0; min-width: 0; }
 .tenant-audit__field input,
 .tenant-audit__field select,
+.tenant-audit__provider-static,
 .tenant-audit__inline-rename input,
 .tenant-audit__header-rename input { width: 100%; min-height: 44px; padding: .65rem .8rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-body); font: inherit; box-sizing: border-box; }
 .tenant-audit__field small { display: block; margin-top: .35rem; }
@@ -2377,7 +2406,7 @@ button.navigation__link {
 .tenant-audit__technical .tenant-audit__actions { margin-top: 0; }
 .tenant-audit__technical-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
 .raw-ddl-viewer { margin-top: .85rem; overflow: hidden; border: 1px solid #cbd8de; border-radius: 9px; background: #f8fafb; }
-.raw-ddl-viewer__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem .8rem; border-bottom: 1px solid #dbe4e8; color: var(--color-text-secondary); font-size: .78rem; }
+.raw-ddl-viewer__toolbar { display: flex; align-items: center; justify-content: center; gap: .55rem 1rem; padding: .8rem; border-bottom: 1px solid #dbe4e8; background: #eef5f7; color: var(--color-text-secondary); font-size: .78rem; text-align: center; }
 .raw-ddl-viewer__toolbar a { text-decoration: none; }
 .raw-ddl-viewer pre { max-height: 34rem; margin: 0; overflow: auto; padding: 1rem; color: #263b47; background: #fbfcfd; font: .8rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; }
 .raw-er-diagram { display: grid; gap: .85rem; margin-top: .85rem; }
@@ -2426,7 +2455,7 @@ button.navigation__link {
   .tenant-audit__launcher select { width: 100%; }
   .tenant-audit__launcher-heading .primary-button { width: 100%; }
   .tenant-audit__launcher-title { align-items: flex-start; flex-direction: column; gap: .35rem; }
-  .tenant-audit__launcher-fields { align-items: stretch; flex-direction: column; }
+  .tenant-audit__launcher-fields { align-items: stretch; grid-template-columns: 1fr; }
   .tenant-audit__launcher-fields .primary-button { width: 100%; }
   .tenant-audit__launcher-status dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tenant-audit__history-summary { flex-direction: column; gap: .55rem; }

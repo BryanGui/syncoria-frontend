@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  archiveAdminTenantIngestion,
   fetchAdminTenantIngestion,
   fetchAdminTenantIngestionHistory,
   fetchLatestAdminTenantIngestion,
@@ -194,11 +195,15 @@ function HistoryItem({
   operation,
   providerLabel,
   onToggle,
+  onArchive,
+  isArchiving,
 }: {
   expanded: boolean
   operation: AdminInitialIngestion
   providerLabel: string
   onToggle: () => void
+  onArchive: () => void
+  isArchiving: boolean
 }) {
   return (
     <article className="ingestion-history__item">
@@ -215,15 +220,27 @@ function HistoryItem({
           <CountSummary operation={operation} />
           <span>Durée : {formatDuration(operation.duration_seconds, operation.status)}</span>
         </div>
-        <button
-          aria-controls={`ingestion-detail-${operation.correlation_id}`}
-          aria-expanded={expanded}
-          className="secondary-button"
-          onClick={onToggle}
-          type="button"
-        >
-          {expanded ? 'Masquer le détail' : 'Voir détail'}
-        </button>
+        <div className="ingestion-history__actions">
+          <button
+            aria-controls={`ingestion-detail-${operation.correlation_id}`}
+            aria-expanded={expanded}
+            className="secondary-button"
+            onClick={onToggle}
+            type="button"
+          >
+            {expanded ? 'Masquer le détail' : 'Voir détail'}
+          </button>
+          {!operation.archived && !isInitialIngestionActive(operation.status) ? (
+            <button
+              className="secondary-button"
+              disabled={isArchiving}
+              onClick={onArchive}
+              type="button"
+            >
+              Archiver
+            </button>
+          ) : null}
+        </div>
       </div>
       {expanded ? (
         <div id={`ingestion-detail-${operation.correlation_id}`}>
@@ -246,12 +263,16 @@ export function AdminTenantIngestion({
   const [historyState, setHistoryState] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [operationState, setOperationState] = useState<'idle' | 'loading' | 'none' | 'error'>('idle')
   const [history, setHistory] = useState<AdminInitialIngestion[]>([])
+  const [archiveHistory, setArchiveHistory] = useState<AdminInitialIngestion[]>([])
+  const [showArchives, setShowArchives] = useState(false)
   const [operation, setOperation] = useState<AdminInitialIngestion | null>(null)
   const [expandedCorrelationId, setExpandedCorrelationId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLaunching, setIsLaunching] = useState(false)
+  const [isArchiving, setIsArchiving] = useState(false)
   const selectedProviderIdRef = useRef(selectedProviderId)
   const operationRef = useRef<AdminInitialIngestion | null>(null)
+  const archivedCorrelationIdsRef = useRef(new Set<string>())
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
   const isSelectedProviderSupported = selectedProvider !== null
@@ -269,6 +290,9 @@ export function AdminTenantIngestion({
       setOperation(null)
       operationRef.current = null
       setHistory([])
+      setArchiveHistory([])
+      archivedCorrelationIdsRef.current = new Set()
+      setShowArchives(false)
       setProviderState('loaded')
       setHistoryState('loaded')
       return undefined
@@ -311,14 +335,20 @@ export function AdminTenantIngestion({
     const abortController = new AbortController()
     let isCurrent = true
     setHistory([])
+    setArchiveHistory([])
+    archivedCorrelationIdsRef.current = new Set()
+    setShowArchives(false)
     setHistoryState('loading')
-    void fetchAdminTenantIngestionHistory(apiBaseUrl, tenantId, abortController.signal).then((result) => {
+    void Promise.all([
+      fetchAdminTenantIngestionHistory(apiBaseUrl, tenantId, abortController.signal, fetch, undefined, false),
+      fetchAdminTenantIngestionHistory(apiBaseUrl, tenantId, abortController.signal, fetch, undefined, true),
+    ]).then(([currentResult, archiveResult]) => {
       if (!isCurrent) return
-      if (result.status === 'unauthenticated') {
+      if (currentResult.status === 'unauthenticated' || archiveResult.status === 'unauthenticated') {
         onSessionExpired()
         return
       }
-      if (result.status !== 'loaded') {
+      if (currentResult.status !== 'loaded' || archiveResult.status !== 'loaded') {
         setHistoryState('error')
         return
       }
@@ -326,9 +356,16 @@ export function AdminTenantIngestion({
       const currentTenantOperation = currentOperation?.tenant_id === tenantId
         ? currentOperation
         : null
+      const currentOperations = currentResult.operations.filter((item) => !item.archived && !archivedCorrelationIdsRef.current.has(item.correlation_id))
+      const archivedOperations = archiveResult.operations.filter((item) => item.archived)
       setHistory(currentTenantOperation === null
-        ? result.operations
-        : upsertOperation(result.operations, currentTenantOperation))
+        ? currentOperations
+        : upsertOperation(currentOperations, currentTenantOperation))
+      setArchiveHistory((current) => {
+        const fetchedIds = new Set(archivedOperations.map((item) => item.correlation_id))
+        const localArchived = current.filter((item) => !fetchedIds.has(item.correlation_id))
+        return [...localArchived, ...archivedOperations]
+      })
       setHistoryState('loaded')
     })
     return () => {
@@ -434,6 +471,7 @@ export function AdminTenantIngestion({
       return
     }
     if (result.status === 'loaded') {
+      archivedCorrelationIdsRef.current.add(historyOperation.correlation_id)
       operationRef.current = result.operation
       setOperation(result.operation)
       setHistory((current) => upsertOperation(current, result.operation))
@@ -445,6 +483,38 @@ export function AdminTenantIngestion({
       ? 'Une ingestion est déjà en cours pour ce provider.'
       : 'L’ingestion ne peut pas être lancée pour le moment.')
   }
+
+  async function archiveIngestion(historyOperation: AdminInitialIngestion) {
+    if (isArchiving || historyOperation.archived || isInitialIngestionActive(historyOperation.status)) return
+    setIsArchiving(true)
+    setErrorMessage(null)
+    const result = await archiveAdminTenantIngestion(
+      apiBaseUrl,
+      tenantId,
+      historyOperation.tenant_provider_record_id,
+      historyOperation.correlation_id,
+    )
+    setIsArchiving(false)
+    if (result.status === 'unauthenticated') {
+      onSessionExpired()
+      return
+    }
+    if (result.status === 'loaded') {
+      setHistory((current) => current.filter((item) => item.correlation_id !== historyOperation.correlation_id))
+      setArchiveHistory((current) => upsertOperation(current, result.operation))
+      setExpandedCorrelationId(null)
+      if (operationRef.current?.correlation_id === historyOperation.correlation_id) {
+        setOperation(null)
+        operationRef.current = null
+      }
+      return
+    }
+    setErrorMessage(result.status === 'conflict'
+      ? 'Une ingestion en cours ne peut pas être archivée.'
+      : 'L’ingestion n’a pas pu être archivée. Réessayez.')
+  }
+
+  const visibleHistory = showArchives ? archiveHistory : history
 
   if (tenantStatus !== 'active') {
     return (
@@ -520,19 +590,33 @@ export function AdminTenantIngestion({
             <p className="provider-card__eyebrow">Runs persistés</p>
             <h4 id="ingestion-history-title">Historique des ingestions</h4>
           </div>
+          <button
+            className="secondary-button ingestion-history__archive-toggle"
+            onClick={() => {
+              setShowArchives((visible) => !visible)
+              setExpandedCorrelationId(null)
+            }}
+            type="button"
+          >
+            {showArchives ? 'Retour aux ingestions' : 'Voir les archives'}
+          </button>
         </div>
         {historyState === 'loading' ? (
           <p className="ingestion-empty">Chargement de l’historique…</p>
         ) : historyState === 'error' ? (
           <p className="ingestion-error" role="alert">L’historique des ingestions ne peut pas être chargé pour le moment.</p>
-        ) : history.length === 0 ? (
-          <p className="ingestion-empty">Aucune ingestion persistée pour ce tenant.</p>
+        ) : visibleHistory.length === 0 ? (
+          <p className="ingestion-empty">
+            {showArchives ? 'Aucune ingestion archivée pour ce tenant.' : 'Aucune ingestion persistée pour ce tenant.'}
+          </p>
         ) : (
           <div className="ingestion-history__list">
-            {history.map((historyOperation) => (
+            {visibleHistory.map((historyOperation) => (
               <HistoryItem
                 expanded={expandedCorrelationId === historyOperation.correlation_id}
                 key={historyOperation.correlation_id}
+                isArchiving={isArchiving}
+                onArchive={() => void archiveIngestion(historyOperation)}
                 onToggle={() => setExpandedCorrelationId((current) => (
                   current === historyOperation.correlation_id ? null : historyOperation.correlation_id
                 ))}
