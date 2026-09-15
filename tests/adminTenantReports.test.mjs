@@ -14,6 +14,10 @@ const tenantWorkspaceSource = await readFile(
   new URL('../src/components/TenantWorkspace.tsx', import.meta.url),
   'utf8',
 )
+const auditReportsSource = await readFile(
+  new URL('../src/components/AdminTenantReports.tsx', import.meta.url),
+  'utf8',
+)
 const report = {
   id: 'audit-example', title: 'Audit exemple', status: 'completed',
   provider: 'notion', report_date: '2026-09-07',
@@ -107,6 +111,12 @@ test('reports remain available through the admin integration audit step', () => 
   assert.match(adminWorkspaceSource, /adminReports=\{/)
   assert.match(adminWorkspaceSource, /<AdminTenantReports/)
   assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
+})
+
+test('uses the backend audit capability instead of a provider-specific launcher branch', () => {
+  assert.match(auditReportsSource, /audit_supported/)
+  assert.doesNotMatch(auditReportsSource, /selectedProvider\.provider\s*!==\s*'notion'/)
+  assert.doesNotMatch(auditReportsSource, /selectedProvider\.provider\s*===\s*'notion'/)
 })
 
 test('formats the calendar date from the browser local time', () => {

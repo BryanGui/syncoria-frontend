@@ -10,21 +10,20 @@ test('internal content uses the full width without changing the public shell', (
   assert.doesNotMatch(appStyles, /\.main-content \{[\s\S]*?max-width: 1440px/)
 })
 
-test('audit reports use a compact history and one responsive selected report', () => {
-  assert.match(appStyles, /\.tenant-audit__report \{[\s\S]*?width: 100%;/)
-  assert.match(appStyles, /\.tenant-audit__history-item \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto 1\.5rem;/)
-  assert.match(appStyles, /\.tenant-audit__kpis \{[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)/)
-  assert.match(appStyles, /@media \(max-width: 540px\) \{[\s\S]*?\.tenant-audit__kpis \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)/)
-  assert.match(reportSource, /Rapports d’audit/)
-  assert.match(reportSource, /selectedReport/)
-  assert.match(reportSource, /userSelectedReportId/)
-  assert.match(reportSource, /Sources analysées[\s\S]*?Enregistrements retenus[\s\S]*?Décisions nécessaires/)
+test('audit history keeps each row compact and exposes its actions directly', () => {
+  assert.match(appStyles, /\.tenant-audit__history-item \{[\s\S]*?width: 100%;/)
+  assert.match(appStyles, /\.tenant-audit__history-actions \{[\s\S]*?flex-wrap: wrap;/)
+  assert.match(appStyles, /@media \(max-width: 540px\) \{[\s\S]*?\.tenant-audit__history-actions \{ display: grid;/)
+  assert.match(reportSource, /Historique des audits/)
+  assert.match(reportSource, /expandedReportId/)
+  assert.match(reportSource, /showArchives/)
+  assert.match(reportSource, /renderArtifactPanel/)
+  assert.doesNotMatch(reportSource, /Rapport sélectionné|Audit sélectionné/)
 })
 
-test('archived audit reports remain selectable and consultable', () => {
-  assert.match(reportSource, /tenant-audit__report--archived/)
-  assert.match(reportSource, /Ce rapport est conservé dans l’historique et reste consultable\./)
-  assert.match(reportSource, /reportStatusLabel\(report\.status\)/)
-  assert.match(reportSource, /setSelectedReportId\(report\.id\)/)
-  assert.match(reportSource, /tenant-audit__actions/)
+test('archives are a separate view without inventing restoration', () => {
+  assert.match(reportSource, /report\.status === 'archived'/)
+  assert.match(reportSource, /Voir les archives/)
+  assert.match(reportSource, /Retour aux audits/)
+  assert.doesNotMatch(reportSource, /Réactiver|Restaurer/)
 })

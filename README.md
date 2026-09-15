@@ -103,6 +103,13 @@ La fiche client admin comporte un onglet **Audit & cartographie**. Il charge
 par le backend, sans chiffres spécifiques à un client dans le code React.
 Un catalogue vide affiche « Aucun rapport publié pour ce client ».
 
+Le launcher utilise les providers actifs renvoyés par l’API. Chaque connexion
+reste visible ; celles dont `audit_supported` vaut `false` sont explicitement
+indisponibles. L’historique est le point d’entrée principal : chaque ligne
+expose ses actions PDF, renommage et archivage. Les artefacts DDL/ER s’ouvrent
+uniquement sous la ligne de l’audit concerné. Le DDL est affiché en lecture
+seule et téléchargé tel quel en `.sql`.
+
 « Voir le rapport » ouvre le PDF dans un nouvel onglet via
 `GET /admin/tenants/{tenant_id}/reports/{report_id}/pdf`. « Télécharger PDF »
 utilise la même route avec `?download=true`. Le navigateur envoie le cookie
