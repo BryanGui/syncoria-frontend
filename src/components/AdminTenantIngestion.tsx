@@ -471,7 +471,6 @@ export function AdminTenantIngestion({
       return
     }
     if (result.status === 'loaded') {
-      archivedCorrelationIdsRef.current.add(historyOperation.correlation_id)
       operationRef.current = result.operation
       setOperation(result.operation)
       setHistory((current) => upsertOperation(current, result.operation))
@@ -500,6 +499,7 @@ export function AdminTenantIngestion({
       return
     }
     if (result.status === 'loaded') {
+      archivedCorrelationIdsRef.current.add(historyOperation.correlation_id)
       setHistory((current) => current.filter((item) => item.correlation_id !== historyOperation.correlation_id))
       setArchiveHistory((current) => upsertOperation(current, result.operation))
       setExpandedCorrelationId(null)
