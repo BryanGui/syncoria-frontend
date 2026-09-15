@@ -105,11 +105,10 @@ Un catalogue vide affiche « Aucun rapport publié pour ce client ».
 
 Le launcher utilise les providers actifs renvoyés par l’API. Chaque connexion
 reste visible ; celles dont `audit_supported` vaut `false` sont explicitement
-indisponibles. L’historique et le détail restent affichés dans deux colonnes
-sur desktop, puis s’empilent sur mobile. Le détail propose les sous-vues
-**Rapport**, **DDL brut** et **ER brut** lorsque les artefacts sont disponibles.
-Le DDL est affiché en lecture seule, téléchargé tel quel en `.sql`, et le
-changement d’audit réinitialise la sous-vue ainsi que ses artefacts.
+indisponibles. L’historique est le point d’entrée principal : chaque ligne
+expose ses actions PDF, renommage et archivage. Les artefacts DDL/ER s’ouvrent
+uniquement sous la ligne de l’audit concerné. Le DDL est affiché en lecture
+seule et téléchargé tel quel en `.sql`.
 
 « Voir le rapport » ouvre le PDF dans un nouvel onglet via
 `GET /admin/tenants/{tenant_id}/reports/{report_id}/pdf`. « Télécharger PDF »
