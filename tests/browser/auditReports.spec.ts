@@ -394,7 +394,7 @@ for (const width of [1280, 390]) {
     const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
     const card = history.locator('.tenant-audit__history-item').first()
     await expect(card).toBeVisible()
-    const layout = await card.locator('.tenant-audit__history-actions > *').evaluateAll((buttons) => buttons.map((button) => {
+    const layout = await card.locator('.tenant-audit__history-action-group-buttons > a, .tenant-audit__history-action-group-buttons > button, .tenant-audit__history-actions--secondary > button').evaluateAll((buttons) => buttons.map((button) => {
       const box = button.getBoundingClientRect()
       return { height: box.height, left: box.left, right: box.right }
     }))
@@ -436,7 +436,7 @@ test('launches an audit, polls it to completion and refreshes active reports', a
   await launcher.getByLabel('Titre de l’audit').fill('Audit recrutement Novalia')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
-  await expect(launcher.getByRole('combobox', { name: 'Provider à auditer' })).toBeDisabled()
+  await expect(launcher.locator('.tenant-audit__provider-option').filter({ hasText: 'Notion A' }).getByRole('radio')).toBeDisabled()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
   await expect(launcher).toContainText('Sources analysées5')
   await expect(launcher).toContainText('Sources retenues3')
@@ -459,7 +459,7 @@ test('does not render a permanent selected-report panel', async ({ page }) => {
 test('keeps the next audit title independent from the latest audit title', async ({ page }) => {
   await openAudit(page, { latestTitle: 'Ancien titre du dernier audit' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  await launcher.getByRole('combobox', { name: 'Provider à auditer' }).selectOption(notionBId)
+  await launcher.locator('.tenant-audit__provider-option').filter({ hasText: 'Notion B' }).getByRole('radio').check()
   await expect(launcher.getByLabel('Titre de l’audit')).toHaveValue(/Audit Notion — \d{4}-\d{2}-\d{2}/)
   await expect(launcher.getByLabel('Titre de l’audit')).not.toHaveValue('Ancien titre du dernier audit')
   await expect(launcher).toContainText('État : Terminé')
@@ -530,11 +530,12 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   test.setTimeout(60000)
   const requests = await openAudit(page, { auditScenario: 'v2' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  const selector = launcher.getByRole('combobox', { name: 'Provider à auditer' })
-  await expect(selector).toHaveValue(notionAId)
-  await expect(selector.locator('option')).toHaveCount(3)
-  await selector.selectOption(notionBId)
-  await expect(selector).toHaveValue(notionBId)
+  const selector = launcher.locator('.tenant-audit__provider-option').filter({ hasText: 'Notion A' }).getByRole('radio')
+  await expect(selector).toBeChecked()
+  await expect(launcher.getByRole('radio')).toHaveCount(3)
+  const notionB = launcher.locator('.tenant-audit__provider-option').filter({ hasText: 'Notion B' }).getByRole('radio')
+  await notionB.check()
+  await expect(notionB).toBeChecked()
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Préparation')
   await expect(launcher.locator('.tenant-audit__step--current')).toContainText('Collecte des sources')
@@ -558,7 +559,9 @@ test('lets an administrator choose a provider and renders the real V2 progressio
 test('shows unsupported active providers without allowing an audit launch', async ({ page }) => {
   await openAudit(page)
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
-  await expect(launcher.getByRole('option', { name: /n8n synthétique — indisponible/ })).toHaveAttribute('disabled', '')
+  const unsupported = launcher.locator('.tenant-audit__provider-option').filter({ hasText: 'n8n synthétique' }).getByRole('radio')
+  await expect(unsupported).toBeDisabled()
+  await expect(unsupported).toHaveAttribute('disabled', '')
   await expect(launcher).toContainText('non auditables')
   await expect(launcher.getByRole('button', { name: 'Lancer l’audit', exact: true })).toBeEnabled()
   await expect(page.locator('body')).not.toContainText('https://automation.example.test')
@@ -567,11 +570,11 @@ test('shows unsupported active providers without allowing an audit launch', asyn
 
 test('loads latest for each explicit Notion selection and aborts the previous request', async ({ page }) => {
   const requests = await openAudit(page, { auditScenario: 'abort' })
-  const selector = page.getByRole('combobox', { name: 'Provider à auditer' })
+  const selector = page.locator('.tenant-audit__provider-option').filter({ hasText: 'Notion B' }).getByRole('radio')
   const abortCount = await page.evaluate(
     () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
   )
-  await selector.selectOption(notionBId)
+  await selector.check()
   await expect.poll(() => page.evaluate(
     () => (window as Window & { __auditAbortCount: number }).__auditAbortCount,
   )).toBeGreaterThan(abortCount)

@@ -2226,7 +2226,6 @@ button.navigation__link {
 .tenant-audit__launcher { margin: .5rem 0 1.25rem; padding: 1rem 1.1rem; border: 1px solid var(--color-border); border-radius: 12px; background: #f7fafb; }
 .tenant-audit__provider-label { display: block; margin-bottom: .45rem; color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; }
 .tenant-audit__launcher-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.tenant-audit__launcher select { width: min(100%, 28rem); min-height: 44px; padding: .65rem .8rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-body); font: inherit; }
 .tenant-audit__eyebrow { margin: 0 0 .2rem; color: var(--color-text-secondary); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .tenant-audit__launcher h4 { margin: 0; color: var(--color-text-primary); font-size: 1rem; }
 .tenant-audit__launcher > p { margin: .7rem 0 0; color: var(--color-text-secondary); font-size: .85rem; }
@@ -2267,11 +2266,15 @@ button.navigation__link {
 .tenant-audit__archive-toggle { min-height: 36px; padding: .45rem .7rem; font-size: .78rem; }
 .tenant-audit__history-actions-layout { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .tenant-audit__history-actions { display: flex; flex-wrap: wrap; gap: .5rem; min-width: 0; }
-.tenant-audit__history-actions--primary { flex: 1 1 auto; }
+.tenant-audit__history-actions--primary { display: flex; flex: 1 1 auto; align-items: stretch; gap: 1rem; }
 .tenant-audit__history-actions--secondary { flex: 0 0 auto; justify-content: flex-end; margin-left: auto; padding-left: 1rem; border-left: 1px solid #ebe9ef; }
-.tenant-audit__history-actions > a,
-.tenant-audit__history-actions > button { min-height: 40px; padding: .5rem .7rem; font-size: .78rem; }
-.tenant-audit__history-actions--primary > a:nth-child(2) { margin-right: .35rem; }
+.tenant-audit__history-action-group { display: grid; gap: .35rem; min-width: 0; padding-right: 1rem; border-right: 1px solid #ebe9ef; }
+.tenant-audit__history-action-group:last-child { padding-right: 0; border-right: 0; }
+.tenant-audit__history-action-group-label { color: var(--color-text-secondary); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.tenant-audit__history-action-group-buttons { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; }
+.tenant-audit__history-action-group-buttons > a,
+.tenant-audit__history-action-group-buttons > button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: .5rem .7rem; box-sizing: border-box; font-size: .78rem; }
+.tenant-audit__history-actions--secondary > button { min-height: 40px; padding: .5rem .7rem; font-size: .78rem; }
 .tenant-audit__history-actions a { text-decoration: none; }
 .tenant-audit__artifact-panel { padding-top: .85rem; border-top: 1px solid #ebe9ef; }
 .tenant-audit__report { width: 100%; padding: 1.35rem; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
@@ -2319,13 +2322,24 @@ button.navigation__link {
 .tenant-audit__report-note,
 .tenant-audit__report-loading,
 .tenant-audit__empty-note { color: var(--color-text-secondary); font-size: .82rem; }
-.tenant-audit__launcher-fields { align-items: end; margin-top: 1rem; display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, .8fr) auto; }
+.tenant-audit__launcher-fields { align-items: start; margin-top: 1rem; display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .9fr); }
 .tenant-audit__field { flex: 1 1 0; min-width: 0; }
-.tenant-audit__field input,
-.tenant-audit__field select,
-.tenant-audit__provider-static,
+.tenant-audit__field > input,
 .tenant-audit__inline-rename input,
 .tenant-audit__header-rename input { width: 100%; min-height: 44px; padding: .65rem .8rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-body); font: inherit; box-sizing: border-box; }
+.tenant-audit__provider-list { min-width: 0; margin: 0; padding: 0; border: 0; }
+.tenant-audit__provider-list .tenant-audit__provider-label { padding: 0; }
+.tenant-audit__provider-options { display: grid; gap: .45rem; }
+.tenant-audit__provider-option { display: flex; align-items: center; gap: .65rem; min-height: 44px; padding: .55rem .7rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); cursor: pointer; }
+.tenant-audit__provider-option input { flex: 0 0 auto; width: 1rem; height: 1rem; margin: 0; }
+.tenant-audit__provider-option > span { display: grid; gap: .12rem; min-width: 0; }
+.tenant-audit__provider-option strong { overflow-wrap: anywhere; color: var(--color-text-body); font-size: .82rem; }
+.tenant-audit__provider-option small { color: var(--color-text-secondary); font-size: .72rem; }
+.tenant-audit__provider-option:has(input:checked) { border-color: #7657b5; box-shadow: 0 0 0 1px #7657b5; }
+.tenant-audit__provider-option--disabled { background: #f1f3f4; color: var(--color-text-secondary); cursor: not-allowed; opacity: .62; }
+.tenant-audit__provider-option--disabled strong { color: var(--color-text-secondary); }
+.tenant-audit__launcher-action { display: flex; justify-content: flex-end; margin-top: 1rem; }
+.tenant-audit__launcher-action .primary-button { min-width: 12rem; }
 .tenant-audit__field small { display: block; margin-top: .35rem; }
 .tenant-audit__field p,
 .tenant-audit__inline-rename p,
@@ -2452,18 +2466,22 @@ button.navigation__link {
 @media (max-width: 540px) {
   .tenant-audit { padding: 1rem; }
   .tenant-audit__launcher-heading { align-items: flex-start; flex-direction: column; }
-  .tenant-audit__launcher select { width: 100%; }
-  .tenant-audit__launcher-heading .primary-button { width: 100%; }
   .tenant-audit__launcher-title { align-items: flex-start; flex-direction: column; gap: .35rem; }
   .tenant-audit__launcher-fields { align-items: stretch; grid-template-columns: 1fr; }
-  .tenant-audit__launcher-fields .primary-button { width: 100%; }
+  .tenant-audit__launcher-action { justify-content: stretch; }
+  .tenant-audit__launcher-action .primary-button { width: 100%; }
   .tenant-audit__launcher-status dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tenant-audit__history-summary { flex-direction: column; gap: .55rem; }
   .tenant-audit__history-actions-layout { align-items: stretch; flex-direction: column; gap: .75rem; }
   .tenant-audit__history-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tenant-audit__history-actions--primary { grid-template-columns: 1fr; }
+  .tenant-audit__history-action-group { padding-right: 0; padding-bottom: .65rem; border-right: 0; border-bottom: 1px solid #ebe9ef; }
+  .tenant-audit__history-action-group:last-child { padding-bottom: 0; border-bottom: 0; }
+  .tenant-audit__history-action-group-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tenant-audit__history-actions--secondary { margin-left: 0; padding-top: .75rem; padding-left: 0; border-top: 1px solid #ebe9ef; border-left: 0; }
-  .tenant-audit__history-actions > a,
-  .tenant-audit__history-actions > button { width: 100%; }
+  .tenant-audit__history-action-group-buttons > a,
+  .tenant-audit__history-action-group-buttons > button,
+  .tenant-audit__history-actions--secondary > button { width: 100%; }
   .tenant-audit__report-heading { flex-direction: column; gap: .8rem; }
   .tenant-audit__report-meta { justify-content: flex-start; }
   .tenant-audit__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
