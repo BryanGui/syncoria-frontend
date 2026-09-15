@@ -2275,6 +2275,12 @@ button.navigation__link {
 .tenant-audit__history-action-group-buttons > a,
 .tenant-audit__history-action-group-buttons > button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: .5rem .7rem; box-sizing: border-box; font-size: .78rem; }
 .tenant-audit__history-actions--secondary > button { min-height: 40px; padding: .5rem .7rem; font-size: .78rem; }
+.tenant-audit__history-actions--primary > .tenant-audit__history-action-group:first-child .tenant-audit__history-action-group-buttons > a:last-child { border-color: #c9c0e8; background: #f5f2fb; color: #4f447b; }
+.tenant-audit__history-actions--primary > .tenant-audit__history-action-group:first-child .tenant-audit__history-action-group-buttons > a:last-child:hover,
+.tenant-audit__history-actions--primary > .tenant-audit__history-action-group:first-child .tenant-audit__history-action-group-buttons > a:last-child:focus-visible { border-color: #a99bd5; background: #ebe6f8; color: #403663; }
+.tenant-audit__history-actions--primary > .tenant-audit__history-action-group + .tenant-audit__history-action-group .tenant-audit__history-action-group-buttons > button { border-color: #b8d2df; background: #f1f7fa; color: #31586b; }
+.tenant-audit__history-actions--primary > .tenant-audit__history-action-group + .tenant-audit__history-action-group .tenant-audit__history-action-group-buttons > button:hover,
+.tenant-audit__history-actions--primary > .tenant-audit__history-action-group + .tenant-audit__history-action-group .tenant-audit__history-action-group-buttons > button:focus-visible { border-color: #8eb8c9; background: #e4f0f5; color: #244a5c; }
 .tenant-audit__history-actions a { text-decoration: none; }
 .tenant-audit__artifact-panel { padding-top: .85rem; border-top: 1px solid #ebe9ef; }
 .tenant-audit__report { width: 100%; padding: 1.35rem; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
