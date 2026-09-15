@@ -137,7 +137,7 @@ test('displays multi-provider ingestion history and opens each run detail under 
   const { requests } = await openIngestion(page)
 
   await expect(page.getByText('Ingestion Notion — Notion Novalia')).toHaveCount(2)
-  await expect(page.getByText('33 s')).toBeVisible()
+  await expect(page.getByText('Durée : 33 s').first()).toBeVisible()
   await expect(page.getByText('Terminé')).toBeVisible()
   await expect(page.getByText('Erreur')).toBeVisible()
   await expect(page.getByRole('option', { name: 'N8n — Automatisation' })).toHaveAttribute('disabled', '')
@@ -163,10 +163,10 @@ test('archives a completed run logically and keeps its detail in the separate ar
   await expect(page.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(1)
   await expect(page.getByRole('button', { name: 'Voir les archives' })).toBeVisible()
   await page.getByRole('button', { name: 'Voir les archives' }).click()
-  await expect(page.getByText(firstCorrelationId)).toBeVisible()
-  await expect(page.getByText('33 s')).toBeVisible()
+  await expect(page.getByText('Durée : 33 s').first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Voir détail' }).click()
+  await page.getByRole('button', { name: 'Voir détail' }).first().click()
+  await expect(page.getByText(firstCorrelationId)).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Companies', exact: true })).toBeVisible()
 })
 
