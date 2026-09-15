@@ -115,8 +115,19 @@ test('reports remain available through the admin integration audit step', () => 
 
 test('uses the backend audit capability instead of a provider-specific launcher branch', () => {
   assert.match(auditReportsSource, /audit_supported/)
+  assert.match(auditReportsSource, /type="radio"/)
+  assert.match(auditReportsSource, /provider\.status === 'active'/)
+  assert.doesNotMatch(auditReportsSource, /<select/)
+  assert.doesNotMatch(auditReportsSource, /provider\.provider\s*[!=]==?\s*['"]notion['"]/
+  )
   assert.doesNotMatch(auditReportsSource, /selectedProvider\.provider\s*!==\s*'notion'/)
   assert.doesNotMatch(auditReportsSource, /selectedProvider\.provider\s*===\s*'notion'/)
+})
+
+test('keeps report actions in explicit report and mapping groups without spacing hacks', async () => {
+  assert.match(auditReportsSource, /tenant-audit__history-action-group/)
+  const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+  assert.doesNotMatch(styles, /tenant-audit__history-actions--primary[^\n]*nth-child/)
 })
 
 test('formats the calendar date from the browser local time', () => {
