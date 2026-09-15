@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 
 import {
   fetchAdminTenantIngestion,
+  fetchAdminTenantIngestionHistory,
   fetchLatestAdminTenantIngestion,
   launchAdminTenantIngestion,
-  supportsInitialIngestionProvider,
   type AdminInitialIngestion,
   type AdminInitialIngestionSource,
 } from '../api/adminTenantIngestions'
@@ -25,7 +25,6 @@ const POLLING_INTERVAL_MS = 5_000
 interface AdminTenantIngestionProps {
   apiBaseUrl: string | null
   tenantId: string
-  tenantSlug: string
   tenantStatus: string
   onSessionExpired: () => void
 }
@@ -40,18 +39,50 @@ function formatDate(value: string | null): string {
   }).format(date)
 }
 
-function formatDuration(startedAt: string, completedAt: string | null): string {
-  if (completedAt === null) return 'En cours'
-  const duration = new Date(completedAt).getTime() - new Date(startedAt).getTime()
-  if (!Number.isFinite(duration) || duration < 0) return 'Durée indisponible'
-  const seconds = Math.floor(duration / 1_000)
+function formatDuration(
+  seconds: number | null,
+  status: AdminInitialIngestion['status'],
+): string {
+  if (seconds === null) {
+    return isInitialIngestionActive(status) ? 'En cours' : 'Durée indisponible'
+  }
+  if (!Number.isSafeInteger(seconds) || seconds < 0) return 'Durée indisponible'
   const minutes = Math.floor(seconds / 60)
   if (minutes === 0) return `${seconds} s`
   return `${minutes} min ${seconds % 60} s`
 }
 
-function formatProvider(tenantSlug: string, providerType: string): string {
-  return `${tenantSlug} · ${providerType}`
+function formatProviderType(provider: string): string {
+  return provider.length === 0
+    ? 'Provider inconnu'
+    : `${provider.slice(0, 1).toUpperCase()}${provider.slice(1)}`
+}
+
+function formatProvider(provider: AdminProviderRecord): string {
+  return `${formatProviderType(provider.provider)} — ${provider.name}`
+}
+
+function formatHistoryProvider(
+  operation: AdminInitialIngestion,
+  providers: AdminProviderRecord[],
+): string {
+  const provider = providers.find((item) => item.id === operation.tenant_provider_record_id)
+  return provider === undefined
+    ? formatProviderType(operation.provider)
+    : formatProvider(provider)
+}
+
+function upsertOperation(
+  operations: AdminInitialIngestion[],
+  nextOperation: AdminInitialIngestion,
+): AdminInitialIngestion[] {
+  const index = operations.findIndex(
+    (operation) => operation.correlation_id === nextOperation.correlation_id,
+  )
+  if (index === -1) return [nextOperation, ...operations]
+  return operations.map((operation, operationIndex) => (
+    operationIndex === index ? nextOperation : operation
+  ))
 }
 
 function ProgressBar({
@@ -83,29 +114,42 @@ function ProgressBar({
   )
 }
 
-function SourceCard({ source }: { source: AdminInitialIngestionSource }) {
-  const expected = source.observed_record_count
+function CountSummary({
+  operation,
+}: {
+  operation: AdminInitialIngestion | AdminInitialIngestionSource
+}) {
+  return (
+    <div className="ingestion-count-summary">
+      <span>{operation.items_received} lus</span>
+      <span>{operation.items_processed} traités</span>
+      <span>{operation.items_inserted} insérés</span>
+      <span>{operation.items_duplicate} doublons</span>
+      <span>{operation.items_rejected} rejetés</span>
+      <span>{operation.items_not_attempted} non tentés</span>
+    </div>
+  )
+}
+
+function SourceDetail({ source }: { source: AdminInitialIngestionSource }) {
   return (
     <article className="ingestion-source">
       <div className="ingestion-source__header">
-        <h4>{source.source_name}</h4>
+        <div>
+          <h5>{source.source_name}</h5>
+          <code>{source.external_source_id}</code>
+        </div>
         <span className={`ingestion-status ingestion-status--${source.status}`}>
           {getInitialIngestionStatusLabel(source.status)}
         </span>
       </div>
-      <ProgressBar
-        expected={expected}
-        label={`Progression de ${source.source_name}`}
-        processed={source.items_processed}
-      />
-      <div className="ingestion-source__counts">
-        <span>{getProgressCountLabel(source.items_processed, expected)}</span>
-        <span>{source.items_inserted} insérés · {source.items_duplicate} doublons</span>
-      </div>
+      <CountSummary operation={source} />
       <dl className="ingestion-source__details">
+        <div><dt>Volume audité</dt><dd>{source.observed_record_count ?? '—'}</dd></div>
         <div><dt>Début</dt><dd>{formatDate(source.started_at)}</dd></div>
-        <div><dt>Durée</dt><dd>{source.started_at === null ? '—' : formatDuration(source.started_at, source.completed_at)}</dd></div>
-        {source.run_id !== null ? <div><dt>Dernier run</dt><dd>{source.run_id}</dd></div> : null}
+        <div><dt>Fin</dt><dd>{formatDate(source.completed_at)}</dd></div>
+        <div><dt>Run technique</dt><dd>{source.run_id ?? '—'}</dd></div>
+        <div><dt>Versions</dt><dd>{source.capture_contract_versions.join(', ') || '—'}</dd></div>
       </dl>
       {source.error_code !== null ? (
         <p className="ingestion-source__error" role="alert">Erreur : {source.error_code}</p>
@@ -114,25 +158,105 @@ function SourceCard({ source }: { source: AdminInitialIngestionSource }) {
   )
 }
 
+function OperationDetail({ operation }: { operation: AdminInitialIngestion }) {
+  return (
+    <div className="ingestion-history__detail">
+      <div className="ingestion-operation__progress-heading">
+        <h5>Progression globale</h5>
+        <span>{getProgressCountLabel(operation.items_processed, operation.items_expected)}</span>
+      </div>
+      <ProgressBar
+        expected={operation.items_expected}
+        label={`Progression de l’ingestion ${operation.correlation_id}`}
+        processed={operation.items_processed}
+      />
+      <CountSummary operation={operation} />
+      <dl className="ingestion-history__metadata">
+        <div><dt>Correlation ID</dt><dd>{operation.correlation_id}</dd></div>
+        <div><dt>Durée</dt><dd>{formatDuration(operation.duration_seconds, operation.status)}</dd></div>
+        <div><dt>Versions</dt><dd>{operation.capture_contract_versions.join(', ') || '—'}</dd></div>
+        <div><dt>Erreurs</dt><dd>{operation.error_codes.join(', ') || 'Aucune'}</dd></div>
+      </dl>
+      <div className="ingestion-history__sources">
+        <h5>Sources</h5>
+        <div className="ingestion-source-grid">
+          {operation.sources.map((source) => (
+            <SourceDetail key={source.external_source_id} source={source} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HistoryItem({
+  expanded,
+  operation,
+  providerLabel,
+  onToggle,
+}: {
+  expanded: boolean
+  operation: AdminInitialIngestion
+  providerLabel: string
+  onToggle: () => void
+}) {
+  return (
+    <article className="ingestion-history__item">
+      <div className="ingestion-history__row">
+        <div className="ingestion-history__identity">
+          <p className="provider-card__eyebrow">Ingestion {providerLabel}</p>
+          <h5>{formatDate(operation.started_at)}</h5>
+          <span className={`ingestion-status ingestion-status--${operation.status}`}>
+            {getInitialIngestionStatusLabel(operation.status)}
+          </span>
+        </div>
+        <div className="ingestion-history__metrics">
+          <span>{operation.sources_total} sources</span>
+          <CountSummary operation={operation} />
+          <span>Durée : {formatDuration(operation.duration_seconds, operation.status)}</span>
+        </div>
+        <button
+          aria-controls={`ingestion-detail-${operation.correlation_id}`}
+          aria-expanded={expanded}
+          className="secondary-button"
+          onClick={onToggle}
+          type="button"
+        >
+          {expanded ? 'Masquer le détail' : 'Voir détail'}
+        </button>
+      </div>
+      {expanded ? (
+        <div id={`ingestion-detail-${operation.correlation_id}`}>
+          <OperationDetail operation={operation} />
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
 export function AdminTenantIngestion({
   apiBaseUrl,
   tenantId,
-  tenantSlug,
   tenantStatus,
   onSessionExpired,
 }: AdminTenantIngestionProps) {
   const [providers, setProviders] = useState<AdminProviderRecord[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState('')
   const [providerState, setProviderState] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [historyState, setHistoryState] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [operationState, setOperationState] = useState<'idle' | 'loading' | 'none' | 'error'>('idle')
+  const [history, setHistory] = useState<AdminInitialIngestion[]>([])
   const [operation, setOperation] = useState<AdminInitialIngestion | null>(null)
+  const [expandedCorrelationId, setExpandedCorrelationId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLaunching, setIsLaunching] = useState(false)
   const selectedProviderIdRef = useRef(selectedProviderId)
+  const operationRef = useRef<AdminInitialIngestion | null>(null)
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
   const isSelectedProviderSupported = selectedProvider !== null
-    && supportsInitialIngestionProvider(selectedProvider.provider)
+    && selectedProvider.status === 'active'
+    && selectedProvider.initial_ingestion_supported
 
   useEffect(() => {
     selectedProviderIdRef.current = selectedProviderId
@@ -143,13 +267,17 @@ export function AdminTenantIngestion({
       setProviders([])
       setSelectedProviderId('')
       setOperation(null)
+      operationRef.current = null
+      setHistory([])
       setProviderState('loaded')
+      setHistoryState('loaded')
       return undefined
     }
     const abortController = new AbortController()
     let isCurrent = true
     setProviderState('loading')
     setOperation(null)
+    operationRef.current = null
     void fetchAdminTenantProviders(apiBaseUrl, tenantId, abortController.signal).then((result) => {
       if (!isCurrent) return
       if (result.status === 'unauthenticated') {
@@ -162,9 +290,11 @@ export function AdminTenantIngestion({
       }
       setProviders(result.providers)
       setSelectedProviderId((currentId) => {
-        const nextProviderId = result.providers.some((provider) => provider.id === currentId)
+        const currentStillExists = result.providers.some((provider) => provider.id === currentId)
+        const firstActive = result.providers.find((provider) => provider.status === 'active')
+        const nextProviderId = currentStillExists
           ? currentId
-          : (result.providers[0]?.id ?? '')
+          : (firstActive?.id ?? result.providers[0]?.id ?? '')
         selectedProviderIdRef.current = nextProviderId
         return nextProviderId
       })
@@ -177,13 +307,47 @@ export function AdminTenantIngestion({
   }, [apiBaseUrl, onSessionExpired, tenantId, tenantStatus])
 
   useEffect(() => {
+    if (tenantStatus !== 'active') return undefined
+    const abortController = new AbortController()
+    let isCurrent = true
+    setHistory([])
+    setHistoryState('loading')
+    void fetchAdminTenantIngestionHistory(apiBaseUrl, tenantId, abortController.signal).then((result) => {
+      if (!isCurrent) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setHistoryState('error')
+        return
+      }
+      const currentOperation = operationRef.current
+      const currentTenantOperation = currentOperation?.tenant_id === tenantId
+        ? currentOperation
+        : null
+      setHistory(currentTenantOperation === null
+        ? result.operations
+        : upsertOperation(result.operations, currentTenantOperation))
+      setHistoryState('loaded')
+    })
+    return () => {
+      isCurrent = false
+      abortController.abort()
+    }
+  }, [apiBaseUrl, onSessionExpired, tenantId, tenantStatus])
+
+  useEffect(() => {
     if (selectedProvider === null || tenantStatus !== 'active') {
       setOperationState('idle')
+      setOperation(null)
       return undefined
     }
     const abortController = new AbortController()
     let isCurrent = true
+    operationRef.current = null
     setOperation(null)
+    setExpandedCorrelationId(null)
     setErrorMessage(null)
     setOperationState('loading')
     void fetchLatestAdminTenantIngestion(
@@ -198,7 +362,12 @@ export function AdminTenantIngestion({
         return
       }
       if (result.status === 'loaded') {
+        operationRef.current = result.operation
         setOperation(result.operation)
+        setHistory((current) => upsertOperation(current, result.operation))
+        if (isInitialIngestionActive(result.operation.status)) {
+          setExpandedCorrelationId(result.operation.correlation_id)
+        }
         setOperationState('idle')
       } else if (result.status === 'not_found') {
         setOperationState('none')
@@ -231,7 +400,9 @@ export function AdminTenantIngestion({
           return
         }
         if (result.status === 'loaded') {
+          operationRef.current = result.operation
           setOperation(result.operation)
+          setHistory((current) => upsertOperation(current, result.operation))
           setErrorMessage(null)
         } else {
           setErrorMessage('La mise à jour de l’ingestion est momentanément indisponible.')
@@ -246,12 +417,8 @@ export function AdminTenantIngestion({
   }, [apiBaseUrl, onSessionExpired, operation, selectedProvider, tenantId])
 
   async function launchIngestion() {
-    if (
-      selectedProvider === null
-      || !supportsInitialIngestionProvider(selectedProvider.provider)
-      || isLaunching
-      || (operation !== null && isInitialIngestionActive(operation.status))
-    ) return
+    if (selectedProvider === null || !isSelectedProviderSupported || isLaunching) return
+    if (operation !== null && isInitialIngestionActive(operation.status)) return
     const launchedProviderId = selectedProvider.id
     setIsLaunching(true)
     setErrorMessage(null)
@@ -259,7 +426,6 @@ export function AdminTenantIngestion({
       apiBaseUrl,
       tenantId,
       launchedProviderId,
-      selectedProvider.provider,
     )
     setIsLaunching(false)
     if (!isLaunchResponseCurrent(selectedProviderIdRef.current, launchedProviderId)) return
@@ -268,7 +434,10 @@ export function AdminTenantIngestion({
       return
     }
     if (result.status === 'loaded') {
+      operationRef.current = result.operation
       setOperation(result.operation)
+      setHistory((current) => upsertOperation(current, result.operation))
+      setExpandedCorrelationId(result.operation.correlation_id)
       setOperationState('idle')
       return
     }
@@ -289,18 +458,9 @@ export function AdminTenantIngestion({
   return (
     <section aria-labelledby="tenant-ingestion-title" className="tenant-ingestion">
       <div className="tenant-ingestion__heading">
-        {selectedProvider !== null ? (
-          <button
-            className="primary-button"
-            disabled={isLaunching || !isSelectedProviderSupported || selectedProvider.status !== 'active' || (operation !== null && isInitialIngestionActive(operation.status))}
-            onClick={() => void launchIngestion()}
-            type="button"
-          >
-            {isLaunching ? 'Lancement…' : 'Lancer l’ingestion'}
-          </button>
-        ) : null}
         <div>
           <h3 id="tenant-ingestion-title">Ingestion</h3>
+          <p>Un run correspond à un provider et reste consultable dans l’historique.</p>
         </div>
       </div>
 
@@ -310,53 +470,79 @@ export function AdminTenantIngestion({
         <p className="ingestion-error" role="alert">Les providers ne peuvent pas être chargés pour le moment.</p>
       ) : providers.length === 0 ? (
         <p className="ingestion-empty">Aucun provider configuré pour ce tenant.</p>
-      ) : selectedProvider === null ? null : (
+      ) : (
         <>
-          <label className="ingestion-provider-select">
-            Provider record concerné
-            <select
-              disabled={isLaunching}
-              onChange={(event) => {
-                selectedProviderIdRef.current = event.target.value
-                setSelectedProviderId(event.target.value)
-              }}
-              value={selectedProviderId}
+          <div className="ingestion-launcher">
+            <label className="ingestion-provider-select">
+              Provider à ingérer
+              <select
+                disabled={isLaunching}
+                onChange={(event) => {
+                  selectedProviderIdRef.current = event.target.value
+                  setSelectedProviderId(event.target.value)
+                }}
+                value={selectedProviderId}
+              >
+                {providers.map((provider) => (
+                  <option
+                    disabled={provider.status !== 'active' || !provider.initial_ingestion_supported}
+                    key={provider.id}
+                    value={provider.id}
+                  >
+                    {formatProvider(provider)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="primary-button"
+              disabled={isLaunching || !isSelectedProviderSupported || (operation !== null && isInitialIngestionActive(operation.status))}
+              onClick={() => void launchIngestion()}
+              type="button"
             >
-              {providers.map((provider) => <option key={provider.id} value={provider.id}>{formatProvider(tenantSlug, provider.provider)}</option>)}
-            </select>
-          </label>
-          {!isSelectedProviderSupported ? (
-            <p className="ingestion-notice">L’ingestion initiale n’est pas encore disponible pour ce provider.</p>
+              {isLaunching ? 'Lancement…' : 'Lancer l’ingestion'}
+            </button>
+          </div>
+          {selectedProvider !== null && !isSelectedProviderSupported ? (
+            <p className="ingestion-notice">
+              Ce provider est visible mais indisponible pour l’ingestion initiale.
+            </p>
           ) : null}
           {errorMessage !== null ? <p className="ingestion-error" role="alert">{errorMessage}</p> : null}
           {operationState === 'loading' ? <p className="ingestion-empty">Chargement de la dernière ingestion…</p> : null}
           {operationState === 'none' ? <p className="ingestion-empty">Aucune ingestion n’a encore été lancée pour ce provider.</p> : null}
-          {operation !== null ? (
-            <div className="ingestion-operation">
-              <div className="ingestion-operation__summary">
-                <div>
-                  <p className="provider-card__eyebrow">Statut global</p>
-                  <strong className={`ingestion-status ingestion-status--${operation.status}`}>{getInitialIngestionStatusLabel(operation.status)}</strong>
-                </div>
-                <div><span>Début</span><strong>{formatDate(operation.started_at)}</strong></div>
-                <div><span>Durée</span><strong>{formatDuration(operation.started_at, operation.completed_at)}</strong></div>
-                <div><span>Sources</span><strong>{operation.sources_total}</strong></div>
-              </div>
-              <div className="ingestion-operation__progress">
-                <div className="ingestion-operation__progress-heading">
-                  <h4>Progression globale</h4>
-                  <span>{getProgressCountLabel(operation.items_processed, operation.items_expected)}</span>
-                </div>
-                <ProgressBar expected={operation.items_expected} label="Progression globale" processed={operation.items_processed} />
-                <p>{operation.items_inserted} insérés · {operation.items_duplicate} doublons · {operation.items_rejected} rejetés</p>
-              </div>
-              <div className="ingestion-source-grid">
-                {operation.sources.map((source) => <SourceCard key={source.external_source_id} source={source} />)}
-              </div>
-            </div>
-          ) : null}
         </>
       )}
+
+      <section aria-labelledby="ingestion-history-title" className="ingestion-history">
+        <div className="ingestion-history__heading">
+          <div>
+            <p className="provider-card__eyebrow">Runs persistés</p>
+            <h4 id="ingestion-history-title">Historique des ingestions</h4>
+          </div>
+        </div>
+        {historyState === 'loading' ? (
+          <p className="ingestion-empty">Chargement de l’historique…</p>
+        ) : historyState === 'error' ? (
+          <p className="ingestion-error" role="alert">L’historique des ingestions ne peut pas être chargé pour le moment.</p>
+        ) : history.length === 0 ? (
+          <p className="ingestion-empty">Aucune ingestion persistée pour ce tenant.</p>
+        ) : (
+          <div className="ingestion-history__list">
+            {history.map((historyOperation) => (
+              <HistoryItem
+                expanded={expandedCorrelationId === historyOperation.correlation_id}
+                key={historyOperation.correlation_id}
+                onToggle={() => setExpandedCorrelationId((current) => (
+                  current === historyOperation.correlation_id ? null : historyOperation.correlation_id
+                ))}
+                operation={historyOperation}
+                providerLabel={formatHistoryProvider(historyOperation, providers)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </section>
   )
 }

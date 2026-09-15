@@ -1365,7 +1365,7 @@ button.navigation__link {
 }
 
 .tenant-ingestion__heading > div {
-  order: 2;
+  order: initial;
 }
 
 .tenant-ingestion__heading h3,
@@ -1388,9 +1388,18 @@ button.navigation__link {
 
 .tenant-ingestion__heading .primary-button { margin-top: 0; }
 
-.ingestion-provider-select {
-  max-width: 420px;
+.ingestion-launcher {
   margin-top: 22px;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.ingestion-provider-select {
+  min-width: 0;
+  max-width: 520px;
+  flex: 1 1 360px;
+  margin-top: 0;
   display: grid;
   gap: 7px;
   color: var(--color-text-body);
@@ -1436,6 +1445,133 @@ button.navigation__link {
   margin-top: 20px;
   display: grid;
   gap: 18px;
+}
+
+.ingestion-history {
+  margin-top: 28px;
+}
+
+.ingestion-history__heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ingestion-history__heading h4,
+.ingestion-history__detail h5,
+.ingestion-history__sources h5 {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.ingestion-history__heading h4 { font-size: 17px; }
+
+.ingestion-history__list {
+  display: grid;
+  gap: 10px;
+}
+
+.ingestion-history__item {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.ingestion-history__row {
+  min-width: 0;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1.15fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.ingestion-history__identity,
+.ingestion-history__metrics {
+  min-width: 0;
+}
+
+.ingestion-history__identity {
+  display: grid;
+  gap: 5px;
+}
+
+.ingestion-history__identity .provider-card__eyebrow { margin-bottom: 0; }
+
+.ingestion-history__identity h5 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ingestion-history__metrics {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.ingestion-history__metrics > span:first-child {
+  color: var(--color-text-body);
+  font-weight: 700;
+}
+
+.ingestion-count-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.ingestion-history__detail {
+  padding: 18px 16px 16px;
+  border-top: 1px solid var(--color-border);
+  background: #fafbfc;
+}
+
+.ingestion-history__detail > .ingestion-count-summary {
+  margin-top: 12px;
+}
+
+.ingestion-history__metadata {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ingestion-history__metadata > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.ingestion-history__metadata dt,
+.ingestion-history__metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ingestion-history__metadata dt {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.ingestion-history__metadata dd {
+  color: var(--color-text-body);
+  font-size: 12px;
+}
+
+.ingestion-history__sources {
+  margin-top: 20px;
+}
+
+.ingestion-history__sources h5 {
+  margin-bottom: 10px;
+  font-size: 14px;
 }
 
 .ingestion-operation__summary {
@@ -1543,6 +1679,21 @@ button.navigation__link {
 }
 
 .ingestion-source h4 { font-size: 14px; overflow-wrap: anywhere; }
+
+.ingestion-source h5 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ingestion-source code {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 
 .ingestion-source__counts {
   margin-top: 10px;
@@ -1988,12 +2139,34 @@ button.navigation__link {
     width: 100%;
   }
 
+  .ingestion-launcher {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ingestion-launcher .primary-button {
+    width: 100%;
+  }
+
   .ingestion-provider-select {
     max-width: none;
   }
 
   .ingestion-operation__summary,
   .ingestion-source-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ingestion-history__row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .ingestion-history__row .secondary-button {
+    width: 100%;
+  }
+
+  .ingestion-history__metadata {
     grid-template-columns: 1fr;
   }
 

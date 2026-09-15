@@ -147,7 +147,6 @@ export function AdminTenantWorkspacePage({
           apiBaseUrl={apiBaseUrl}
           onSessionExpired={onSessionExpired}
           tenantId={pageState.tenant.id}
-          tenantSlug={pageState.tenant.slug}
           tenantStatus={pageState.tenant.status}
         />
       )}

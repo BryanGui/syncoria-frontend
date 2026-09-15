@@ -24,6 +24,7 @@ export interface AdminInitialIngestionSource {
   items_rejected: number
   items_not_attempted: number
   error_code: string | null
+  capture_contract_versions: string[]
 }
 
 export interface AdminInitialIngestion {
@@ -45,6 +46,9 @@ export interface AdminInitialIngestion {
   sources_completed: number
   sources_in_progress: number
   sources_error: number
+  duration_seconds: number | null
+  error_codes: string[]
+  capture_contract_versions: string[]
   sources: AdminInitialIngestionSource[]
 }
 
@@ -52,9 +56,9 @@ export type AdminInitialIngestionResult =
   | { status: 'loaded'; operation: AdminInitialIngestion }
   | { status: 'not_found' | 'unauthenticated' | 'conflict' | 'unsupported' | 'error' }
 
-export function supportsInitialIngestionProvider(provider: string): boolean {
-  return provider === 'notion'
-}
+export type AdminInitialIngestionHistoryResult =
+  | { status: 'loaded'; operations: AdminInitialIngestion[] }
+  | { status: 'unauthenticated' | 'error' }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -62,6 +66,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.every((item) => typeof item === 'string' && item.length > 0)
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -95,6 +104,7 @@ function parseSource(value: unknown): AdminInitialIngestionSource | null {
     || !isNullableString(value.started_at)
     || !isNullableString(value.completed_at)
     || !isNullableString(value.error_code)
+    || !isStringArray(value.capture_contract_versions)
     || (value.observed_record_count !== null && !isNonNegativeInteger(value.observed_record_count))
     || countFields.some((field) => !isNonNegativeInteger(value[field]))
   ) return null
@@ -114,6 +124,7 @@ function parseSource(value: unknown): AdminInitialIngestionSource | null {
     items_rejected: value.items_rejected as number,
     items_not_attempted: value.items_not_attempted as number,
     error_code: value.error_code,
+    capture_contract_versions: value.capture_contract_versions,
   }
 }
 
@@ -140,6 +151,9 @@ function parseOperation(value: unknown): AdminInitialIngestion | null {
     || !isStatus(value.status)
     || typeof value.started_at !== 'string'
     || !isNullableString(value.completed_at)
+    || (value.duration_seconds !== null && !isNonNegativeInteger(value.duration_seconds))
+    || !isStringArray(value.error_codes)
+    || !isStringArray(value.capture_contract_versions)
     || (value.items_expected !== null && !isNonNegativeInteger(value.items_expected))
     || countFields.some((field) => !isNonNegativeInteger(value[field]))
     || sources.some((source) => source === null)
@@ -165,12 +179,19 @@ function parseOperation(value: unknown): AdminInitialIngestion | null {
     sources_completed: value.sources_completed as number,
     sources_in_progress: value.sources_in_progress as number,
     sources_error: value.sources_error as number,
+    duration_seconds: value.duration_seconds as number | null,
+    error_codes: value.error_codes,
+    capture_contract_versions: value.capture_contract_versions,
     sources: sources as AdminInitialIngestionSource[],
   }
 }
 
 function ingestionEndpoint(tenantId: string, providerRecordId: string, suffix = ''): string {
   return `/admin/tenants/${encodeURIComponent(tenantId)}/providers/${encodeURIComponent(providerRecordId)}/ingestions${suffix}`
+}
+
+function ingestionHistoryEndpoint(tenantId: string): string {
+  return `/admin/tenants/${encodeURIComponent(tenantId)}/ingestions`
 }
 
 function logFailure(
@@ -249,15 +270,48 @@ export function fetchAdminTenantIngestion(
   return requestOperation(apiBaseUrl, tenantId, providerRecordId, 'GET', `/${encodeURIComponent(correlationId)}`, signal, request, logger)
 }
 
+export async function fetchAdminTenantIngestionHistory(
+  apiBaseUrl: string | null,
+  tenantId: string,
+  signal?: AbortSignal,
+  request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminInitialIngestionHistoryResult> {
+  if (apiBaseUrl === null) return { status: 'error' }
+  try {
+    const response = await request(`${apiBaseUrl}${ingestionHistoryEndpoint(tenantId)}`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+      method: 'GET',
+      signal,
+    })
+    if (response.status === 401) return { status: 'unauthenticated' }
+    if (!response.ok) {
+      logFailure(logger, 'load_initial_ingestion_history', response.status)
+      return { status: 'error' }
+    }
+    const payload: unknown = await response.json()
+    if (!Array.isArray(payload)) return { status: 'error' }
+    const operations = payload.map(parseOperation)
+    if (operations.some((operation) => operation === null)) return { status: 'error' }
+    const retained = operations as AdminInitialIngestion[]
+    if (retained.some((operation) => operation.tenant_id !== tenantId)) {
+      return { status: 'error' }
+    }
+    return { status: 'loaded', operations: retained }
+  } catch (error: unknown) {
+    if (!signal?.aborted) logFailure(logger, 'load_initial_ingestion_history', undefined, error)
+    return { status: 'error' }
+  }
+}
+
 export function launchAdminTenantIngestion(
   apiBaseUrl: string | null,
   tenantId: string,
   providerRecordId: string,
-  provider: string,
   signal?: AbortSignal,
   request: typeof fetch = fetch,
   logger: TechnicalLogger = technicalLogger,
 ): Promise<AdminInitialIngestionResult> {
-  if (!supportsInitialIngestionProvider(provider)) return Promise.resolve({ status: 'unsupported' })
   return requestOperation(apiBaseUrl, tenantId, providerRecordId, 'POST', '', signal, request, logger)
 }
