@@ -118,6 +118,7 @@ async function openAudit(page: Page, options: {
       tenant_id: tenantId,
       provider: 'notion',
       audit_supported: true,
+      initial_ingestion_supported: true,
       credential_type: 'integration_token',
       name: 'Notion A',
       status: 'active',
@@ -133,6 +134,7 @@ async function openAudit(page: Page, options: {
     }, {
       id: notionBId, tenant_id: tenantId, provider: 'notion',
       audit_supported: true,
+      initial_ingestion_supported: true,
       credential_type: 'integration_token', name: 'Notion B', status: 'active', configuration: {},
       credential_configured: true, created_at: '2026-08-14T08:00:00Z', updated_at: '2026-08-14T08:00:00Z',
       last_verified_at: null, last_verification_status: null, last_verification_http_status: null,
@@ -140,6 +142,7 @@ async function openAudit(page: Page, options: {
     }, {
       id: unsupportedProviderId, tenant_id: tenantId, provider: 'n8n',
       audit_supported: false,
+      initial_ingestion_supported: false,
       credential_type: 'api_key', name: 'n8n synthétique', status: 'active',
       configuration: { base_url: 'https://automation.example.test' }, credential_configured: true,
       created_at: '2026-08-15T08:00:00Z', updated_at: '2026-08-15T08:00:00Z',

@@ -6,7 +6,6 @@ import {
   fetchAdminTenantIngestionHistory,
   fetchLatestAdminTenantIngestion,
   launchAdminTenantIngestion,
-  supportsInitialIngestionProvider,
 } from '../src/api/adminTenantIngestions.ts'
 
 
@@ -105,7 +104,7 @@ test('treats a missing latest operation as an empty state and preserves session 
 test('launches without client-side source identifiers and follows the returned correlation', async () => {
   let launchOptions
   const launch = await launchAdminTenantIngestion(
-    'https://api.example.com', tenantId, providerRecordId, 'notion', undefined,
+    'https://api.example.com', tenantId, providerRecordId, undefined,
     async (_url, options) => {
       launchOptions = options
       return Response.json(operation, { status: 202 })
@@ -126,19 +125,17 @@ test('launches without client-side source identifiers and follows the returned c
   assert.equal(statusUrl, `https://api.example.com/admin/tenants/${tenantId}/providers/${providerRecordId}/ingestions/${correlationId}`)
 })
 
-test('refuses unsupported providers before any launch POST is sent', async () => {
+test('does not make launch compatibility decisions from a provider name', async () => {
   let requestCount = 0
   const result = await launchAdminTenantIngestion(
-    'https://api.example.com', tenantId, providerRecordId, 'n8n', undefined,
+    'https://api.example.com', tenantId, providerRecordId, undefined,
     async () => {
       requestCount += 1
       return Response.json(operation, { status: 202 })
     },
   )
-  assert.equal(supportsInitialIngestionProvider('notion'), true)
-  assert.equal(supportsInitialIngestionProvider('n8n'), false)
-  assert.deepEqual(result, { status: 'unsupported' })
-  assert.equal(requestCount, 0)
+  assert.deepEqual(result, { status: 'loaded', operation })
+  assert.equal(requestCount, 1)
 })
 
 test('allowlists ingestion fields and rejects raw or inconsistent payloads', async () => {

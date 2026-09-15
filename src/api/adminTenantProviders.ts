@@ -15,6 +15,7 @@ export interface AdminProviderRecord {
   tenant_id: string
   provider: AdminProvider
   audit_supported: boolean
+  initial_ingestion_supported: boolean
   credential_type: string | null
   name: string
   status: string
@@ -118,6 +119,7 @@ function parseProviderRecord(value: unknown): AdminProviderRecord | null {
     || typeof value.status !== 'string'
     || configuration === null
     || typeof value.audit_supported !== 'boolean'
+    || typeof value.initial_ingestion_supported !== 'boolean'
     || typeof value.credential_configured !== 'boolean'
     || typeof value.created_at !== 'string'
     || typeof value.updated_at !== 'string'
@@ -133,6 +135,7 @@ function parseProviderRecord(value: unknown): AdminProviderRecord | null {
     tenant_id: value.tenant_id,
     provider: value.provider,
     audit_supported: value.audit_supported,
+    initial_ingestion_supported: value.initial_ingestion_supported,
     credential_type: value.credential_type,
     name: value.name,
     status: value.status,

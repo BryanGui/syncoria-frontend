@@ -19,6 +19,7 @@ const notionRecord = {
   tenant_id: tenantId,
   provider: 'notion',
   audit_supported: true,
+  initial_ingestion_supported: true,
   credential_type: 'integration_token',
   name: 'Notion recrutement',
   status: 'active',
@@ -79,6 +80,7 @@ test('preserves the backend audit capability for each provider record', async ()
     id: '33333333-3333-4333-8333-333333333333',
     provider: 'n8n',
     audit_supported: false,
+    initial_ingestion_supported: false,
   }
   const result = await fetchAdminTenantProviders(
     'https://api.example.com', tenantId, undefined,
@@ -86,6 +88,7 @@ test('preserves the backend audit capability for each provider record', async ()
   )
   assert.equal(result.status, 'loaded')
   assert.deepEqual(result.providers.map((provider) => provider.audit_supported), [true, false])
+  assert.deepEqual(result.providers.map((provider) => provider.initial_ingestion_supported), [true, false])
 })
 
 test('parses and preserves known, unknown, and null credential types', async () => {
@@ -128,6 +131,7 @@ test('creates Notion and n8n using only their expected non-sensitive configurati
       ...notionRecord,
       provider: input.provider,
       audit_supported: input.provider === 'notion',
+      initial_ingestion_supported: input.provider === 'notion',
       credential_type: input.credential_type,
       name: input.name,
       configuration: input.configuration,

@@ -4,6 +4,8 @@ import test from 'node:test'
 
 
 const component = await readFile(new URL('../src/components/AdminTenantIngestion.tsx', import.meta.url), 'utf8')
+const ingestionApi = await readFile(new URL('../src/api/adminTenantIngestions.ts', import.meta.url), 'utf8')
+const providerApi = await readFile(new URL('../src/api/adminTenantProviders.ts', import.meta.url), 'utf8')
 const ingestionModel = await readFile(new URL('../src/tenantIngestion.ts', import.meta.url), 'utf8')
 const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
 const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
@@ -40,9 +42,21 @@ test('renders real global and source counters without data leaks or Novalia fixt
 
 test('disables unsupported providers and ignores stale launch responses', () => {
   assert.match(component, /!isSelectedProviderSupported/)
+  assert.match(component, /selectedProvider\.initial_ingestion_supported/)
+  assert.match(component, /!provider\.initial_ingestion_supported/)
   assert.match(component, /disabled=\{isLaunching\}/)
   assert.match(component, /isLaunchResponseCurrent\(selectedProviderIdRef\.current, launchedProviderId\)/)
   assert.match(component, /Ce provider est visible mais indisponible/)
+})
+
+test('uses the backend ingestion capability without a provider-name hardcode', () => {
+  assert.match(providerApi, /initial_ingestion_supported: boolean/)
+  assert.match(providerApi, /value\.initial_ingestion_supported/)
+  assert.doesNotMatch(ingestionApi, /supportsInitialIngestionProvider/)
+  assert.doesNotMatch(
+    ingestionApi,
+    /provider\s*(?:===|!==|==|!=)\s*['"]notion['"]/
+  )
 })
 
 test('keeps the dashboard responsive on mobile widths', () => {

@@ -5,7 +5,6 @@ import {
   fetchAdminTenantIngestionHistory,
   fetchLatestAdminTenantIngestion,
   launchAdminTenantIngestion,
-  supportsInitialIngestionProvider,
   type AdminInitialIngestion,
   type AdminInitialIngestionSource,
 } from '../api/adminTenantIngestions'
@@ -257,7 +256,7 @@ export function AdminTenantIngestion({
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
   const isSelectedProviderSupported = selectedProvider !== null
     && selectedProvider.status === 'active'
-    && supportsInitialIngestionProvider(selectedProvider.provider)
+    && selectedProvider.initial_ingestion_supported
 
   useEffect(() => {
     selectedProviderIdRef.current = selectedProviderId
@@ -427,7 +426,6 @@ export function AdminTenantIngestion({
       apiBaseUrl,
       tenantId,
       launchedProviderId,
-      selectedProvider.provider,
     )
     setIsLaunching(false)
     if (!isLaunchResponseCurrent(selectedProviderIdRef.current, launchedProviderId)) return
@@ -487,7 +485,7 @@ export function AdminTenantIngestion({
               >
                 {providers.map((provider) => (
                   <option
-                    disabled={provider.status !== 'active' || !supportsInitialIngestionProvider(provider.provider)}
+                    disabled={provider.status !== 'active' || !provider.initial_ingestion_supported}
                     key={provider.id}
                     value={provider.id}
                   >

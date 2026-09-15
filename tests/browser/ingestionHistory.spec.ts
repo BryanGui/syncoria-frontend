@@ -7,11 +7,18 @@ const firstCorrelationId = '33333333-3333-4333-8333-333333333333'
 const secondCorrelationId = '66666666-6666-4666-8666-666666666666'
 const prefix = `/admin/tenants/${tenantId}`
 
-const provider = (id: string, type: 'notion' | 'n8n', name: string, auditSupported: boolean) => ({
+const provider = (
+  id: string,
+  type: 'notion' | 'n8n',
+  name: string,
+  auditSupported: boolean,
+  initialIngestionSupported: boolean,
+) => ({
   id,
   tenant_id: tenantId,
   provider: type,
   audit_supported: auditSupported,
+  initial_ingestion_supported: initialIngestionSupported,
   credential_type: type === 'notion' ? 'integration_token' : 'api_key',
   name,
   status: 'active',
@@ -88,8 +95,8 @@ async function openIngestion(page: Page): Promise<{ requests: string[] }> {
     if (url.pathname === prefix) return route.fulfill({ json: tenant })
     if (url.pathname === `${prefix}/providers`) {
       return route.fulfill({ json: [
-        provider(notionId, 'notion', 'Notion Novalia', true),
-        provider(automationId, 'n8n', 'Automatisation', false),
+        provider(notionId, 'notion', 'Notion Novalia', true, true),
+        provider(automationId, 'n8n', 'Automatisation', false, false),
       ] })
     }
     if (url.pathname === `${prefix}/ingestions` && route.request().method() === 'GET') {
