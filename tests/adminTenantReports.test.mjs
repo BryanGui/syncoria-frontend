@@ -124,6 +124,12 @@ test('uses the backend audit capability instead of a provider-specific launcher 
   assert.doesNotMatch(auditReportsSource, /selectedProvider\.provider\s*===\s*'notion'/)
 })
 
+test('restores only active audit operations in the launcher', () => {
+  assert.match(auditReportsSource, /function isActiveAuditOperation\(operation: AdminProviderAuditOperation\)/)
+  assert.match(auditReportsSource, /latest\.status === 'loaded' && isActiveAuditOperation\(latest\.operation\)/)
+  assert.doesNotMatch(auditReportsSource, /Ce titre sera visible dans l’historique et le rapport\./)
+})
+
 test('keeps report actions in explicit report and mapping groups without spacing hacks', async () => {
   assert.match(auditReportsSource, /tenant-audit__history-action-group/)
   const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')

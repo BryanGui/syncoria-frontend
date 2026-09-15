@@ -75,6 +75,7 @@ async function openAudit(page: Page, options: {
   reportsRefreshFails?: boolean
   nullDecision?: boolean
   latestTitle?: string
+  latestStatus?: 'completed' | 'failed'
   legacyReport?: boolean
 } = {}) {
   await page.addInitScript(() => {
@@ -159,7 +160,7 @@ async function openAudit(page: Page, options: {
         || options.auditScenario === 'timer'
         || options.auditScenario === 'conflict' && latestCallCount === 2
       if (options.latestTitle) return route.fulfill({
-        json: { ...auditOperation('completed'), display_title: options.latestTitle },
+        json: { ...auditOperation(options.latestStatus ?? 'completed'), display_title: options.latestTitle },
       })
       return route.fulfill({
         json: hasActiveLatest ? {
@@ -456,13 +457,20 @@ test('does not render a permanent selected-report panel', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Audit sélectionné', exact: true })).toHaveCount(0)
 })
 
-test('keeps the next audit title independent from the latest audit title', async ({ page }) => {
+test('does not restore a completed latest audit as the current state', async ({ page }) => {
   await openAudit(page, { latestTitle: 'Ancien titre du dernier audit' })
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
   await launcher.locator('.tenant-audit__provider-option').filter({ hasText: 'Notion B' }).getByRole('radio').check()
   await expect(launcher.getByLabel('Titre de l’audit')).toHaveValue(/Audit Notion — \d{4}-\d{2}-\d{2}/)
   await expect(launcher.getByLabel('Titre de l’audit')).not.toHaveValue('Ancien titre du dernier audit')
-  await expect(launcher).toContainText('État : Terminé')
+  await expect(launcher.locator('.tenant-audit__launcher-status')).toHaveCount(0)
+})
+
+test('does not restore a failed latest audit as the current state', async ({ page }) => {
+  await openAudit(page, { latestTitle: 'Ancien audit en échec', latestStatus: 'failed' })
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
+  await expect(launcher.locator('.tenant-audit__launcher-status')).toHaveCount(0)
+  await expect(launcher).not.toContainText('Échec de l’audit')
 })
 
 test('keeps report actions available for a legacy report without audit references', async ({ page }) => {
@@ -641,6 +649,16 @@ test('failed audit stops polling and allows a new launch', async ({ page }) => {
   const pollCount = requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET').length
   await page.waitForTimeout(2700)
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(pollCount)
+})
+
+test('does not restore a terminal audit after returning to the Audit tab', async ({ page }) => {
+  await openAudit(page, { auditScenario: 'launch' })
+  const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
+  await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
+  await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Ingestion', exact: true }).click()
+  await page.getByRole('button', { name: 'Audit & cartographie', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Lancement de l’audit', exact: true }).locator('.tenant-audit__launcher-status')).toHaveCount(0)
 })
 
 test('keeps report history visible when the post-completion refresh fails', async ({ page }) => {
