@@ -18,6 +18,7 @@ interface TenantWorkspaceProps {
   adminReports?: ReactNode
   adminIntegration?: ReactNode
   adminIngestion?: ReactNode
+  adminDataIntegration?: ReactNode
   lifecycleControls?: ReactNode
 }
 
@@ -25,6 +26,7 @@ export function TenantWorkspace({
   adminReports,
   adminIntegration,
   adminIngestion,
+  adminDataIntegration,
   lifecycleControls,
   tenant,
   tenantLabel,
@@ -119,9 +121,11 @@ export function TenantWorkspace({
             ) : activeIntegrationSection === 'Ingestion' ? (
               adminIngestion
             ) : (
-              <div className="tenant-workspace__empty">
-                <p>Cette étape sera disponible lorsque les données brutes pourront être intégrées au modèle métier.</p>
-              </div>
+              adminDataIntegration ?? (
+                <div className="tenant-workspace__empty">
+                  <p>Cette étape sera disponible lorsque les données brutes pourront être intégrées au modèle métier.</p>
+                </div>
+              )
             )}
           </div>
         </section>

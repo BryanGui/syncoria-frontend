@@ -10,6 +10,7 @@ import {
 import { AdminTenantReports } from '../components/AdminTenantReports'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { AdminTenantIngestion } from '../components/AdminTenantIngestion'
+import { AdminTenantDataIntegration } from '../components/AdminTenantDataIntegration'
 import { TenantWorkspace } from '../components/TenantWorkspace'
 interface AdminTenantWorkspacePageProps {
   apiBaseUrl: string | null
@@ -142,6 +143,15 @@ export function AdminTenantWorkspacePage({
 
   return (
     <TenantWorkspace
+      adminDataIntegration={(
+        <AdminTenantDataIntegration
+          apiBaseUrl={apiBaseUrl}
+          onSessionExpired={onSessionExpired}
+          tenantId={pageState.tenant.id}
+          tenantLabel={pageState.tenant.name}
+          tenantStatus={pageState.tenant.status}
+        />
+      )}
       adminIngestion={(
         <AdminTenantIngestion
           apiBaseUrl={apiBaseUrl}
