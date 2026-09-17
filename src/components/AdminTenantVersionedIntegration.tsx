@@ -180,7 +180,7 @@ function DdlLibrary({
       {loadState === 'loaded' && ddls.length > 0 ? (
         <div aria-label="Bibliothèque DDL" className="versioned-integration__ddl-list">
           {ddls.map((ddl) => (
-            <div className={`versioned-integration__ddl-row${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
+            <div className={`versioned-integration__ddl-row${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}${isDraftVersion ? '' : ' versioned-integration__ddl-row--readonly'}`} key={ddl.id}>
               {isDraftVersion ? (
                 <input
                   aria-label={`Sélectionner ${ddl.title}`}
@@ -190,7 +190,7 @@ function DdlLibrary({
                   onChange={() => onSelect(ddl.id)}
                   type="radio"
                 />
-              ) : <span aria-hidden="true" className="versioned-integration__ddl-radio" />}
+              ) : null}
               <button className="versioned-integration__ddl-title" onClick={() => onPreview(ddl.id)} type="button">
                 <strong>{ddl.title}</strong>
                 <span>

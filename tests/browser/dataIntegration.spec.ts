@@ -634,6 +634,41 @@ test('never lets a late response from version A overwrite version B', async ({ p
   await expect(page.locator('.versioned-integration__readonly')).not.toContainText('10 reçus')
 })
 
+test('shows real DDL radios only for drafts and keeps read-only DDLs identifiable and previewable', async ({ page }) => {
+  const archivedVersion = { ...archived, version_number: 3, display_name: 'Novalia historique v3' }
+  const archivedDdl = { ...sourceDdl, title: 'Audit archivé', source_audit_title: 'Audit archivé' }
+  await openIntegration(page, {
+    integrations: [active, draft, archivedVersion],
+    ddls: { [activeId]: [sourceDdl], [draftId]: [importedDdl], [archivedId]: [archivedDdl] },
+  })
+
+  const activeLibrary = ddlSection(page)
+  await expect(activeLibrary.locator('input[type="radio"]')).toHaveCount(0)
+  await expect(activeLibrary.locator('.versioned-integration__ddl-radio')).toHaveCount(0)
+  await expect(activeLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
+  const activeTitle = activeLibrary.locator('.versioned-integration__ddl-title').filter({ hasText: 'Audit Notion' })
+  await expect(activeTitle).toBeVisible()
+  await activeTitle.click()
+  await expect(page.getByRole('region', { name: 'Aperçu de Audit Notion', exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Créer', exact: true }).click()
+  const draftLibrary = ddlSection(page)
+  await expect(draftLibrary.locator('input[type="radio"]')).toHaveCount(1)
+  await expect(draftLibrary.getByRole('radio', { name: 'Sélectionner DDL importé v2', exact: true })).toBeVisible()
+  await expect(draftLibrary.locator('.versioned-integration__ddl-radio')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Versions', exact: true }).click()
+  await page.getByRole('button', { name: /Novalia historique v3/ }).click()
+  const archivedLibrary = ddlSection(page)
+  await expect(archivedLibrary.locator('input[type="radio"]')).toHaveCount(0)
+  await expect(archivedLibrary.locator('.versioned-integration__ddl-radio')).toHaveCount(0)
+  await expect(archivedLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
+  const archivedTitle = archivedLibrary.locator('.versioned-integration__ddl-title').filter({ hasText: 'Audit archivé' })
+  await expect(archivedTitle).toBeVisible()
+  await archivedTitle.click()
+  await expect(page.getByRole('region', { name: 'Aperçu de Audit archivé', exact: true })).toBeVisible()
+})
+
 test('keeps an archived tenant fully consultable and entirely read-only', async ({ page }) => {
   const backend = await openIntegration(page, {
     tenantStatus: 'archived',
@@ -663,6 +698,16 @@ for (const width of [1440, 390]) {
   test(`keeps the version workflow within the viewport at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 })
     await openIntegration(page, { integrations: [active, draft, otherDraft] })
+    const readOnlyLibrary = ddlSection(page)
+    const readOnlyRow = readOnlyLibrary.locator('.versioned-integration__ddl-row').first()
+    await expect(readOnlyRow).toBeVisible()
+    await expect(readOnlyRow.locator('input[type="radio"], .versioned-integration__ddl-radio')).toHaveCount(0)
+    const rowBox = await readOnlyRow.boundingBox()
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    expect(rowBox).not.toBeNull()
+    expect(rowBox!.x).toBeGreaterThanOrEqual(0)
+    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(clientWidth)
+    await page.screenshot({ path: testInfo.outputPath(`integration-readonly-${width}.png`), fullPage: true })
     await page.locator('.versioned-integration__ddl-title').first().click()
     await expect(page.getByRole('region', { name: 'Aperçu de Audit Notion', exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Créer', exact: true }).click()

@@ -2461,6 +2461,7 @@ button.navigation__link {
   .tenant-audit__launcher-action .primary-button { width: 100%; }
   .tenant-audit__launcher-status dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tenant-audit__history-summary { flex-direction: column; gap: .55rem; }
+  .tenant-audit__history-item .ui-action-menu__content { right: auto; left: 0; }
   .tenant-audit__report-heading { flex-direction: column; gap: .8rem; }
   .tenant-audit__report-meta { justify-content: flex-start; }
   .tenant-audit__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
@@ -3534,7 +3535,6 @@ button.navigation__link {
 .versioned-integration__ingestion-row:last-child { border-radius: 0 0 var(--radius-medium) var(--radius-medium); }
 .versioned-integration__ddl-row--selected { background: var(--color-accent-soft); }
 .versioned-integration__ddl-row input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; }
-.versioned-integration__ddl-radio { flex: 0 0 auto; width: 16px; height: 16px; border: 1px solid var(--color-border-strong); border-radius: 50%; }
 .versioned-integration__ddl-title { min-width: 0; flex: 1 1 auto; display: grid; gap: 2px; padding: 0; border: 0; background: transparent; color: var(--color-text-body); cursor: pointer; font: inherit; text-align: left; }
 .versioned-integration__ddl-title strong { overflow-wrap: anywhere; color: var(--color-text-primary); font-size: .83rem; }
 .versioned-integration__ddl-title span { overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: .75rem; }
@@ -3607,6 +3607,8 @@ button.navigation__link {
   .versioned-integration__ddl-row { flex-wrap: wrap; }
   .versioned-integration__ddl-title { flex-basis: calc(100% - 42px); }
   .versioned-integration__ddl-row .ui-badge { margin-left: 26px; }
+  .versioned-integration__ddl-row--readonly .versioned-integration__ddl-title { flex-basis: 100%; }
+  .versioned-integration__ddl-row--readonly .ui-badge { margin-left: 0; }
   .versioned-integration__ingestion-row { flex-direction: column; }
   .versioned-integration__ingestion-row .ui-action-menu { align-self: flex-end; }
   .versioned-integration__preview-heading > div { flex-wrap: wrap; }

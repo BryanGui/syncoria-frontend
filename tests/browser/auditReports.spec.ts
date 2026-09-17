@@ -395,23 +395,43 @@ test('keeps decisions neutral when the backend does not provide them', async ({ 
   await expect(history).not.toContainText('Décisions nécessaires')
 })
 
-for (const width of [1280, 390]) {
-  test(`buttons are centered and aligned at ${width}px`, async ({ page }, testInfo) => {
+for (const width of [1440, 390]) {
+  test(`keeps compact audit rows and their action menu usable at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 })
     await openAudit(page)
     const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
-    const card = history.locator('.tenant-audit__history-item').first()
-    await expect(card).toBeVisible()
-    const layout = await card.locator('.tenant-audit__history-action-group-buttons > a, .tenant-audit__history-action-group-buttons > button, .tenant-audit__history-actions--secondary > button').evaluateAll((buttons) => buttons.map((button) => {
-      const box = button.getBoundingClientRect()
-      return { height: box.height, left: box.left, right: box.right }
-    }))
-    for (const button of layout) {
-      expect(button.height).toBeGreaterThanOrEqual(40)
-      expect(button.left).toBeGreaterThanOrEqual(0)
-      expect(button.right).toBeLessThanOrEqual(width)
+    const rows = history.locator('.tenant-audit__history-item')
+    await expect(rows).toHaveCount(3)
+    const row = rows.first()
+    const title = row.locator('.tenant-audit__history-title')
+    const menu = row.locator('.ui-action-menu')
+    const trigger = menu.locator('summary')
+    const pdfAction = row.getByRole('link', { name: 'Télécharger le PDF', exact: true })
+    await expect(row).toBeVisible()
+    await expect(title).toBeVisible()
+    await expect(title).toContainText('Audit Drive')
+    await expect(trigger).toBeVisible()
+    await expect(pdfAction).not.toBeVisible()
+    await expect(page.locator('.tenant-audit__history-action-group-buttons, .tenant-audit__history-actions--secondary')).toHaveCount(0)
+
+    await trigger.click()
+    await expect(menu).toHaveAttribute('open', '')
+    await expect(pdfAction).toBeVisible()
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    for (const element of [trigger, menu.locator('.ui-action-menu__content')]) {
+      const box = await element.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(clientWidth)
     }
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
     await page.screenshot({ path: testInfo.outputPath(`audit-${width}.png`), fullPage: true })
+    await page.keyboard.press('Escape')
+    await expect(menu).not.toHaveAttribute('open', '')
   })
 }
 
