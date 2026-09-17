@@ -50,19 +50,21 @@ test('notifications support accessible roles and bounded auto-dismiss', async ()
   assert.match(component, /window\.setTimeout/)
 })
 
-test('the reference page exercises the shared UI patterns', async () => {
-  const page = await source('src/components/UiReferencePage.tsx')
-  for (const primitive of ['Button', 'Badge', 'SelectableList', 'FormField', 'Notification', 'ActionMenu', 'EmptyState']) {
-    assert.match(page, new RegExp(`\\b${primitive}\\b`))
-  }
-  const app = await source('src/App.tsx')
-  assert.match(app, /<UiReferencePage \/>/)
-})
-
 test('documents the UI rules for future screen migrations', async () => {
   const documentation = await source('docs/UI_GUIDELINES.md')
   assert.match(documentation, /palette|Tokens/i)
   assert.match(documentation, /SelectableList/)
   assert.match(documentation, /Une page ne doit pas créer sa propre couleur/)
   assert.match(documentation, /accessibilité/i)
+  assert.match(documentation, /une seule action\s+visuellement principale/i)
+  assert.match(documentation, /badge.*uniquement.*état/i)
+  assert.match(documentation, /panel vide surdimensionné/i)
+  assert.match(documentation, /Le fait qu’une primitive UI existe ne justifie pas son affichage/i)
+})
+
+test('keeps the UI interaction harness out of the normal dashboard', async () => {
+  const app = await source('src/App.tsx')
+  assert.doesNotMatch(app, /<UiReferencePage \/>/)
+  assert.match(app, /import\.meta\.env\.VITE_UI_INTERACTION_TEST/)
+  assert.match(app, /ui-interaction-test/)
 })

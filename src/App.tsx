@@ -41,9 +41,10 @@ import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
 import { LandingPage } from './pages/LandingPage'
-import { UiReferencePage } from './components/UiReferencePage'
+import { ActionMenuTestHarness } from './components/ui/ActionMenuTestHarness'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
+const isUiInteractionTest = import.meta.env.VITE_UI_INTERACTION_TEST === 'true'
 
 type IconName = DashboardNavigationIcon
   | 'server'
@@ -728,7 +729,6 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
             />
           </ul>
           </section>
-          <UiReferencePage />
           </>
         ) : isClients ? (
           <ClientsPage
@@ -887,6 +887,10 @@ function App() {
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
   }, [isLoginOpen])
+
+  if (isUiInteractionTest && window.location.search.includes('ui-interaction-test')) {
+    return <ActionMenuTestHarness />
+  }
 
   function renderLoginPanel() {
     if (sessionState.status === 'loading') {
