@@ -3,9 +3,7 @@ import { useState, type ReactNode } from 'react'
 import {
   TENANT_WORKSPACE_SECTIONS,
   ADMIN_TENANT_WORKSPACE_SECTIONS,
-  INTEGRATION_WORKSPACE_SECTIONS,
   type AdminTenantWorkspaceSection,
-  type IntegrationWorkspaceSection,
   type TenantWorkspaceSection,
   type TenantWorkspaceTenant,
   getTenantStatusLabel,
@@ -18,7 +16,7 @@ interface TenantWorkspaceProps {
   adminReports?: ReactNode
   adminIntegration?: ReactNode
   adminIngestion?: ReactNode
-  adminDataIntegration?: ReactNode
+  adminVersionedIntegration?: ReactNode
   lifecycleControls?: ReactNode
 }
 
@@ -26,7 +24,7 @@ export function TenantWorkspace({
   adminReports,
   adminIntegration,
   adminIngestion,
-  adminDataIntegration,
+  adminVersionedIntegration,
   lifecycleControls,
   tenant,
   tenantLabel,
@@ -37,9 +35,6 @@ export function TenantWorkspace({
   >(
     'Vue générale',
   )
-  const [activeIntegrationSection, setActiveIntegrationSection] = useState<
-    IntegrationWorkspaceSection
-  >('Audit & cartographie')
   const sections = adminIntegration === undefined
     ? TENANT_WORKSPACE_SECTIONS
     : ADMIN_TENANT_WORKSPACE_SECTIONS
@@ -96,39 +91,14 @@ export function TenantWorkspace({
             <code>{tenant.id}</code>
           </div>
         </div>
-      ) : activeSection === 'Provider credentials' && adminIntegration !== undefined ? (
+      ) : activeSection === 'Connexions' && adminIntegration !== undefined ? (
         adminIntegration
-      ) : activeSection === 'Audit & intégration' ? (
-        <section className="tenant-workspace__integration">
-          <nav aria-label="Étapes d’intégration" className="tenant-workspace__subtabs">
-            {INTEGRATION_WORKSPACE_SECTIONS.map((section) => (
-              <button
-                aria-current={activeIntegrationSection === section ? 'page' : undefined}
-                className={activeIntegrationSection === section
-                  ? 'tenant-workspace__subtab tenant-workspace__subtab--active'
-                  : 'tenant-workspace__subtab'}
-                key={section}
-                onClick={() => setActiveIntegrationSection(section)}
-                type="button"
-              >
-                {section}
-              </button>
-            ))}
-          </nav>
-          <div className="tenant-workspace__integration-content">
-            {activeIntegrationSection === 'Audit & cartographie' ? (
-              adminReports
-            ) : activeIntegrationSection === 'Ingestion' ? (
-              adminIngestion
-            ) : (
-              adminDataIntegration ?? (
-                <div className="tenant-workspace__empty">
-                  <p>Cette étape sera disponible lorsque les données brutes pourront être intégrées au modèle métier.</p>
-                </div>
-              )
-            )}
-          </div>
-        </section>
+      ) : activeSection === 'Audit' ? (
+        adminReports
+      ) : activeSection === 'Ingestion' ? (
+        adminIngestion
+      ) : activeSection === 'Intégration' ? (
+        adminVersionedIntegration
       ) : activeSection === 'Synchronisation' ? (
         <div className="tenant-workspace__empty">
           <h3 className="visually-hidden">Synchronisation</h3>

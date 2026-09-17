@@ -1,11 +1,12 @@
 import { useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 
 interface ActionMenuProps {
+  ariaLabel?: string
   children: ReactNode
   label: string
 }
 
-export function ActionMenu({ children, label }: ActionMenuProps) {
+export function ActionMenu({ ariaLabel, children, label }: ActionMenuProps) {
   const menuRef = useRef<HTMLDetailsElement>(null)
   const [isOpen, setIsOpen] = useState(false)
 
@@ -44,7 +45,7 @@ export function ActionMenu({ children, label }: ActionMenuProps) {
       open={isOpen}
       ref={menuRef}
     >
-      <summary>{label}<span aria-hidden="true">⌄</span></summary>
+      <summary aria-label={ariaLabel}>{label}<span aria-hidden="true">⌄</span></summary>
       <div className="ui-action-menu__content" onClick={handleClick}>{children}</div>
     </details>
   )

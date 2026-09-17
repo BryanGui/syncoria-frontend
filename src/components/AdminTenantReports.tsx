@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import {
   fetchAdminTenantProviderAudit,
   fetchLatestAdminTenantProviderAudit,
@@ -18,6 +18,7 @@ import {
   type AdminTenantReportsResult,
 } from '../api/adminTenantReports'
 import { RawAuditERDiagram } from './RawAuditERDiagram'
+import { ActionMenu } from './ui/ActionMenu'
 import { formatLocalCalendarDate, formatReportDate } from '../tenantReports/model'
 
 interface AdminTenantReportsProps {
@@ -409,19 +410,184 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     setEditingReportId(null); setRenameError(null)
   }
 
-  function toggleArtifact(report: AdminTenantReport, tab: AuditDetailTab) {
-    if (reportReference(report) === null) return
-    if (expandedReportId === report.id && expandedArtifactTab === tab) {
-      setExpandedReportId(null)
-      setReportDetailState({ status: 'idle' })
+  async function downloadArtifact(report: AdminTenantReport, artifact: AuditDetailTab) {
+    const reference = reportReference(report)
+    if (reference === null) return
+    const loaded = reportDetailState.status === 'loaded' && reportDetailState.reportId === report.id
+      ? reportDetailState.report
+      : null
+    let detail = loaded
+    if (detail === null) {
+      const result = await fetchAdminTenantProviderAuditReport(
+        apiBaseUrl,
+        tenantId,
+        reference.providerRecordId,
+        reference.correlationId,
+      )
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setReportsError('Les artefacts techniques ne peuvent pas être chargés pour le moment.')
+        return
+      }
+      detail = result.report
+    }
+    const content = artifact === 'ddl'
+      ? detail.structured_report.raw_ddl
+      : detail.structured_report.raw_er === null
+        ? null
+        : `${JSON.stringify(detail.structured_report.raw_er, null, 2)}\n`
+    if (content === null || content.length === 0) {
+      setReportsError(artifact === 'ddl'
+        ? 'Aucun DDL brut n’est disponible pour cet audit.'
+        : 'Aucun ER brut n’est disponible pour cet audit.')
       return
     }
-    setExpandedArtifactTab(tab)
-    setExpandedReportId(report.id)
+    const extension = artifact === 'ddl' ? 'sql' : 'json'
+    const fileName = `${reportArtifactFilenamePart(tenantLabel)}-${reportArtifactFilenamePart(report.title)}-${artifact}.${extension}`
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   function renderReportHistory(reports: AdminTenantReport[]) {
-    return <section aria-label="Historique des audits" className="tenant-audit__history"><div className="tenant-audit__section-heading"><div><p className="tenant-audit__eyebrow">Historique</p><h4>{showArchives ? 'Audits archivés' : 'Audits'}</h4></div><button className="secondary-button tenant-audit__archive-toggle" onClick={() => { setShowArchives((visible) => !visible); setExpandedReportId(null); setReportDetailState({ status: 'idle' }) }} type="button">{showArchives ? 'Retour aux audits' : 'Voir les archives'}</button></div>{reports.length === 0 ? <p className="tenant-audit__empty-note">{showArchives ? 'Aucun audit archivé.' : 'Aucun audit publié pour ce client.'}</p> : <ul>{reports.map((report) => { const renaming = editingReportId === report.id; const reference = reportReference(report); const detailMatches = reportDetailState.status !== 'idle' && reportDetailState.reportId === report.id; const loadedDetail = reportDetailState.status === 'loaded' && reportDetailState.reportId === report.id ? reportDetailState.report : null; const hasDdl = loadedDetail === null || (loadedDetail.structured_report.raw_ddl !== null && loadedDetail.structured_report.raw_ddl.length > 0 && !loadedDetail.structured_report.raw_ddl_invalid); const hasEr = loadedDetail === null || (loadedDetail.structured_report.raw_er !== null && !loadedDetail.structured_report.raw_er_invalid); const hasManagementActions = reference !== null || report.status === 'completed'; return <li className="tenant-audit__history-row" key={report.id}><article aria-label={`${report.title} — ${formatReportDate(report.report_date)}`} className="tenant-audit__history-item"><div className="tenant-audit__history-summary"><div className="tenant-audit__history-main"><strong>{report.title}</strong><span>Provider : {providerLabel(report.provider)} · <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></span></div><div className="tenant-audit__history-stat"><strong className={report.status === 'archived' ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{reportStatusLabel(report.status)}</strong><span>{report.sources_analyzed} sources{report.decisions_required === null ? '' : ` · Décisions nécessaires : ${report.decisions_required}`}</span></div></div><div className="tenant-audit__history-actions-layout"><div className="tenant-audit__history-actions tenant-audit__history-actions--primary"><div className="tenant-audit__history-action-group"><span className="tenant-audit__history-action-group-label">Rapport</span><div className="tenant-audit__history-action-group-buttons"><a className="primary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id)} rel="noreferrer" target="_blank">Voir rapport</a><a className="secondary-button" href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger PDF</a></div></div>{reference && (hasDdl || hasEr) ? <div className="tenant-audit__history-action-group"><span className="tenant-audit__history-action-group-label">Cartographie</span><div className="tenant-audit__history-action-group-buttons">{hasDdl ? <button className="secondary-button" onClick={() => toggleArtifact(report, 'ddl')} type="button">{expandedReportId === report.id && expandedArtifactTab === 'ddl' ? 'Masquer DDL brut' : 'DDL brut'}</button> : null}{hasEr ? <button className="secondary-button" onClick={() => toggleArtifact(report, 'er')} type="button">{expandedReportId === report.id && expandedArtifactTab === 'er' ? 'Masquer ER brut' : 'ER brut'}</button> : null}</div></div> : null}</div>{hasManagementActions ? <div className="tenant-audit__history-actions tenant-audit__history-actions--secondary">{reference ? <button aria-label={`Renommer ${report.title}`} className="secondary-button" disabled={isRenaming} onClick={() => beginRename(report)} type="button">Renommer</button> : null}{report.status === 'completed' ? <button className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">Archiver</button> : null}</div> : null}</div>{renaming ? <div className="tenant-audit__inline-rename"><label htmlFor={`rename-${report.id}`}>Nouveau titre</label><input id={`rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} /><div className="tenant-audit__actions"><button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button><button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button></div>{renameError ? <p role="alert">{renameError}</p> : null}</div> : null}{expandedReportId === report.id ? renderArtifactPanel(report, detailMatches) : null}{confirmationId === report.id ? <div className="tenant-audit__confirmation" role="alertdialog" aria-labelledby={`archive-${report.id}-title`} aria-describedby={`archive-${report.id}-description`}><strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong><p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p><div className="tenant-audit__actions"><button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button><button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button></div>{archiveError && <p role="alert">{archiveError}</p>}</div> : null}</article></li> })}</ul>}</section>
+    return (
+      <section aria-label="Historique des audits" className="tenant-audit__history">
+        <div className="tenant-audit__section-heading">
+          <div>
+            <p className="tenant-audit__eyebrow">Historique</p>
+            <h4>{showArchives ? 'Audits archivés' : 'Audits'}</h4>
+          </div>
+          <button
+            className="secondary-button tenant-audit__archive-toggle"
+            onClick={() => {
+              setShowArchives((visible) => !visible)
+              setExpandedReportId(null)
+              setReportDetailState({ status: 'idle' })
+            }}
+            type="button"
+          >
+            {showArchives ? 'Retour aux audits' : 'Voir les archives'}
+          </button>
+        </div>
+        {reports.length === 0 ? (
+          <p className="tenant-audit__empty-note">
+            {showArchives ? 'Aucun audit archivé.' : 'Aucun audit publié pour ce client.'}
+          </p>
+        ) : (
+          <ul>
+            {reports.map((report) => {
+              const renaming = editingReportId === report.id
+              const reference = reportReference(report)
+              const detailMatches = reportDetailState.status !== 'idle'
+                && reportDetailState.reportId === report.id
+              const hasManagementActions = reference !== null || report.status === 'completed'
+              const openReport = () => {
+                if (expandedReportId === report.id) {
+                  setExpandedReportId(null)
+                  setReportDetailState({ status: 'idle' })
+                  return
+                }
+                setExpandedArtifactTab('ddl')
+                setExpandedReportId(report.id)
+              }
+              const handleRowClick = (event: MouseEvent<HTMLElement>) => {
+                const target = event.target as HTMLElement
+                if (target.closest('.ui-action-menu') || target.closest('button, a, input, select, textarea')) return
+                openReport()
+              }
+              const handleRowKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+                if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
+                  event.preventDefault()
+                  openReport()
+                }
+              }
+              return (
+                <li className="tenant-audit__history-row" key={report.id}>
+                  <article
+                    aria-expanded={expandedReportId === report.id}
+                    aria-label={`${report.title} — ${formatReportDate(report.report_date)}`}
+                    className="tenant-audit__history-item"
+                    onClick={handleRowClick}
+                    onKeyDown={handleRowKeyDown}
+                    role="group"
+                    tabIndex={0}
+                  >
+                    <div className="tenant-audit__history-summary">
+                      <div className="tenant-audit__history-main">
+                        <button className="tenant-audit__history-title" onClick={openReport} type="button">
+                          {report.title} — {formatReportDate(report.report_date)}
+                        </button>
+                        <span>{providerLabel(report.provider)} · <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></span>
+                      </div>
+                      <div className="tenant-audit__history-stat">
+                        <strong className={report.status === 'archived' ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>
+                          {reportStatusLabel(report.status)}
+                        </strong>
+                        <span>{report.sources_analyzed} sources{report.decisions_required === null ? '' : ` · Décisions nécessaires : ${report.decisions_required}`}</span>
+                      </div>
+                      {hasManagementActions ? (
+                        <ActionMenu ariaLabel="Actions de l’audit" label="⋯">
+                          <a href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>
+                            Télécharger le PDF
+                          </a>
+                          {reference ? (
+                            <>
+                              <button onClick={() => void downloadArtifact(report, 'ddl')} type="button">
+                                Télécharger le DDL
+                              </button>
+                              <button onClick={() => void downloadArtifact(report, 'er')} type="button">
+                                Télécharger l’ER
+                              </button>
+                              <button disabled={isRenaming} onClick={() => beginRename(report)} type="button">
+                                Renommer
+                              </button>
+                            </>
+                          ) : null}
+                          {report.status === 'completed' ? (
+                            <button disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">
+                              Archiver
+                            </button>
+                          ) : null}
+                        </ActionMenu>
+                      ) : null}
+                    </div>
+                    {renaming ? (
+                      <div className="tenant-audit__inline-rename">
+                        <label htmlFor={`rename-${report.id}`}>Nouveau titre</label>
+                        <input id={`rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} />
+                        <div className="tenant-audit__actions">
+                          <button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button>
+                          <button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button>
+                        </div>
+                        {renameError ? <p role="alert">{renameError}</p> : null}
+                      </div>
+                    ) : null}
+                    {expandedReportId === report.id ? renderArtifactPanel(report, detailMatches) : null}
+                    {confirmationId === report.id ? (
+                      <div aria-describedby={`archive-${report.id}-description`} aria-labelledby={`archive-${report.id}-title`} className="tenant-audit__confirmation" role="alertdialog">
+                        <strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong>
+                        <p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p>
+                        <div className="tenant-audit__actions">
+                          <button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button>
+                          <button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button>
+                        </div>
+                        {archiveError ? <p role="alert">{archiveError}</p> : null}
+                      </div>
+                    ) : null}
+                  </article>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+    )
   }
 
   function renderArtifactPanel(report: AdminTenantReport, detailMatches: boolean) {
@@ -437,12 +603,18 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     const hasEr = rawEr !== null && !rawErInvalid
     const fileName = buildRawDdlFilename(tenantLabel, report.provider, report.title, report.report_date)
     const erFileNameBase = buildRawErFilename(tenantLabel, report.provider, report.title, report.report_date, 'mmd').replace(/\.mmd$/, '')
-    return <section aria-label={`Artefacts de ${report.title}`} className="tenant-audit__artifact-panel">
+    return <section aria-label={`Aperçu de ${report.title}`} className="tenant-audit__artifact-panel">
       {reportDetailState.status === 'loading' && detailMatches ? <p className="tenant-audit__report-loading" role="status">Chargement des artefacts…</p> : null}
       {reportDetailState.status === 'error' && detailMatches ? <p className="tenant-audit__empty-note" role="alert">Les artefacts techniques ne peuvent pas être chargés pour le moment.</p> : null}
       {reportDetailState.status === 'unavailable' && detailMatches ? <p className="tenant-audit__empty-note">Les artefacts techniques ne sont pas disponibles pour cet ancien audit.</p> : null}
       {rawDdlInvalid ? <p className="tenant-audit__empty-note" role="alert">Le DDL brut reçu est invalide et reste masqué.</p> : null}
       {rawErInvalid ? <p className="tenant-audit__empty-note" role="alert">Le modèle ER brut reçu est invalide et reste masqué.</p> : null}
+      {detail ? (
+        <div aria-label="Artefacts du rapport" className="tenant-audit__artifact-tabs" role="tablist">
+          <button aria-selected={expandedArtifactTab === 'ddl'} className="secondary-button" onClick={() => setExpandedArtifactTab('ddl')} role="tab" type="button">DDL brut</button>
+          <button aria-selected={expandedArtifactTab === 'er'} className="secondary-button" onClick={() => setExpandedArtifactTab('er')} role="tab" type="button">ER brut</button>
+        </div>
+      ) : null}
       {expandedArtifactTab === 'ddl' && hasDdl ? <RawDdlViewer ddl={rawDdl} fileName={fileName} /> : null}
       {expandedArtifactTab === 'er' && hasEr ? <RawErViewer fileNameBase={erFileNameBase} model={rawEr} /> : null}
       {detail && expandedArtifactTab === 'ddl' && !hasDdl ? <p className="tenant-audit__empty-note">Aucun DDL brut n’est disponible pour ce rapport.</p> : null}
@@ -450,5 +622,5 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     </section>
   }
 
-  return <section aria-label="Audit & cartographie" className="tenant-audit"><h3>Audit & cartographie</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}{renderReportHistory(visibleReports)}</>}</section>
+  return <section aria-label="Audit" className="tenant-audit"><h3>Audit</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}{renderReportHistory(visibleReports)}</>}</section>
 }

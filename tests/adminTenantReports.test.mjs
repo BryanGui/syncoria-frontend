@@ -110,7 +110,7 @@ test('reports remain available through the admin integration audit step', () => 
   assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Rapports'), false)
   assert.match(adminWorkspaceSource, /adminReports=\{/)
   assert.match(adminWorkspaceSource, /<AdminTenantReports/)
-  assert.match(tenantWorkspaceSource, /activeIntegrationSection === 'Audit & cartographie'[\s\S]*?adminReports/)
+  assert.match(tenantWorkspaceSource, /activeSection === 'Audit'[\s\S]*?adminReports/)
 })
 
 test('uses the backend audit capability instead of a provider-specific launcher branch', () => {
@@ -130,8 +130,9 @@ test('restores only active audit operations in the launcher', () => {
   assert.doesNotMatch(auditReportsSource, /Ce titre sera visible dans l’historique et le rapport\./)
 })
 
-test('keeps report actions in explicit report and mapping groups without spacing hacks', async () => {
-  assert.match(auditReportsSource, /tenant-audit__history-action-group/)
+test('keeps report actions in the compact row menu without spacing hacks', async () => {
+  assert.match(auditReportsSource, /ActionMenu ariaLabel="Actions de l’audit" label="⋯"/)
+  assert.match(auditReportsSource, /tenant-audit__history-summary/)
   const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
   assert.doesNotMatch(styles, /tenant-audit__history-actions--primary[^\n]*nth-child/)
 })

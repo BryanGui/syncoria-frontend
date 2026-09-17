@@ -2,61 +2,65 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const component = await readFile(new URL('../src/components/AdminTenantDataIntegration.tsx', import.meta.url), 'utf8')
-const api = await readFile(new URL('../src/api/adminIntegrationWorkspaces.ts', import.meta.url), 'utf8')
+const component = await readFile(new URL('../src/components/AdminTenantVersionedIntegration.tsx', import.meta.url), 'utf8')
+const api = await readFile(new URL('../src/api/adminIntegrations.ts', import.meta.url), 'utf8')
 const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
 const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
 const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
-test('keeps the existing navigation and wires the data integration sub-tab', () => {
-  assert.match(workspace, /INTEGRATION_WORKSPACE_SECTIONS\.map/)
-  assert.match(workspace, /adminDataIntegration \?\?/)
-  assert.match(page, /<AdminTenantDataIntegration/)
-  assert.match(page, /adminDataIntegration=\{/)
-  assert.match(component, /aria-label="Workspaces d’intégration"/)
-  assert.match(component, /Le détail et les DDL seront chargés uniquement après votre sélection/)
+test('exposes the versioned integration workflow in the dedicated admin section', () => {
+  assert.match(workspace, /ADMIN_TENANT_WORKSPACE_SECTIONS/)
+  assert.match(workspace, /activeSection === 'Intégration'/)
+  assert.match(workspace, /adminVersionedIntegration/)
+  assert.match(page, /<AdminTenantVersionedIntegration/)
+  assert.match(page, /adminVersionedIntegration=\{/)
+  assert.match(component, /const labels = \{ create: 'Créer', active: 'Active', versions: 'Versions' \}/)
+  assert.match(component, /setView\(active \? 'active' : 'create'\)/)
 })
 
-test('presents source to target as read-only opaque text with downloads', () => {
-  assert.match(component, /DDL source/)
-  assert.match(component, /DDL cible/)
-  assert.match(component, /Non modifiable/)
-  assert.match(component, /Lecture seule/)
-  assert.match(component, /URL\.createObjectURL\(new Blob\(\[content\]/)
-  assert.match(component, /Télécharger le DDL/)
-  assert.match(component, /SQL conservé comme texte opaque/)
-  assert.doesNotMatch(component, /<textarea|Monaco|CodeMirror|console\./)
+test('keeps one version-scoped DDL library with explicit selection and preview', () => {
+  assert.match(component, /DDL disponibles/)
+  assert.match(component, /Ajouter depuis un audit/)
+  assert.match(component, /Importer un DDL/)
+  assert.match(component, /Sélectionner \$\{ddl.title\}/)
+  assert.match(component, /setDdlPreview\(result.ddl\)/)
+  assert.match(component, /Télécharger/)
+  assert.match(component, /Le DDL a été importé sans être sélectionné automatiquement/)
+  assert.doesNotMatch(component, /source_ddl|working_ddl|DDL cible|DDL source.*DDL cible/)
 })
 
-test('supports creation and explicit replacement without executing SQL', () => {
-  assert.match(component, /createAdminIntegrationWorkspaceFromAudit/)
-  assert.match(component, /createAdminIntegrationWorkspaceFromUpload/)
-  assert.match(component, /replaceAdminIntegrationWorkspaceWorkingDdl/)
-  assert.match(component, /accept="\.sql,text\/plain,application\/sql"/)
-  assert.match(component, /Remplacer le DDL cible \?/)
-  assert.match(component, /Confirmer le remplacement/)
-  assert.match(component, /aucun SQL ne sera exécuté/)
-  assert.doesNotMatch(component, /fetch\([^)]*content|execute|runSql|CREATE TABLE/)
+test('keeps draft editing, cloning and activation explicit', () => {
+  assert.match(component, /cloneAdminIntegration/)
+  assert.match(component, /patchAdminIntegration/)
+  assert.match(component, /activateAdminIntegration/)
+  assert.match(component, /Confirmation d’activation/)
+  assert.match(component, /Note de conception/)
+  assert.match(component, /based_on_integration_id/)
+  assert.doesNotMatch(component, /window\.location\.reload|window\.location\.hash/)
 })
 
-test('explains the initial source state and keeps archived tenants read-only', () => {
-  assert.match(component, /version === 1/)
-  assert.match(component, /working_ddl === loadedWorkspace\.source_ddl/)
-  assert.match(component, /Aucun DDL cible n’a encore été importé/)
-  assert.match(component, /tenantStatus !== 'active'/)
+test('uses version-scoped ingestion references with replace and remove actions', () => {
+  assert.match(component, /fetchAdminIntegrationIngestionCandidates/)
+  assert.match(component, /selectAdminIntegrationIngestion/)
+  assert.match(component, /deleteAdminIntegrationIngestion/)
+  assert.match(component, /Choisir \{ingestionSummary\(candidate\)\}/)
+  assert.match(component, /Retirer la référence/)
+})
+
+test('keeps archived tenants read-only and validates imported DDLs', () => {
+  assert.match(component, /const isArchivedTenant = tenantStatus !== 'active'/)
+  assert.match(component, /const canEdit = !isArchivedTenant && isCurrentDraft/)
   assert.match(component, /aucune création ni modification n’est possible/)
-  assert.match(component, /!isArchived/)
   assert.match(component, /MAX_DDL_BYTES/)
+  assert.match(component, /Le fichier doit être au format \.sql/)
+  assert.match(component, /Le fichier dépasse la taille maximale de 1 MiB/)
 })
 
-test('keeps API validation, tenant scoping, and redacted failures explicit', () => {
+test('keeps canonical tenant-scoped API paths and redacted failures explicit', () => {
+  assert.match(api, /\/admin\/tenants\/\$\{encodeURIComponent\(tenantId\)\}\/integrations/)
   assert.match(api, /credentials: 'include'/)
-  assert.match(api, /encodeURIComponent\(tenantId\)/)
-  assert.match(api, /encodeURIComponent\(workspaceId\)/)
   assert.match(api, /MAX_DDL_BYTES = 1024 \* 1024/)
   assert.match(api, /getDdlValidationError/)
-  assert.match(api, /errorType/)
-  assert.doesNotMatch(api, /logger\([^)]*content|logFailure\([^)]*content/)
-  assert.match(styles, /\.tenant-data-integration__ddl-grid/)
-  assert.match(styles, /\.tenant-data-integration__target-upload/)
+  assert.doesNotMatch(api, /integration-workspaces|source_ddl|working_ddl|console\./)
+  assert.doesNotMatch(styles, /tenant-data-integration__|ui-reference__/)
 })

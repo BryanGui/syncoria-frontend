@@ -20,6 +20,7 @@ import {
   isInitialIngestionActive,
   isLaunchResponseCurrent,
 } from '../tenantIngestion'
+import { ActionMenu } from './ui/ActionMenu'
 
 const POLLING_INTERVAL_MS = 5_000
 
@@ -208,39 +209,33 @@ function HistoryItem({
   return (
     <article className="ingestion-history__item">
       <div className="ingestion-history__row">
-        <div className="ingestion-history__identity">
-          <p className="provider-card__eyebrow">Ingestion {providerLabel}</p>
-          <h5>{formatDate(operation.started_at)}</h5>
-          <span className={`ingestion-status ingestion-status--${operation.status}`}>
-            {getInitialIngestionStatusLabel(operation.status)}
+        <button
+          aria-controls={`ingestion-detail-${operation.correlation_id}`}
+          aria-expanded={expanded}
+          className="ingestion-history__row-trigger"
+          onClick={onToggle}
+          type="button"
+        >
+          <span className="ingestion-history__identity">
+            <span className="provider-card__eyebrow">{providerLabel}</span>
+            <strong>{formatDate(operation.started_at)}</strong>
+            <span className={`ingestion-status ingestion-status--${operation.status}`}>
+              {getInitialIngestionStatusLabel(operation.status)}
+            </span>
           </span>
-        </div>
-        <div className="ingestion-history__metrics">
-          <span>{operation.sources_total} sources</span>
-          <CountSummary operation={operation} />
-          <span>Durée : {formatDuration(operation.duration_seconds, operation.status)}</span>
-        </div>
-        <div className="ingestion-history__actions">
-          <button
-            aria-controls={`ingestion-detail-${operation.correlation_id}`}
-            aria-expanded={expanded}
-            className="secondary-button"
-            onClick={onToggle}
-            type="button"
-          >
-            {expanded ? 'Masquer le détail' : 'Voir détail'}
-          </button>
-          {!operation.archived && !isInitialIngestionActive(operation.status) ? (
-            <button
-              className="secondary-button"
-              disabled={isArchiving}
-              onClick={onArchive}
-              type="button"
-            >
+          <span className="ingestion-history__metrics">
+            <span>{operation.sources_total} sources</span>
+            <span>{operation.items_received} reçus · {operation.items_inserted} insérés · {operation.items_duplicate} doublons</span>
+            <span>{formatDuration(operation.duration_seconds, operation.status)}</span>
+          </span>
+        </button>
+        {!operation.archived && !isInitialIngestionActive(operation.status) ? (
+          <ActionMenu ariaLabel="Actions de l’ingestion" label="⋯">
+            <button disabled={isArchiving} onClick={onArchive} type="button">
               Archiver
             </button>
-          ) : null}
-        </div>
+          </ActionMenu>
+        ) : null}
       </div>
       {expanded ? (
         <div id={`ingestion-detail-${operation.correlation_id}`}>
