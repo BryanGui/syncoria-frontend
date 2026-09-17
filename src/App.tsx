@@ -41,6 +41,7 @@ import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
 import { LandingPage } from './pages/LandingPage'
+import { UiReferencePage } from './components/UiReferencePage'
 
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
@@ -727,6 +728,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
             />
           </ul>
           </section>
+          <UiReferencePage />
           </>
         ) : isClients ? (
           <ClientsPage
