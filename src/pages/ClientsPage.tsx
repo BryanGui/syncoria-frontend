@@ -240,7 +240,6 @@ export function ClientsPage({
                 <th scope="col">Slug</th>
                 <th scope="col">Statut</th>
                 <th scope="col">Identifiant technique</th>
-                <th scope="col"><span className="visually-hidden">Action</span></th>
               </tr>
             </thead>
             <tbody>
@@ -264,15 +263,6 @@ export function ClientsPage({
                     </span>
                   </td>
                   <td><code>{tenant.id}</code></td>
-                  <td>
-                    <button
-                      className="secondary-button clients-table__open"
-                      onClick={() => onOpenTenant(tenant.id)}
-                      type="button"
-                    >
-                      Ouvrir
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>

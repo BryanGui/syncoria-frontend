@@ -18,6 +18,20 @@ test('action menu closes after selection and when focus leaves the menu', async 
 
   const menu = page.locator('details.ui-action-menu')
   const trigger = menu.locator('summary')
+  const controlledId = await trigger.getAttribute('aria-controls')
+  expect(controlledId).toBeTruthy()
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator(`#${controlledId}`)).toHaveCount(1)
+
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+  await expect(menu).toHaveAttribute('open', '')
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('Escape')
+  await expect(menu).not.toHaveAttribute('open', '')
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await expect(trigger).toBeFocused()
+
   await trigger.click()
   await expect(menu).toHaveAttribute('open', '')
 
@@ -33,5 +47,6 @@ test('action menu closes after selection and when focus leaves the menu', async 
   await expect(menu).toHaveAttribute('open', '')
   await page.keyboard.press('Escape')
   await expect(menu).not.toHaveAttribute('open', '')
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
   await expect(trigger).toBeFocused()
 })

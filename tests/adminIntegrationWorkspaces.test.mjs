@@ -2,123 +2,216 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  createAdminIntegrationWorkspaceFromAudit,
-  createAdminIntegrationWorkspaceFromUpload,
-  fetchAdminIntegrationWorkspace,
-  fetchAdminIntegrationWorkspaceAuditSources,
-  fetchAdminIntegrationWorkspaces,
+  activateAdminIntegration,
+  addAdminIntegrationDdlFromAudit,
+  cloneAdminIntegration,
+  createAdminIntegration,
+  deleteAdminIntegrationIngestion,
+  fetchAdminIntegration,
+  fetchAdminIntegrationDdls,
+  fetchAdminIntegrationIngestionCandidates,
+  fetchAdminIntegrationIngestions,
+  fetchAdminIntegrations,
   getDdlValidationError,
+  importAdminIntegrationDdl,
   MAX_DDL_BYTES,
-  replaceAdminIntegrationWorkspaceWorkingDdl,
-} from '../src/api/adminIntegrationWorkspaces.ts'
+  patchAdminIntegration,
+  selectAdminIntegrationDdl,
+  selectAdminIntegrationIngestion,
+} from '../src/api/adminIntegrations.ts'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
-const workspaceId = '22222222-2222-4222-8222-222222222222'
-const sourceDdl = '-- source\nCREATE TABLE source_table (id integer);\n'
-const targetDdl = '-- target\nCREATE TABLE target_table (id integer);\n'
+const integrationId = '22222222-2222-4222-8222-222222222222'
+const ddlId = '33333333-3333-4333-8333-333333333333'
+const providerRecordId = '44444444-4444-4444-8444-444444444444'
+const correlationId = '55555555-5555-4555-8555-555555555555'
+const ddl = {
+  id: ddlId,
+  title: 'Novalia global v1',
+  kind: 'imported',
+  source_report_id: null,
+  source_filename: 'novalia.sql',
+  created_at: '2026-09-17T10:00:00Z',
+  is_selected: true,
+  source_provider: null,
+  source_audit_title: null,
+  source_report_date: null,
+}
 
-function workspace(overrides = {}) {
+function integration(overrides = {}) {
   return {
-    id: workspaceId,
+    id: integrationId,
     tenant_id: tenantId,
-    source_type: 'upload',
-    source_report_id: null,
-    source_filename: 'source.sql',
-    source_ddl: sourceDdl,
-    working_ddl: sourceDdl,
-    version: 1,
-    status: 'draft',
-    created_at: '2026-09-16T10:00:00Z',
-    updated_at: '2026-09-16T10:00:00Z',
+    version_number: 1,
+    display_name: 'Novalia Talents v1',
+    namespace_key: 'v1',
+    status: 'active',
+    based_on_integration_id: null,
+    design_note: null,
+    selected_ddl_id: ddlId,
+    created_at: '2026-09-17T10:00:00Z',
+    updated_at: '2026-09-17T10:00:00Z',
     ...overrides,
   }
 }
 
-test('loads tenant-scoped workspaces and details with encoded IDs and cookies', async () => {
-  const encodedTenant = '11111111-1111-4111-8111-111111111111'
-  let calls = []
+function ingestion(overrides = {}) {
+  return {
+    tenant_provider_record_id: providerRecordId,
+    provider: 'notion',
+    correlation_id: correlationId,
+    status: 'completed',
+    archived: false,
+    started_at: '2026-09-17T09:00:00Z',
+    completed_at: '2026-09-17T09:01:00Z',
+    items_received: 90,
+    items_inserted: 88,
+    items_duplicate: 2,
+    created_at: '2026-09-17T09:02:00Z',
+    ...overrides,
+  }
+}
+
+test('uses the tenant-scoped version contract with credentials', async () => {
+  const calls = []
   const request = async (url, options) => {
     calls.push({ url, options })
-    return Response.json(url.endsWith(workspaceId) ? workspace() : [workspace()])
+    return Response.json(url.endsWith(integrationId) ? integration() : [integration()])
   }
-  const list = await fetchAdminIntegrationWorkspaces('https://api.example.com', encodedTenant, undefined, request)
-  const detail = await fetchAdminIntegrationWorkspace('https://api.example.com', tenantId, workspaceId, undefined, request)
+  const list = await fetchAdminIntegrations('https://api.example.com', tenantId, undefined, request)
+  const detail = await fetchAdminIntegration('https://api.example.com', tenantId, integrationId, undefined, request)
   assert.equal(list.status, 'loaded')
   assert.equal(detail.status, 'loaded')
-  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integration-workspaces`)
-  assert.equal(calls[1].url, `https://api.example.com/admin/tenants/${tenantId}/integration-workspaces/${workspaceId}`)
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations`)
+  assert.equal(calls[1].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}`)
   assert.equal(calls[1].options.credentials, 'include')
-  assert.equal(calls[1].options.method, 'GET')
 })
 
-test('loads published audit sources and creates workspaces from audit or upload', async () => {
-  const source = { report_id: 'audit-notion-2026-09-16', provider: 'notion', title: 'Audit Notion', report_date: '2026-09-16' }
-  let captured = []
+test('creates, patches, clones and activates versions without local copying', async () => {
+  const calls = []
   const request = async (url, options) => {
-    captured.push({ url, options })
-    if (url.endsWith('/audit-sources')) return Response.json([source])
-    return Response.json(workspace({ source_type: 'audit', source_report_id: source.report_id, source_filename: null }))
+    calls.push({ url, options })
+    return Response.json(integration({ status: url.endsWith('/activate') ? 'active' : 'draft' }))
   }
-  const sources = await fetchAdminIntegrationWorkspaceAuditSources('https://api.example.com', tenantId, undefined, request)
-  const fromAudit = await createAdminIntegrationWorkspaceFromAudit('https://api.example.com', tenantId, source.report_id, undefined, request)
-  const fromUpload = await createAdminIntegrationWorkspaceFromUpload('https://api.example.com', tenantId, targetDdl, 'target.sql', undefined, request)
-  assert.deepEqual(sources, { status: 'loaded', sources: [source] })
-  assert.equal(fromAudit.status, 'loaded')
-  assert.equal(fromUpload.status, 'loaded')
-  assert.deepEqual(JSON.parse(captured[1].options.body), { source_report_id: source.report_id })
-  assert.deepEqual(JSON.parse(captured[2].options.body), { content: targetDdl, source_filename: 'target.sql' })
-  assert.equal(captured[1].options.credentials, 'include')
+  assert.equal((await createAdminIntegration('https://api.example.com', tenantId, undefined, undefined, request)).status, 'loaded')
+  assert.equal((await patchAdminIntegration('https://api.example.com', tenantId, integrationId, { display_name: 'v2', design_note: 'Note' }, undefined, request)).status, 'loaded')
+  assert.equal((await cloneAdminIntegration('https://api.example.com', tenantId, integrationId, undefined, undefined, request)).status, 'loaded')
+  assert.equal((await activateAdminIntegration('https://api.example.com', tenantId, integrationId, undefined, request)).status, 'loaded')
+  assert.deepEqual(JSON.parse(calls[0].options.body), {})
+  assert.deepEqual(JSON.parse(calls[1].options.body), { display_name: 'v2', design_note: 'Note' })
+  assert.equal(calls[2].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/clone`)
+  assert.equal(calls[3].options.method, 'PUT')
 })
 
-test('replaces only working_ddl through the explicit PUT contract', async () => {
+test('keeps source and imported DDL in one version-scoped library', async () => {
+  const calls = []
+  const source = { ...ddl, id: '66666666-6666-4666-8666-666666666666', kind: 'source', source_report_id: 'audit-notion-2026-09-17', source_filename: null, source_provider: 'notion', source_audit_title: 'Audit Notion', source_report_date: '2026-09-17', is_selected: false }
+  const request = async (url, options) => {
+    calls.push({ url, options })
+    if (options.method === 'GET' && url.endsWith('/ddls')) return Response.json([source, ddl])
+    if (url.endsWith(`/ddls/${ddlId}/selection`)) return Response.json({ ...ddl, ddl_content: 'CREATE TABLE example (id integer);' })
+    return Response.json(ddl)
+  }
+  const list = await fetchAdminIntegrationDdls('https://api.example.com', tenantId, integrationId, undefined, request)
+  const added = await addAdminIntegrationDdlFromAudit('https://api.example.com', tenantId, integrationId, 'audit-notion-2026-09-17', undefined, request)
+  const imported = await importAdminIntegrationDdl('https://api.example.com', tenantId, integrationId, 'Experiment', 'CREATE TABLE experiment (id integer);', undefined, request)
+  const selected = await selectAdminIntegrationDdl('https://api.example.com', tenantId, integrationId, ddlId, undefined, request)
+  assert.equal(list.status, 'loaded')
+  assert.equal(list.ddls[0].kind, 'source')
+  assert.equal(added.status, 'loaded')
+  assert.equal(imported.status, 'loaded')
+  assert.equal(selected.status, 'loaded')
+  assert.deepEqual(JSON.parse(calls[1].options.body), { source_report_id: 'audit-notion-2026-09-17' })
+  assert.deepEqual(JSON.parse(calls[2].options.body), { title: 'Experiment', content: 'CREATE TABLE experiment (id integer);' })
+  assert.equal(calls[3].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddls/${ddlId}/selection`)
+})
+
+test('replaces one version ingestion reference and never deletes the raw operation', async () => {
   let captured
-  const result = await replaceAdminIntegrationWorkspaceWorkingDdl(
-    'https://api.example.com', tenantId, workspaceId, targetDdl, undefined,
+  const result = await selectAdminIntegrationIngestion(
+    'https://api.example.com', tenantId, integrationId, providerRecordId, correlationId, undefined,
     async (url, options) => {
       captured = { url, options }
-      return Response.json(workspace({ source_ddl: sourceDdl, working_ddl: targetDdl, version: 2 }))
+      return Response.json(ingestion())
     },
   )
   assert.equal(result.status, 'loaded')
-  assert.equal(result.workspace.working_ddl, targetDdl)
-  assert.equal(result.workspace.source_ddl, sourceDdl)
-  assert.equal(result.workspace.version, 2)
-  assert.equal(captured.url, `https://api.example.com/admin/tenants/${tenantId}/integration-workspaces/${workspaceId}/working-ddl`)
+  assert.deepEqual(JSON.parse(captured.options.body), { correlation_id: correlationId })
   assert.equal(captured.options.method, 'PUT')
-  assert.equal(captured.options.credentials, 'include')
-  assert.deepEqual(JSON.parse(captured.options.body), { content: targetDdl })
+  assert.equal((await deleteAdminIntegrationIngestion(
+    'https://api.example.com', tenantId, integrationId, providerRecordId, undefined,
+    async (url, options) => {
+      captured = { url, options }
+      return new Response(null, { status: 204 })
+    },
+  )).status, 'deleted')
+  assert.equal(captured.options.method, 'DELETE')
 })
 
-test('rejects empty, NUL-containing and oversized SQL before making a request', async () => {
+test('loads selected references and candidates independently', async () => {
+  const request = async (url) => Response.json(url.endsWith('/ingestion-candidates') ? [ingestion({ correlation_id: '77777777-7777-4777-8777-777777777777' })] : [ingestion()])
+  const selected = await fetchAdminIntegrationIngestions('https://api.example.com', tenantId, integrationId, undefined, request)
+  const candidates = await fetchAdminIntegrationIngestionCandidates('https://api.example.com', tenantId, integrationId, undefined, request)
+  assert.equal(selected.status, 'loaded')
+  assert.equal(candidates.status, 'loaded')
+  assert.notEqual(selected.ingestions[0].correlation_id, candidates.ingestions[0].correlation_id)
+})
+
+test('validates files and never exposes backend or SQL details', async () => {
   assert.equal(getDdlValidationError(' \n\t'), 'empty')
   assert.equal(getDdlValidationError('SELECT\u0000 1'), 'invalid')
   assert.equal(getDdlValidationError('x'.repeat(MAX_DDL_BYTES + 1)), 'too_large')
-  let requestCount = 0
-  const request = async () => { requestCount += 1; return Response.json(workspace()) }
-  assert.deepEqual(
-    await createAdminIntegrationWorkspaceFromUpload('https://api.example.com', tenantId, '', null, undefined, request),
-    { status: 'invalid' },
+  const result = await fetchAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json({ detail: 'sensitive SQL or backend detail' }, { status: 503 }),
   )
-  assert.deepEqual(
-    await replaceAdminIntegrationWorkspaceWorkingDdl('https://api.example.com', tenantId, workspaceId, 'x'.repeat(MAX_DDL_BYTES + 1), undefined, request),
-    { status: 'invalid' },
-  )
-  assert.equal(requestCount, 0)
+  assert.deepEqual(result, { status: 'error' })
+  assert.doesNotMatch(JSON.stringify(result), /sensitive SQL|backend detail/)
 })
 
-test('maps tenant isolation and HTTP failures without exposing backend details', async () => {
-  const secret = 'sensitive SQL or backend detail'
-  const mismatch = await fetchAdminIntegrationWorkspace(
-    'https://api.example.com', tenantId, workspaceId, undefined,
-    async () => Response.json(workspace({ tenant_id: '33333333-3333-4333-8333-333333333333', source_ddl: secret, working_ddl: secret })),
+test('reads only sanitized integration codes from the FastAPI detail envelope', async () => {
+  const conflict = (code) => async () => Response.json({
+    detail: { code, message: 'Technical backend message that must stay hidden.' },
+  }, { status: 409 })
+  const title = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, 'Duplicate title',
+    'CREATE TABLE duplicate_title (id integer);', undefined, conflict('duplicate_title'),
   )
-  assert.deepEqual(mismatch, { status: 'error' })
-  for (const [status, expected] of [[401, 'unauthenticated'], [404, 'not_found'], [409, 'conflict'], [422, 'invalid'], [503, 'error']]) {
-    const result = await replaceAdminIntegrationWorkspaceWorkingDdl(
-      'https://api.example.com', tenantId, workspaceId, targetDdl, undefined,
-      async () => Response.json({ detail: secret }, { status }),
-    )
-    assert.equal(result.status, expected)
-    assert.doesNotMatch(JSON.stringify(result), /sensitive SQL|backend detail/)
-  }
+  const content = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, 'Duplicate content',
+    'CREATE TABLE duplicate_content (id integer);', undefined, conflict('duplicate_content'),
+  )
+  const audit = await addAdminIntegrationDdlFromAudit(
+    'https://api.example.com', tenantId, integrationId, 'audit-notion-2026-09-17',
+    undefined, conflict('duplicate_audit'),
+  )
+  const invalid = await createAdminIntegration(
+    'https://api.example.com', tenantId, undefined, undefined,
+    async () => Response.json({ detail: { code: 'invalid', message: 'Invalid integration request.' } }, { status: 422 }),
+  )
+  const tooLarge = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, 'Too large',
+    'CREATE TABLE too_large (id integer);', undefined,
+    async () => Response.json({ detail: { code: 'too_large', message: 'Invalid integration request.' } }, { status: 413 }),
+  )
+  const genericConflict = await activateAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json({ detail: { code: 'conflict', message: 'Current state is private.' } }, { status: 409 }),
+  )
+  const notFound = await fetchAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json({ detail: { code: 'not_found', message: 'Private identifier.' } }, { status: 404 }),
+  )
+
+  assert.deepEqual(title, { status: 'conflict', code: 'duplicate_title' })
+  assert.deepEqual(content, { status: 'conflict', code: 'duplicate_content' })
+  assert.deepEqual(audit, { status: 'conflict', code: 'duplicate_audit' })
+  assert.deepEqual(invalid, { status: 'invalid', code: 'invalid' })
+  assert.deepEqual(tooLarge, { status: 'invalid', code: 'too_large' })
+  assert.deepEqual(genericConflict, { status: 'conflict', code: 'conflict' })
+  assert.deepEqual(notFound, { status: 'not_found', code: 'not_found' })
+  assert.doesNotMatch(
+    JSON.stringify([title, content, audit, invalid, tooLarge, genericConflict, notFound]),
+    /Technical backend|Invalid integration request|Current state is private|Private identifier/,
+  )
 })

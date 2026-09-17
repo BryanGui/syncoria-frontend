@@ -275,8 +275,7 @@ async function openAudit(page: Page, options: {
   if (!options.client) {
     await page.getByRole('button', { name: 'Clients', exact: true }).click()
     await page.getByRole('button', { name: 'Client synthétique', exact: true }).click()
-    await page.getByRole('button', { name: 'Audit & intégration', exact: true }).click()
-    await page.getByRole('button', { name: 'Audit & cartographie', exact: true }).click()
+    await page.getByRole('button', { name: 'Audit', exact: true }).click()
   }
   return requests
 }
@@ -290,13 +289,13 @@ test('history is the primary entry point and exposes direct actions per audit', 
   await expect(history.locator('.tenant-audit__history-item')).toHaveCount(3)
   await expect(history.locator('time')).toHaveText(['16/10/2026', '15/10/2026', '07/09/2026'])
   const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
-  await expect(drive).toContainText('Provider : Drive')
+  await expect(drive).toContainText('Drive')
   await expect(drive).toContainText('Terminé')
   await expect(history).not.toContainText(/\d+ audits?\b/)
-  for (const action of ['Voir rapport', 'Télécharger PDF', 'DDL brut', 'ER brut']) {
-    await expect(drive.locator('.tenant-audit__history-actions--primary').getByRole(action === 'Voir rapport' || action === 'Télécharger PDF' ? 'link' : 'button', { name: action, exact: true })).toBeVisible()
+  await drive.locator('.ui-action-menu > summary').click()
+  for (const action of ['Télécharger le PDF', 'Télécharger le DDL', 'Télécharger l’ER', 'Renommer', 'Archiver']) {
+    await expect(drive.getByRole(action === 'Télécharger le PDF' ? 'link' : 'button', { name: action, exact: true })).toBeVisible()
   }
-  for (const action of ['Renommer', 'Archiver']) await expect(drive.locator('.tenant-audit__history-actions--secondary').getByRole('button', { name: action, exact: action === 'Archiver' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toHaveCount(0)
 })
 
@@ -310,12 +309,14 @@ test('separates archives and removes an archived audit from the main history', a
   await expect(history.getByRole('button', { name: 'Retour aux audits', exact: true })).toBeVisible()
   await history.getByRole('button', { name: 'Retour aux audits', exact: true }).click()
   const audit = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
+  await audit.locator('.ui-action-menu > summary').click()
   await audit.getByRole('button', { name: 'Archiver', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toBeVisible()
   expect(requests.filter((r) => r.method === 'POST')).toHaveLength(0)
   await page.getByRole('button', { name: 'Annuler', exact: true }).click()
   await expect(page.getByRole('alertdialog')).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toHaveLength(0)
+  await audit.locator('.ui-action-menu > summary').click()
   await audit.getByRole('button', { name: 'Archiver', exact: true }).click()
   await page.getByRole('button', { name: 'Confirmer l’archivage', exact: true }).click()
   await expect(history.locator('.tenant-audit__history-item')).toHaveCount(2)
@@ -323,63 +324,69 @@ test('separates archives and removes an archived audit from the main history', a
   await history.getByRole('button', { name: 'Voir les archives', exact: true }).click()
   const archived = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
   await expect(archived).toContainText('Archivé')
-  await expect(archived.locator('.tenant-audit__history-actions--primary').getByRole('link', { name: 'Voir rapport', exact: true })).toBeVisible()
-  await expect(archived.locator('.tenant-audit__history-actions--primary').getByRole('link', { name: 'Télécharger PDF', exact: true })).toBeVisible()
-  await expect(archived.locator('.tenant-audit__history-actions--secondary').getByRole('button', { name: /^Renommer/ })).toBeVisible()
-  await expect(archived.locator('.tenant-audit__history-actions--secondary').getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
+  await archived.locator('.ui-action-menu > summary').click()
+  await expect(archived.getByRole('link', { name: 'Télécharger le PDF', exact: true })).toBeVisible()
+  await expect(archived.getByRole('button', { name: 'Renommer', exact: true })).toBeVisible()
+  await expect(archived.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toEqual([{ path: `${prefix}/reports/${report.id}/archive`, method: 'POST' }])
   expect(requests.filter((r) => r.path === `${prefix}/reports`)).toHaveLength(2)
   const download = page.waitForEvent('download')
-  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).getByRole('link', { name: 'Télécharger PDF' }).click()
+  await history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' }).getByRole('link', { name: 'Télécharger le PDF' }).click()
   expect((await download).suggestedFilename()).toBe('synthetic.pdf')
 })
 
-test('opens exact DDL and ER artifacts under their audit row', async ({ page }) => {
+test('opens the audit PDF from both the row and its title', async ({ page }) => {
   await openAudit(page)
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { __openedReportUrls: string[] }
+    trackedWindow.__openedReportUrls = []
+    trackedWindow.open = ((url?: string | URL) => {
+      trackedWindow.__openedReportUrls.push(String(url))
+      return null
+    }) as typeof window.open
+  })
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
-  await drive.getByRole('button', { name: 'DDL brut', exact: true }).click()
-  const artifacts = drive.getByRole('region', { name: 'Artefacts de Audit Drive', exact: true })
-  await expect(artifacts.locator('pre')).toHaveText('-- Audit Drive\nCREATE TABLE "Audit Drive" ();\n')
-  await expect(artifacts).not.toContainText('Le téléchargement est disponible après ouverture du DDL.')
-  const download = page.waitForEvent('download')
-  await artifacts.getByRole('link', { name: 'Télécharger le DDL brut', exact: true }).click()
-  const downloaded = await (await download).path()
+  await drive.focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([
+    `https://api.bryanlab.ovh${prefix}/reports/audit-drive-2026-10-16/pdf`,
+  ])
+  await drive.getByRole('button', { name: /Audit Drive/ }).click()
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([
+    `https://api.bryanlab.ovh${prefix}/reports/audit-drive-2026-10-16/pdf`,
+    `https://api.bryanlab.ovh${prefix}/reports/audit-drive-2026-10-16/pdf`,
+  ])
+  await expect(drive.locator('.tenant-audit__artifact-panel')).toHaveCount(0)
+})
+
+test('keeps the audit menu and artifact downloads isolated from the row action', async ({ page }) => {
+  await openAudit(page)
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { __openedReportUrls: string[] }
+    trackedWindow.__openedReportUrls = []
+    trackedWindow.open = ((url?: string | URL) => {
+      trackedWindow.__openedReportUrls.push(String(url))
+      return null
+    }) as typeof window.open
+  })
+  const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
+  const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
+  await drive.locator('.ui-action-menu > summary').click()
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
+  const ddlDownload = page.waitForEvent('download')
+  await drive.getByRole('button', { name: 'Télécharger le DDL', exact: true }).click()
+  const downloaded = await (await ddlDownload).path()
   expect(downloaded).not.toBeNull()
   expect(await readFile(downloaded!, 'utf8')).toBe('-- Audit Drive\nCREATE TABLE "Audit Drive" ();\n')
-  await drive.getByRole('button', { name: 'ER brut', exact: true }).click()
-  const diagram = drive.locator('.raw-er-diagram')
-  await expect(diagram.locator('.raw-er-node')).toBeVisible()
-  await expect(diagram).toContainText('Observed field')
-  await expect(diagram).toContainText('text')
-  await expect(diagram).toContainText('Relations observées à cible non résolue')
-  await expect(diagram).not.toContainText('Table Contacts')
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
+  await drive.locator('.ui-action-menu > summary').click()
   const erJsonDownload = page.waitForEvent('download')
-  await artifacts.getByRole('link', { name: 'Télécharger l’ER brut (JSON)', exact: true }).click()
+  await drive.getByRole('button', { name: 'Télécharger l’ER', exact: true }).click()
   const erJsonPath = await (await erJsonDownload).path()
   expect(erJsonPath).not.toBeNull()
   expect(JSON.parse(await readFile(erJsonPath!, 'utf8'))).toEqual(structuredReport('Audit Drive', null).raw_er)
-  const erMermaidDownload = page.waitForEvent('download')
-  await artifacts.getByRole('link', { name: 'Télécharger l’ER brut (Mermaid)', exact: true }).click()
-  const erMermaidPath = await (await erMermaidDownload).path()
-  expect(erMermaidPath).not.toBeNull()
-  const erMermaid = await readFile(erMermaidPath!, 'utf8')
-  expect(erMermaid).toContain('flowchart LR')
-  expect(erMermaid).toContain('Audit Drive')
-  expect(erMermaid).toContain('Relation observée non résolue')
-})
-
-test('opening another audit replaces the previous row artifacts', async ({ page }) => {
-  await openAudit(page)
-  const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
-  const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
-  await drive.getByRole('button', { name: 'DDL brut', exact: true }).click()
-  await expect(drive.locator('pre')).toContainText('-- Audit Drive')
-  const notion = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
-  await notion.getByRole('button', { name: 'DDL brut', exact: true }).click()
-  await expect(drive.locator('pre')).toHaveCount(0)
-  await expect(notion.locator('pre')).toContainText('-- Audit Notion')
-  await expect(notion.locator('pre')).not.toContainText('-- Audit Drive')
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
 })
 
 test('keeps decisions neutral when the backend does not provide them', async ({ page }) => {
@@ -388,23 +395,43 @@ test('keeps decisions neutral when the backend does not provide them', async ({ 
   await expect(history).not.toContainText('Décisions nécessaires')
 })
 
-for (const width of [1280, 390]) {
-  test(`buttons are centered and aligned at ${width}px`, async ({ page }, testInfo) => {
+for (const width of [1440, 390]) {
+  test(`keeps compact audit rows and their action menu usable at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 })
     await openAudit(page)
     const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
-    const card = history.locator('.tenant-audit__history-item').first()
-    await expect(card).toBeVisible()
-    const layout = await card.locator('.tenant-audit__history-action-group-buttons > a, .tenant-audit__history-action-group-buttons > button, .tenant-audit__history-actions--secondary > button').evaluateAll((buttons) => buttons.map((button) => {
-      const box = button.getBoundingClientRect()
-      return { height: box.height, left: box.left, right: box.right }
-    }))
-    for (const button of layout) {
-      expect(button.height).toBeGreaterThanOrEqual(40)
-      expect(button.left).toBeGreaterThanOrEqual(0)
-      expect(button.right).toBeLessThanOrEqual(width)
+    const rows = history.locator('.tenant-audit__history-item')
+    await expect(rows).toHaveCount(3)
+    const row = rows.first()
+    const title = row.locator('.tenant-audit__history-title')
+    const menu = row.locator('.ui-action-menu')
+    const trigger = menu.locator('summary')
+    const pdfAction = row.getByRole('link', { name: 'Télécharger le PDF', exact: true })
+    await expect(row).toBeVisible()
+    await expect(title).toBeVisible()
+    await expect(title).toContainText('Audit Drive')
+    await expect(trigger).toBeVisible()
+    await expect(pdfAction).not.toBeVisible()
+    await expect(page.locator('.tenant-audit__history-action-group-buttons, .tenant-audit__history-actions--secondary')).toHaveCount(0)
+
+    await trigger.click()
+    await expect(menu).toHaveAttribute('open', '')
+    await expect(pdfAction).toBeVisible()
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
+    for (const element of [trigger, menu.locator('.ui-action-menu__content')]) {
+      const box = await element.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(clientWidth)
     }
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
     await page.screenshot({ path: testInfo.outputPath(`audit-${width}.png`), fullPage: true })
+    await page.keyboard.press('Escape')
+    await expect(menu).not.toHaveAttribute('open', '')
   })
 }
 
@@ -417,6 +444,7 @@ test('an archived tenant has no report links or archive calls', async ({ page })
 
 test('expired session during archive returns to login', async ({ page }) => {
   await openAudit(page, { archiveStatus: 401 })
+  await page.locator('.ui-action-menu > summary').first().click()
   await page.getByRole('button', { name: 'Archiver', exact: true }).first().click()
   await page.getByRole('button', { name: 'Confirmer l’archivage', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Se connecter', exact: true }).first()).toBeVisible()
@@ -424,6 +452,7 @@ test('expired session during archive returns to login', async ({ page }) => {
 
 test('failed archive keeps the selected report active and shows a sanitized retry message', async ({ page }) => {
   await openAudit(page, { archiveStatus: 503 })
+  await page.locator('.ui-action-menu > summary').first().click()
   await page.getByRole('button', { name: 'Archiver', exact: true }).first().click()
   await page.getByRole('button', { name: 'Confirmer l’archivage', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('Le rapport n’a pas pu être archivé. Réessayez.')
@@ -477,21 +506,21 @@ test('keeps report actions available for a legacy report without audit reference
   await openAudit(page, { legacyReport: true })
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const legacy = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '01/07/2026' })
-  await expect(legacy.getByRole('button', { name: /Renommer/ })).toHaveCount(0)
-  await expect(legacy.getByRole('link', { name: 'Voir rapport', exact: true })).toBeVisible()
-  await expect(legacy.getByRole('link', { name: 'Télécharger PDF' })).toBeVisible()
-  await expect(legacy.getByRole('button', { name: 'DDL brut', exact: true })).toHaveCount(0)
-  await expect(legacy.getByRole('button', { name: 'ER brut', exact: true })).toHaveCount(0)
+  await legacy.locator('.ui-action-menu > summary').click()
+  await expect(legacy.getByRole('button', { name: 'Renommer', exact: true })).toHaveCount(0)
+  await expect(legacy.getByRole('link', { name: 'Télécharger le PDF', exact: true })).toBeVisible()
+  await expect(legacy.getByRole('button', { name: 'Télécharger le DDL', exact: true })).toHaveCount(0)
+  await expect(legacy.getByRole('button', { name: 'Télécharger l’ER', exact: true })).toHaveCount(0)
 })
 
 test('keeps report actions and metadata attached to the audit row', async ({ page }) => {
   const requests = await openAudit(page)
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const notion = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
-  await expect(notion).toContainText('Provider : Notion')
+  await expect(notion).toContainText('Notion')
   await expect(notion).toContainText('07/09/2026')
-  await expect(notion.getByRole('link', { name: 'Voir rapport', exact: true })).toHaveAttribute('target', '_blank')
-  await expect(notion.getByRole('link', { name: 'Télécharger PDF', exact: true })).toBeVisible()
+  await notion.locator('.ui-action-menu > summary').click()
+  await expect(notion.getByRole('link', { name: 'Télécharger le PDF', exact: true })).toBeVisible()
   await expect(notion).not.toContainText('BLOCKER : confirmer le périmètre.')
   await expect(notion).not.toContainText('Recommandations Syncoria')
   expect(requests.filter((request) => request.path === `${auditPrefix}/${auditCorrelationId}/report` && request.method === 'GET')).toHaveLength(0)
@@ -501,7 +530,8 @@ test('renames a report in place and keeps its report actions available', async (
   const requests = await openAudit(page)
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const notion = history.locator('.tenant-audit__history-item').filter({ hasText: '07/09/2026' })
-  await notion.getByRole('button', { name: /Renommer/ }).click()
+  await notion.locator('.ui-action-menu > summary').click()
+  await notion.getByRole('button', { name: 'Renommer', exact: true }).click()
   await notion.getByLabel('Nouveau titre').fill('Audit recrutement — phase 1')
   await notion.getByRole('button', { name: 'Enregistrer', exact: true }).click()
   await expect(notion).toContainText('Audit recrutement — phase 1')
@@ -514,7 +544,8 @@ test('shows a sanitized rename error and keeps the existing title', async ({ pag
   await openAudit(page, { renameStatus: 503 })
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const notion = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
-  await notion.getByRole('button', { name: /Renommer/ }).click()
+  await notion.locator('.ui-action-menu > summary').click()
+  await notion.getByRole('button', { name: 'Renommer', exact: true }).click()
   await notion.getByLabel('Nouveau titre').fill('Titre non sauvegardé')
   await notion.getByRole('button', { name: 'Enregistrer', exact: true }).click()
   await expect(notion.getByRole('alert')).toHaveText('Le titre n’a pas pu être enregistré. Réessayez.')
@@ -529,8 +560,10 @@ test('adds a newly published audit without changing the existing row actions', a
   const launcher = page.getByRole('region', { name: 'Lancement de l’audit', exact: true })
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
-  await expect(history.locator('.tenant-audit__history-item', { hasText: /Audit Notion —/ })).toBeVisible()
-  await expect(notion.getByRole('link', { name: 'Voir rapport', exact: true })).toBeVisible()
+  const published = history.locator('.tenant-audit__history-item', { hasText: '17/10/2026' })
+  await expect(published).toBeVisible()
+  await published.locator('.ui-action-menu > summary').click()
+  await expect(published.getByRole('link', { name: 'Télécharger le PDF', exact: true })).toBeVisible()
   expect(requests.filter((request) => request.path === `${prefix}/reports`)).toHaveLength(2)
 })
 
@@ -558,7 +591,7 @@ test('lets an administrator choose a provider and renders the real V2 progressio
   await expect(launcher).toContainText('État : Terminé')
   await expect(launcher).toContainText('Temps écoulé')
   await expect(launcher).not.toContainText('%')
-  await expect(page.getByRole('region', { name: 'Historique des audits', exact: true }).locator('.tenant-audit__history-item', { hasText: /Audit Notion —/ })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Historique des audits', exact: true }).locator('.tenant-audit__history-item', { hasText: '17/10/2026' })).toBeVisible()
   const selectedAuditPrefix = `${prefix}/providers/${notionBId}/audits`
   expect(requests.filter((request) => request.path === selectedAuditPrefix && request.method === 'POST')).toHaveLength(1)
   expect(requests.filter((request) => request.path === `${selectedAuditPrefix}/${auditCorrelationId}` && request.method === 'GET')).toHaveLength(6)
@@ -657,7 +690,7 @@ test('does not restore a terminal audit after returning to the Audit tab', async
   await launcher.getByRole('button', { name: 'Lancer l’audit', exact: true }).click()
   await expect(launcher.getByText('État : Terminé', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Ingestion', exact: true }).click()
-  await page.getByRole('button', { name: 'Audit & cartographie', exact: true }).click()
+  await page.getByRole('button', { name: 'Audit', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Lancement de l’audit', exact: true }).locator('.tenant-audit__launcher-status')).toHaveCount(0)
 })
 
@@ -690,5 +723,5 @@ test('409 recovers the active audit and resumes polling', async ({ page }) => {
 test('client workspace does not expose report actions', async ({ page }) => {
   await openAudit(page, { client: true })
   await expect(page.getByRole('heading', { name: 'synthetic', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Audit & cartographie', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Audit', exact: true })).toHaveCount(0)
 })

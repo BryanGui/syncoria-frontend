@@ -22,8 +22,10 @@ export type TenantWorkspaceSection = typeof TENANT_WORKSPACE_SECTIONS[number]
 
 export const ADMIN_TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
-  'Provider credentials',
-  'Audit & intégration',
+  'Connexions',
+  'Audit',
+  'Ingestion',
+  'Intégration',
   'Synchronisation',
   'Automatisations',
   'Logs',
@@ -31,12 +33,3 @@ export const ADMIN_TENANT_WORKSPACE_SECTIONS = [
 
 export type AdminTenantWorkspaceSection =
   typeof ADMIN_TENANT_WORKSPACE_SECTIONS[number]
-
-export const INTEGRATION_WORKSPACE_SECTIONS = [
-  'Audit & cartographie',
-  'Ingestion',
-  'Intégration des données',
-] as const
-
-export type IntegrationWorkspaceSection =
-  typeof INTEGRATION_WORKSPACE_SECTIONS[number]
