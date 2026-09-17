@@ -249,14 +249,15 @@ function mapStatus(status: number): AdminIntegrationFailureStatus | null {
   if (status === 401) return 'unauthenticated'
   if (status === 404) return 'not_found'
   if (status === 409) return 'conflict'
-  if (status === 422) return 'invalid'
+  if (status === 413 || status === 422) return 'invalid'
   return null
 }
 
-async function conflictCode(response: Response): Promise<string | undefined> {
+async function errorCode(response: Response): Promise<string | undefined> {
   try {
-    const payload = await response.json() as { code?: unknown }
-    return typeof payload.code === 'string' ? payload.code : undefined
+    const payload = await response.json() as unknown
+    if (!isObject(payload) || !isObject(payload.detail)) return undefined
+    return typeof payload.detail.code === 'string' ? payload.detail.code : undefined
   } catch {
     return undefined
   }
@@ -288,9 +289,9 @@ async function requestPayload<T>(
     })
     const mapped = mapStatus(response.status)
     if (mapped !== null) {
-      return mapped === 'conflict'
-        ? { status: mapped, code: await conflictCode(response) }
-        : { status: mapped }
+      if (mapped === 'unauthenticated') return { status: mapped }
+      const code = await errorCode(response)
+      return code === undefined ? { status: mapped } : { status: mapped, code }
     }
     if (!response.ok) {
       logFailure(logger, action, response.status)
@@ -583,7 +584,11 @@ export async function deleteAdminIntegrationIngestion(
       method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' }, signal,
     })
     const mapped = mapStatus(response.status)
-    if (mapped !== null) return { status: mapped }
+    if (mapped !== null) {
+      if (mapped === 'unauthenticated') return { status: mapped }
+      const code = await errorCode(response)
+      return code === undefined ? { status: mapped } : { status: mapped, code }
+    }
     if (!response.ok) {
       logFailure(logger, 'delete_integration_ingestion', response.status)
       return { status: 'error' }

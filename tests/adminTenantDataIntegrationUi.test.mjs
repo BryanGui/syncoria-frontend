@@ -50,7 +50,8 @@ test('uses version-scoped ingestion references with replace and remove actions',
 test('keeps archived tenants read-only and validates imported DDLs', () => {
   assert.match(component, /const isArchivedTenant = tenantStatus !== 'active'/)
   assert.match(component, /const canEdit = !isArchivedTenant && isCurrentDraft/)
-  assert.match(component, /aucune création ni modification n’est possible/)
+  assert.match(component, /aucune création ni modification n’est disponible/)
+  assert.match(component, /Les versions restent consultables dans Active et Versions/)
   assert.match(component, /MAX_DDL_BYTES/)
   assert.match(component, /Le fichier doit être au format \.sql/)
   assert.match(component, /Le fichier dépasse la taille maximale de 1 MiB/)

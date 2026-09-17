@@ -168,3 +168,50 @@ test('validates files and never exposes backend or SQL details', async () => {
   assert.deepEqual(result, { status: 'error' })
   assert.doesNotMatch(JSON.stringify(result), /sensitive SQL|backend detail/)
 })
+
+test('reads only sanitized integration codes from the FastAPI detail envelope', async () => {
+  const conflict = (code) => async () => Response.json({
+    detail: { code, message: 'Technical backend message that must stay hidden.' },
+  }, { status: 409 })
+  const title = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, 'Duplicate title',
+    'CREATE TABLE duplicate_title (id integer);', undefined, conflict('duplicate_title'),
+  )
+  const content = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, 'Duplicate content',
+    'CREATE TABLE duplicate_content (id integer);', undefined, conflict('duplicate_content'),
+  )
+  const audit = await addAdminIntegrationDdlFromAudit(
+    'https://api.example.com', tenantId, integrationId, 'audit-notion-2026-09-17',
+    undefined, conflict('duplicate_audit'),
+  )
+  const invalid = await createAdminIntegration(
+    'https://api.example.com', tenantId, undefined, undefined,
+    async () => Response.json({ detail: { code: 'invalid', message: 'Invalid integration request.' } }, { status: 422 }),
+  )
+  const tooLarge = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, 'Too large',
+    'CREATE TABLE too_large (id integer);', undefined,
+    async () => Response.json({ detail: { code: 'too_large', message: 'Invalid integration request.' } }, { status: 413 }),
+  )
+  const genericConflict = await activateAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json({ detail: { code: 'conflict', message: 'Current state is private.' } }, { status: 409 }),
+  )
+  const notFound = await fetchAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json({ detail: { code: 'not_found', message: 'Private identifier.' } }, { status: 404 }),
+  )
+
+  assert.deepEqual(title, { status: 'conflict', code: 'duplicate_title' })
+  assert.deepEqual(content, { status: 'conflict', code: 'duplicate_content' })
+  assert.deepEqual(audit, { status: 'conflict', code: 'duplicate_audit' })
+  assert.deepEqual(invalid, { status: 'invalid', code: 'invalid' })
+  assert.deepEqual(tooLarge, { status: 'invalid', code: 'too_large' })
+  assert.deepEqual(genericConflict, { status: 'conflict', code: 'conflict' })
+  assert.deepEqual(notFound, { status: 'not_found', code: 'not_found' })
+  assert.doesNotMatch(
+    JSON.stringify([title, content, audit, invalid, tooLarge, genericConflict, notFound]),
+    /Technical backend|Invalid integration request|Current state is private|Private identifier/,
+  )
+})

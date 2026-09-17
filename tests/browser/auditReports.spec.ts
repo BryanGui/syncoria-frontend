@@ -335,47 +335,58 @@ test('separates archives and removes an archived audit from the main history', a
   expect((await download).suggestedFilename()).toBe('synthetic.pdf')
 })
 
-test('opens exact DDL and ER artifacts under their audit row', async ({ page }) => {
+test('opens the audit PDF from both the row and its title', async ({ page }) => {
   await openAudit(page)
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { __openedReportUrls: string[] }
+    trackedWindow.__openedReportUrls = []
+    trackedWindow.open = ((url?: string | URL) => {
+      trackedWindow.__openedReportUrls.push(String(url))
+      return null
+    }) as typeof window.open
+  })
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
+  await drive.focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([
+    `https://api.bryanlab.ovh${prefix}/reports/audit-drive-2026-10-16/pdf`,
+  ])
   await drive.getByRole('button', { name: /Audit Drive/ }).click()
-  const artifacts = drive.locator('.tenant-audit__artifact-panel')
-  await expect(artifacts).toContainText('-- Audit Drive')
-  await expect(artifacts).toContainText('CREATE TABLE "Audit Drive" ();')
-  await expect(artifacts).not.toContainText('Le téléchargement est disponible après ouverture du DDL.')
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([
+    `https://api.bryanlab.ovh${prefix}/reports/audit-drive-2026-10-16/pdf`,
+    `https://api.bryanlab.ovh${prefix}/reports/audit-drive-2026-10-16/pdf`,
+  ])
+  await expect(drive.locator('.tenant-audit__artifact-panel')).toHaveCount(0)
+})
+
+test('keeps the audit menu and artifact downloads isolated from the row action', async ({ page }) => {
+  await openAudit(page)
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { __openedReportUrls: string[] }
+    trackedWindow.__openedReportUrls = []
+    trackedWindow.open = ((url?: string | URL) => {
+      trackedWindow.__openedReportUrls.push(String(url))
+      return null
+    }) as typeof window.open
+  })
+  const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
+  const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
   await drive.locator('.ui-action-menu > summary').click()
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
   const ddlDownload = page.waitForEvent('download')
   await drive.getByRole('button', { name: 'Télécharger le DDL', exact: true }).click()
   const downloaded = await (await ddlDownload).path()
   expect(downloaded).not.toBeNull()
   expect(await readFile(downloaded!, 'utf8')).toBe('-- Audit Drive\nCREATE TABLE "Audit Drive" ();\n')
-  await artifacts.getByRole('tab', { name: 'ER brut', exact: true }).click()
-  const diagram = drive.locator('.raw-er-diagram')
-  await expect(diagram.locator('.raw-er-node')).toBeVisible()
-  await expect(diagram).toContainText('Observed field')
-  await expect(diagram).toContainText('text')
-  await expect(diagram).toContainText('Relations observées à cible non résolue')
-  await expect(diagram).not.toContainText('Table Contacts')
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
   await drive.locator('.ui-action-menu > summary').click()
   const erJsonDownload = page.waitForEvent('download')
   await drive.getByRole('button', { name: 'Télécharger l’ER', exact: true }).click()
   const erJsonPath = await (await erJsonDownload).path()
   expect(erJsonPath).not.toBeNull()
   expect(JSON.parse(await readFile(erJsonPath!, 'utf8'))).toEqual(structuredReport('Audit Drive', null).raw_er)
-})
-
-test('opening another audit replaces the previous row artifacts', async ({ page }) => {
-  await openAudit(page)
-  const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
-  const drive = history.locator('.tenant-audit__history-item', { hasText: 'Audit Drive' })
-  await drive.getByRole('button', { name: /Audit Drive/ }).click()
-  await expect(drive).toContainText('-- Audit Drive')
-  const notion = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
-  await notion.getByRole('button', { name: /Audit Notion/ }).click()
-  await expect(drive).not.toContainText('-- Audit Drive')
-  await expect(notion).toContainText('-- Audit Notion')
-  await expect(notion).not.toContainText('-- Audit Drive')
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
 })
 
 test('keeps decisions neutral when the backend does not provide them', async ({ page }) => {

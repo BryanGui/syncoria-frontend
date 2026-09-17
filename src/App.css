@@ -2248,10 +2248,14 @@ button.navigation__link {
 .tenant-audit__section-heading h4 { margin: 0; color: var(--color-text-primary); font-size: 1.2rem; }
 .tenant-audit__section-heading > p { margin: 0; color: var(--color-text-secondary); font-size: .8rem; }
 .tenant-audit__history ul { display: grid; gap: .55rem; margin: 0; padding: 0; list-style: none; }
-.tenant-audit__history-item { display: grid; gap: .85rem; width: 100%; padding: .95rem 1rem; box-sizing: border-box; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface); color: var(--color-text-body); text-align: left; }
+.tenant-audit__history-item { display: grid; gap: .85rem; width: 100%; padding: .95rem 1rem; box-sizing: border-box; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface); color: var(--color-text-body); text-align: left; cursor: pointer; }
 .tenant-audit__history-item:hover { border-color: #b8afe0; }
+.tenant-audit__history-item:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .tenant-audit__history-main, .tenant-audit__history-stat { display: grid; gap: .25rem; min-width: 0; }
 .tenant-audit__history-main strong { overflow: hidden; color: var(--color-text-primary); font-size: .9rem; text-overflow: ellipsis; white-space: nowrap; }
+.tenant-audit__history-title { width: fit-content; max-width: 100%; padding: 0; overflow: hidden; border: 0; background: transparent; color: var(--color-text-primary); font: inherit; font-size: .9rem; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.tenant-audit__history-title:hover { text-decoration: underline; }
+.tenant-audit__history-title:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .tenant-audit__history-main span, .tenant-audit__history-stat span { color: var(--color-text-secondary); font-size: .78rem; }
 .tenant-audit__history-stat { justify-items: end; text-align: right; }
 .tenant-audit__status { display: inline-flex; align-items: center; width: fit-content; color: #18794e; font-weight: 700; }
@@ -3509,8 +3513,13 @@ button.navigation__link {
 .versioned-integration__empty-create { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); color: var(--color-text-secondary); }
 .versioned-integration__empty { margin: 0; font-size: .85rem; }
 .versioned-integration__empty-create { display: grid; gap: 12px; max-width: 720px; }
-.versioned-integration__creation-actions { display: flex; justify-content: flex-start; }
-.versioned-integration__clone-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.versioned-integration__create-manager { display: grid; gap: 14px; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); }
+.versioned-integration__draft-picker { display: grid; gap: 8px; }
+.versioned-integration__draft-picker h5 { margin: 0; color: var(--color-text-primary); font-size: .82rem; }
+.versioned-integration__creation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.versioned-integration__creation-option { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.versioned-integration__creation-option .ui-button { justify-self: start; }
+.versioned-integration__compact-note { margin: 0; color: var(--color-text-secondary); font-size: .8rem; line-height: 1.45; }
 .versioned-integration__section { display: grid; gap: 12px; min-width: 0; padding-top: 4px; }
 .versioned-integration__section-heading { align-items: center; }
 .versioned-integration__section-heading h4 { font-size: .98rem; }
@@ -3587,11 +3596,11 @@ button.navigation__link {
   .versioned-integration__version-heading,
   .versioned-integration__preview-heading { flex-direction: column; align-items: flex-start; }
   .versioned-integration__form-grid,
+  .versioned-integration__creation-grid,
   .versioned-integration__metadata,
   .versioned-integration__versions-layout { grid-template-columns: 1fr; }
-  .versioned-integration__clone-control,
   .versioned-integration__activation { grid-template-columns: 1fr; align-items: stretch; }
-  .versioned-integration__clone-control .ui-button,
+  .versioned-integration__creation-option .ui-button,
   .versioned-integration__activation > .ui-button { width: 100%; }
   .versioned-integration__ddl-row,
   .versioned-integration__ingestion-row { align-items: flex-start; }

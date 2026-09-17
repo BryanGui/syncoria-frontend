@@ -6,8 +6,6 @@ import {
   launchAdminTenantProviderAudit,
   updateAdminTenantProviderAuditTitle,
   type AdminProviderAuditOperation,
-  type AdminProviderAuditERModel,
-  type AdminProviderAuditReport,
 } from '../api/adminTenantAudits'
 import { fetchAdminTenantProviders, type AdminProviderRecord } from '../api/adminTenantProviders'
 import {
@@ -17,7 +15,6 @@ import {
   type AdminTenantReport,
   type AdminTenantReportsResult,
 } from '../api/adminTenantReports'
-import { RawAuditERDiagram } from './RawAuditERDiagram'
 import { ActionMenu } from './ui/ActionMenu'
 import { formatLocalCalendarDate, formatReportDate } from '../tenantReports/model'
 
@@ -36,10 +33,6 @@ const auditPhases = [
 
 type ReportReference = { providerRecordId: string; correlationId: string }
 type AuditDetailTab = 'ddl' | 'er'
-type ReportDetailState =
-  | { status: 'idle' }
-  | { status: 'loading' | 'unavailable' | 'error'; reportId: string }
-  | { status: 'loaded'; reportId: string; report: AdminProviderAuditReport }
 
 function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
@@ -78,114 +71,6 @@ function reportArtifactFilenamePart(value: string): string {
     .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'audit'
 }
 
-function buildRawDdlFilename(
-  tenantLabel: string,
-  provider: string,
-  reportTitle: string,
-  reportDate: string,
-): string {
-  return [tenantLabel, provider, reportTitle, reportDate]
-    .map(reportArtifactFilenamePart).join('-') + '.sql'
-}
-
-function buildRawErFilename(
-  tenantLabel: string,
-  provider: string,
-  reportTitle: string,
-  reportDate: string,
-  extension: 'json' | 'mmd',
-): string {
-  return [tenantLabel, provider, reportTitle, reportDate]
-    .map(reportArtifactFilenamePart).join('-') + `.${extension}`
-}
-
-function escapeMermaidLabel(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function buildRawErMermaid(model: AdminProviderAuditERModel): string {
-  const tableIds = new Map(model.tables.map((table, index) => [table.name, `table_${index}_${reportArtifactFilenamePart(table.name).replace(/-/g, '_')}`]))
-  const lines = ['flowchart LR']
-  model.tables.forEach((table, index) => {
-    const tableId = tableIds.get(table.name) ?? `table_${index}_audit`
-    const columns = table.columns.map((column) => escapeMermaidLabel(`${column.name}: ${column.postgres_type}`))
-    const label = [escapeMermaidLabel(table.name), ...columns].filter(Boolean).join('<br/>')
-    lines.push(`  ${tableId}["${label}"]`)
-  })
-  model.relationships.forEach((relationship) => {
-    const sourceId = tableIds.get(relationship.source_table)
-    const targetId = relationship.target_table === null ? null : tableIds.get(relationship.target_table)
-    const targetColumn = relationship.target_column === null ? '' : ` → ${relationship.target_column}`
-    const relationLabel = `${relationship.source_column}${targetColumn} · cardinality: ${relationship.cardinality}`
-    if (sourceId === undefined || targetId === null || targetId === undefined) {
-      lines.push(`  %% Relation observée non résolue : ${escapeMermaidLabel(`${relationship.source_table}.${relationship.source_column} → ${relationship.target_table ?? 'cible inconnue'}`)}`)
-      return
-    }
-    lines.push(`  ${sourceId} -->|"${escapeMermaidLabel(relationLabel)}"| ${targetId}`)
-  })
-  return `${lines.join('\n')}\n`
-}
-
-function RawDdlViewer({
-  ddl,
-  fileName,
-}: {
-  ddl: string
-  fileName: string
-}) {
-  const downloadUrl = useMemo(
-    () => URL.createObjectURL(new Blob([ddl], { type: 'text/plain;charset=utf-8' })),
-    [ddl],
-  )
-  useEffect(() => () => URL.revokeObjectURL(downloadUrl), [downloadUrl])
-  return (
-    <div className="raw-ddl-viewer">
-      <div className="raw-ddl-viewer__toolbar">
-        <span>Lecture seule · contenu brut préservé</span>
-        <a className="secondary-button" download={fileName} href={downloadUrl}>
-          Télécharger le DDL brut
-        </a>
-      </div>
-      <pre aria-label="DDL brut">{ddl}</pre>
-    </div>
-  )
-}
-
-function RawErViewer({
-  model,
-  fileNameBase,
-}: {
-  model: AdminProviderAuditERModel
-  fileNameBase: string
-}) {
-  const rawJson = useMemo(() => `${JSON.stringify(model, null, 2)}\n`, [model])
-  const rawMermaid = useMemo(() => buildRawErMermaid(model), [model])
-  const downloadUrls = useMemo(() => ({
-    json: URL.createObjectURL(new Blob([rawJson], { type: 'application/json;charset=utf-8' })),
-    mermaid: URL.createObjectURL(new Blob([rawMermaid], { type: 'text/plain;charset=utf-8' })),
-  }), [rawJson, rawMermaid])
-  useEffect(() => () => {
-    URL.revokeObjectURL(downloadUrls.json)
-    URL.revokeObjectURL(downloadUrls.mermaid)
-  }, [downloadUrls])
-  return (
-    <div className="raw-er-viewer">
-      <div className="raw-er-viewer__toolbar">
-        <span>Export déterministe depuis raw_er</span>
-        <div className="raw-er-viewer__downloads">
-          <a className="secondary-button" download={`${fileNameBase}.json`} href={downloadUrls.json}>
-            Télécharger l’ER brut (JSON)
-          </a>
-          <a className="secondary-button" download={`${fileNameBase}.mmd`} href={downloadUrls.mermaid}>
-            Télécharger l’ER brut (Mermaid)
-          </a>
-        </div>
-      </div>
-      <RawAuditERDiagram model={model} />
-    </div>
-  )
-}
-
 function AuditElapsedTime({ operation }: { operation: AdminProviderAuditOperation }) {
   const [now, setNow] = useState(() => Date.now())
   const active = operation.status === 'pending' || operation.status === 'running'
@@ -207,8 +92,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const [state, setState] = useState<AdminTenantReportsResult | { status: 'loading' }>({ status: 'loading' })
   const [reportsError, setReportsError] = useState<string | null>(null)
   const [showArchives, setShowArchives] = useState(false)
-  const [expandedReportId, setExpandedReportId] = useState<string | null>(null)
-  const [expandedArtifactTab, setExpandedArtifactTab] = useState<AuditDetailTab>('ddl')
   const [reloadKey, setReloadKey] = useState(0)
   const [confirmationId, setConfirmationId] = useState<string | null>(null)
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -225,11 +108,9 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const [titleDraft, setTitleDraft] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
   const [isRenaming, setIsRenaming] = useState(false)
-  const [reportDetailState, setReportDetailState] = useState<ReportDetailState>({ status: 'idle' })
   const archiveRequest = useRef<AbortController | null>(null)
   const auditRequest = useRef<AbortController | null>(null)
   const renameRequest = useRef<AbortController | null>(null)
-  const reportDetailRequest = useRef<AbortController | null>(null)
   const polling = useRef<{ controller: AbortController; timer: number | null } | null>(null)
   const reportsTenant = useRef<string | null>(null)
   const lastActiveAudit = useRef<AdminProviderAuditOperation | null>(null)
@@ -261,7 +142,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
 
   useEffect(() => {
     const controller = new AbortController(); const tenantChanged = reportsTenant.current !== tenantId; reportsTenant.current = tenantId
-    if (tenantChanged) { setReportsError(null); setState({ status: 'loading' }); setShowArchives(false); setExpandedReportId(null); setReportDetailState({ status: 'idle' }) } else setState((previous) => previous.status === 'loaded' ? previous : { status: 'loading' })
+    if (tenantChanged) { setReportsError(null); setState({ status: 'loading' }); setShowArchives(false) } else setState((previous) => previous.status === 'loaded' ? previous : { status: 'loading' })
     setConfirmationId(null); setPendingId(null); setArchiveError(null)
     void fetchAdminTenantReports(apiBaseUrl, tenantId, controller.signal).then((result) => {
       if (controller.signal.aborted) return
@@ -276,44 +157,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
     }
     return null
   }, [])
-
-  useEffect(() => {
-    reportDetailRequest.current?.abort()
-    if (expandedReportId === null) {
-      setReportDetailState({ status: 'idle' })
-      return undefined
-    }
-    const report = state.status === 'loaded'
-      ? state.reports.find((item) => item.id === expandedReportId) ?? null
-      : null
-    const reference = report === null ? null : reportReference(report)
-    if (reference === null) {
-      setReportDetailState({ status: 'unavailable', reportId: expandedReportId })
-      return undefined
-    }
-    const controller = new AbortController()
-    reportDetailRequest.current = controller
-    setReportDetailState({ status: 'loading', reportId: expandedReportId })
-    void fetchAdminTenantProviderAuditReport(
-      apiBaseUrl, tenantId, reference.providerRecordId, reference.correlationId,
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return
-      reportDetailRequest.current = null
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        setReportDetailState({ status: 'error', reportId: expandedReportId })
-      } else if (result.status === 'loaded' && result.report.report_id === expandedReportId) {
-        setReportDetailState({ status: 'loaded', reportId: expandedReportId, report: result.report })
-      } else {
-        setReportDetailState({ status: result.status === 'not_found' ? 'unavailable' : 'error', reportId: expandedReportId })
-      }
-    })
-    return () => {
-      controller.abort()
-      if (reportDetailRequest.current === controller) reportDetailRequest.current = null
-    }
-  }, [apiBaseUrl, expandedReportId, onSessionExpired, reportReference, state, tenantId])
 
   useEffect(() => {
     const controller = new AbortController(); setProviderState('loading'); setProviders([]); setSelectedProviderId(''); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null); setIsLaunching(false); setDisplayTitle('')
@@ -394,7 +237,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   async function archiveReport(reportId: string) {
     if (archiveRequest.current && !archiveRequest.current.signal.aborted) return
     const controller = new AbortController(); archiveRequest.current = controller; setPendingId(reportId); setArchiveError(null); const result = await archiveAdminTenantReport(apiBaseUrl, tenantId, reportId, controller.signal); if (controller.signal.aborted) return; archiveRequest.current = null; setPendingId(null)
-    if (result.status === 'unauthenticated') { onSessionExpired(); setState({ status: 'unauthenticated' }) } else if (result.status === 'archived') { setConfirmationId(null); setExpandedReportId(null); setReportDetailState({ status: 'idle' }); setState((previous) => previous.status !== 'loaded' ? previous : { ...previous, reports: previous.reports.map((report) => report.id === reportId ? { ...report, status: 'archived' } : report) }); setReloadKey((key) => key + 1) } else setArchiveError(result.status === 'not_found' ? 'Ce rapport ou ce client n’est plus disponible. Rechargez les rapports.' : 'Le rapport n’a pas pu être archivé. Réessayez.')
+    if (result.status === 'unauthenticated') { onSessionExpired(); setState({ status: 'unauthenticated' }) } else if (result.status === 'archived') { setConfirmationId(null); setState((previous) => previous.status !== 'loaded' ? previous : { ...previous, reports: previous.reports.map((report) => report.id === reportId ? { ...report, status: 'archived' } : report) }); setReloadKey((key) => key + 1) } else setArchiveError(result.status === 'not_found' ? 'Ce rapport ou ce client n’est plus disponible. Rechargez les rapports.' : 'Le rapport n’a pas pu être archivé. Réessayez.')
   }
   function beginRename(report: AdminTenantReport) { setEditingReportId(report.id); setTitleDraft(report.title); setRenameError(null) }
   async function saveRename(report: AdminTenantReport) {
@@ -413,27 +256,21 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   async function downloadArtifact(report: AdminTenantReport, artifact: AuditDetailTab) {
     const reference = reportReference(report)
     if (reference === null) return
-    const loaded = reportDetailState.status === 'loaded' && reportDetailState.reportId === report.id
-      ? reportDetailState.report
-      : null
-    let detail = loaded
-    if (detail === null) {
-      const result = await fetchAdminTenantProviderAuditReport(
-        apiBaseUrl,
-        tenantId,
-        reference.providerRecordId,
-        reference.correlationId,
-      )
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        setReportsError('Les artefacts techniques ne peuvent pas être chargés pour le moment.')
-        return
-      }
-      detail = result.report
+    const result = await fetchAdminTenantProviderAuditReport(
+      apiBaseUrl,
+      tenantId,
+      reference.providerRecordId,
+      reference.correlationId,
+    )
+    if (result.status === 'unauthenticated') {
+      onSessionExpired()
+      return
     }
+    if (result.status !== 'loaded') {
+      setReportsError('Les artefacts techniques ne peuvent pas être chargés pour le moment.')
+      return
+    }
+    const detail = result.report
     const content = artifact === 'ddl'
       ? detail.structured_report.raw_ddl
       : detail.structured_report.raw_er === null
@@ -467,8 +304,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
             className="secondary-button tenant-audit__archive-toggle"
             onClick={() => {
               setShowArchives((visible) => !visible)
-              setExpandedReportId(null)
-              setReportDetailState({ status: 'idle' })
             }}
             type="button"
           >
@@ -484,17 +319,13 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
             {reports.map((report) => {
               const renaming = editingReportId === report.id
               const reference = reportReference(report)
-              const detailMatches = reportDetailState.status !== 'idle'
-                && reportDetailState.reportId === report.id
               const hasManagementActions = reference !== null || report.status === 'completed'
               const openReport = () => {
-                if (expandedReportId === report.id) {
-                  setExpandedReportId(null)
-                  setReportDetailState({ status: 'idle' })
-                  return
-                }
-                setExpandedArtifactTab('ddl')
-                setExpandedReportId(report.id)
+                window.open(
+                  buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id),
+                  '_blank',
+                  'noopener,noreferrer',
+                )
               }
               const handleRowClick = (event: MouseEvent<HTMLElement>) => {
                 const target = event.target as HTMLElement
@@ -510,7 +341,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
               return (
                 <li className="tenant-audit__history-row" key={report.id}>
                   <article
-                    aria-expanded={expandedReportId === report.id}
                     aria-label={`${report.title} — ${formatReportDate(report.report_date)}`}
                     className="tenant-audit__history-item"
                     onClick={handleRowClick}
@@ -568,7 +398,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
                         {renameError ? <p role="alert">{renameError}</p> : null}
                       </div>
                     ) : null}
-                    {expandedReportId === report.id ? renderArtifactPanel(report, detailMatches) : null}
                     {confirmationId === report.id ? (
                       <div aria-describedby={`archive-${report.id}-description`} aria-labelledby={`archive-${report.id}-title`} className="tenant-audit__confirmation" role="alertdialog">
                         <strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong>
@@ -588,38 +417,6 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
         )}
       </section>
     )
-  }
-
-  function renderArtifactPanel(report: AdminTenantReport, detailMatches: boolean) {
-    const detail = reportDetailState.status === 'loaded' && detailMatches
-      ? reportDetailState.report
-      : null
-    const structured = detail?.structured_report ?? null
-    const rawDdl = structured?.raw_ddl ?? null
-    const rawEr = structured?.raw_er ?? null
-    const rawDdlInvalid = structured?.raw_ddl_invalid === true
-    const rawErInvalid = structured?.raw_er_invalid === true
-    const hasDdl = rawDdl !== null && rawDdl.length > 0 && !rawDdlInvalid
-    const hasEr = rawEr !== null && !rawErInvalid
-    const fileName = buildRawDdlFilename(tenantLabel, report.provider, report.title, report.report_date)
-    const erFileNameBase = buildRawErFilename(tenantLabel, report.provider, report.title, report.report_date, 'mmd').replace(/\.mmd$/, '')
-    return <section aria-label={`Aperçu de ${report.title}`} className="tenant-audit__artifact-panel">
-      {reportDetailState.status === 'loading' && detailMatches ? <p className="tenant-audit__report-loading" role="status">Chargement des artefacts…</p> : null}
-      {reportDetailState.status === 'error' && detailMatches ? <p className="tenant-audit__empty-note" role="alert">Les artefacts techniques ne peuvent pas être chargés pour le moment.</p> : null}
-      {reportDetailState.status === 'unavailable' && detailMatches ? <p className="tenant-audit__empty-note">Les artefacts techniques ne sont pas disponibles pour cet ancien audit.</p> : null}
-      {rawDdlInvalid ? <p className="tenant-audit__empty-note" role="alert">Le DDL brut reçu est invalide et reste masqué.</p> : null}
-      {rawErInvalid ? <p className="tenant-audit__empty-note" role="alert">Le modèle ER brut reçu est invalide et reste masqué.</p> : null}
-      {detail ? (
-        <div aria-label="Artefacts du rapport" className="tenant-audit__artifact-tabs" role="tablist">
-          <button aria-selected={expandedArtifactTab === 'ddl'} className="secondary-button" onClick={() => setExpandedArtifactTab('ddl')} role="tab" type="button">DDL brut</button>
-          <button aria-selected={expandedArtifactTab === 'er'} className="secondary-button" onClick={() => setExpandedArtifactTab('er')} role="tab" type="button">ER brut</button>
-        </div>
-      ) : null}
-      {expandedArtifactTab === 'ddl' && hasDdl ? <RawDdlViewer ddl={rawDdl} fileName={fileName} /> : null}
-      {expandedArtifactTab === 'er' && hasEr ? <RawErViewer fileNameBase={erFileNameBase} model={rawEr} /> : null}
-      {detail && expandedArtifactTab === 'ddl' && !hasDdl ? <p className="tenant-audit__empty-note">Aucun DDL brut n’est disponible pour ce rapport.</p> : null}
-      {detail && expandedArtifactTab === 'er' && !hasEr ? <p className="tenant-audit__empty-note">Aucun ER brut n’est disponible pour ce rapport.</p> : null}
-    </section>
   }
 
   return <section aria-label="Audit" className="tenant-audit"><h3>Audit</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}{renderReportHistory(visibleReports)}</>}</section>
