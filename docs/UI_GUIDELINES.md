@@ -44,14 +44,62 @@ Les composants se trouvent dans `src/components/ui` :
 
 ## Règles d’utilisation
 
-Une zone ne doit avoir qu’une action visuellement forte lorsque c’est possible.
-Les actions secondaires utilisent `secondary` ou `ghost`. `danger` est réservé
-à une action destructive réelle.
+### Alignement et densité des actions
+
+Une zone fonctionnelle ne doit généralement exposer qu’une seule action
+visuellement principale.
+
+Exemples acceptés :
+
+- `Créer` puis `Modifier` et `Plus ▾` ;
+- `Ouvrir` puis `Télécharger ▾`.
+
+Les actions secondaires utilisent `ghost`, un lien texte, un menu ou un menu
+contextuel. Elles sont regroupées lorsqu’elles appartiennent au même contexte.
+Il ne faut pas afficher toutes les variantes de `Button` simultanément dans une
+zone métier.
+
+Toutes les actions d’une zone partagent une ligne de référence cohérente. Dans
+un header, le titre et la description restent alignés à gauche, tandis que les
+actions réellement rattachées au même niveau sont alignées à droite, avec une
+hauteur, une baseline et un espacement cohérents. Un badge ne doit pas être
+placé à droite uniquement parce qu’il reste de l’espace.
+
+Les actions ne doivent jamais dominer le contenu. Préférer la typographie,
+l’espace et un séparateur léger à l’ajout de boutons, badges ou surfaces pour
+fabriquer artificiellement une hiérarchie.
+
+Un badge indique uniquement un état utile à la compréhension ou à l’action :
+`Actif`, `Archivé`, `Erreur`, `Auditable`, `Sélectionné`, `Source` ou `Importé`.
+Il ne sert pas de titre secondaire, de décoration, de libellé `Standard` ou
+`Référence` sans utilité métier, ni de compteur décoratif.
+
+Un panel correspond à une vraie unité fonctionnelle. Deux panels côte à côte
+doivent avoir une raison fonctionnelle et une densité comparable. Un
+`EmptyState` reste compact sauf si le contexte métier justifie réellement une
+zone plus grande ; il ne doit pas créer un panel vide surdimensionné.
+
+Le fait qu’une primitive UI existe ne justifie pas son affichage. Chaque bouton,
+badge, panel ou menu visible doit correspondre à un besoin fonctionnel
+identifiable.
+
+Avant de livrer une page, vérifier les alignements horizontalement et
+verticalement à l’échelle de la zone entière, pas uniquement composant par
+composant.
 
 Une liste de choix doit utiliser `SelectableList` au lieu d’une carte par
 option. Une erreur de chargement qui empêche la page de fonctionner reste un
 état persistant avec une action `Réessayer`; une erreur ponctuelle d’action est
 une notification transitoire.
+
+Les boutons `compact` mesurent 32 px et les contrôles `standard` 36 px. Les
+inputs et selects suivent la hauteur standard. Un déclencheur de menu placé à
+côté de boutons partage leur hauteur, leur rayon logique et leur espacement.
+Les marges arbitraires ne doivent pas corriger un mauvais alignement.
+
+La grille d’un écran métier ne doit pas être créée pour exposer plusieurs
+composants. Chaque colonne doit correspondre à une unité utile et les contenus
+doivent rester équilibrés.
 
 ## Responsive et accessibilité
 

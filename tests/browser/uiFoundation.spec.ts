@@ -13,8 +13,8 @@ test('action menu closes after selection and when focus leaves the menu', async 
     return route.fulfill({ status: 404, json: {} })
   })
 
-  await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Bibliothèque UI', exact: true })).toBeVisible()
+  await page.goto('/?ui-interaction-test=1')
+  await expect(page.getByRole('heading', { name: 'Test ActionMenu', exact: true })).toBeVisible()
 
   const menu = page.locator('details.ui-action-menu')
   const trigger = menu.locator('summary')
@@ -26,7 +26,7 @@ test('action menu closes after selection and when focus leaves the menu', async 
 
   await trigger.click()
   await expect(menu).toHaveAttribute('open', '')
-  await page.locator('#reference-name').focus()
+  await page.locator('#action-menu-focus-target').focus()
   await expect(menu).not.toHaveAttribute('open', '')
 
   await trigger.click()
