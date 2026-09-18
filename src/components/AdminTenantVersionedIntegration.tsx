@@ -98,7 +98,13 @@ function sortIntegrations(integrations: AdminIntegrationSummary[]): AdminIntegra
   return [...integrations].sort((a, b) => b.version_number - a.version_number || b.updated_at.localeCompare(a.updated_at))
 }
 
-function validDdlTitle(title: string): boolean {
+function validImportedDdlTitle(title: string): boolean {
+  return title.length > 0
+    && !title.includes('\u0000')
+    && new TextEncoder().encode(title).byteLength <= 120
+}
+
+function validRenamedDdlTitle(title: string): boolean {
   return title.trim().length > 0
     && title === title.trim()
     && !title.includes('\u0000')
@@ -627,7 +633,7 @@ export function AdminTenantVersionedIntegration({
       setNotification({ tone: 'error', message: 'Le fichier doit être au format .sql.' })
       return
     }
-    if (!validDdlTitle(file.name)) {
+    if (!validImportedDdlTitle(file.name)) {
       setNotification({ tone: 'error', message: 'Le nom du fichier doit contenir au maximum 120 octets UTF-8.' })
       return
     }
@@ -664,10 +670,10 @@ export function AdminTenantVersionedIntegration({
       }
       setDdlIntegrationId(draft.id)
       setDdls((current) => [
+        result.ddl,
         ...current
           .filter((ddl) => ddl.id !== result.ddl.id)
           .map((ddl) => ({ ...ddl, is_default: false })),
-        result.ddl,
       ])
       setNotification({ tone: 'success', message: `${file.name} a été chargé.` })
     } catch {
@@ -687,7 +693,7 @@ export function AdminTenantVersionedIntegration({
   async function saveRename(ddlId: string) {
     if (selectedId === null || mutationPending) return
     const normalized = renameTitle.trim()
-    if (!validDdlTitle(normalized)) {
+    if (!validRenamedDdlTitle(normalized)) {
       setRenameError('Le titre est obligatoire et limité à 120 octets UTF-8.')
       return
     }

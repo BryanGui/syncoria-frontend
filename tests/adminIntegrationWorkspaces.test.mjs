@@ -207,7 +207,7 @@ test('uses the exact version-scoped DDL catalogue contract', async () => {
 
   const listed = await fetchAdminIntegrationDdlCandidates('https://api.example.com', tenantId, integrationId, undefined, request)
   const detail = await fetchAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ddlId, undefined, request)
-  const imported = await importAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, 'exact file.sql', 'CREATE TABLE catalogued (id integer);', undefined, request)
+  const imported = await importAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ' exact file.sql', 'CREATE TABLE catalogued (id integer);', undefined, request)
   const selected = await selectAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ddlId, undefined, request)
   const renamed = await renameAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ddlId, 'renamed.sql', undefined, request)
 
@@ -218,7 +218,7 @@ test('uses the exact version-scoped DDL catalogue contract', async () => {
   assert.equal(renamed.status, 'loaded')
   assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddl-candidates`)
   assert.equal(calls[1].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddl-candidates/${ddlId}`)
-  assert.deepEqual(JSON.parse(calls[2].options.body), { title: 'exact file.sql', content: 'CREATE TABLE catalogued (id integer);' })
+  assert.deepEqual(JSON.parse(calls[2].options.body), { title: ' exact file.sql', content: 'CREATE TABLE catalogued (id integer);' })
   assert.equal(calls[3].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddl-candidates/${ddlId}/selection`)
   assert.equal(calls[4].options.method, 'PATCH')
 })
