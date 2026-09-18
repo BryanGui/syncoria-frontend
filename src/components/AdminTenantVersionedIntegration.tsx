@@ -1,28 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
-  activateAdminIntegration,
   addAdminIntegrationDdlFromAudit,
-  cloneAdminIntegration,
   createAdminIntegration,
-  deleteAdminIntegrationIngestion,
+  deleteAdminIntegrationDdl,
   fetchAdminIntegration,
   fetchAdminIntegrationDdl,
   fetchAdminIntegrationDdls,
-  fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
+  fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
   importAdminIntegrationDdl,
   MAX_DDL_BYTES,
-  patchAdminIntegration,
+  renameAdminIntegrationDdl,
+  replaceAdminIntegrationProviders,
   selectAdminIntegrationDdl,
-  selectAdminIntegrationIngestion,
   type AdminIntegration,
   type AdminIntegrationDdl,
   type AdminIntegrationDdlMetadata,
   type AdminIntegrationFailure,
   type AdminIntegrationIngestion,
+  type AdminIntegrationProvider,
   type AdminIntegrationSummary,
   type IntegrationStatus,
 } from '../api/adminIntegrations'
@@ -30,7 +29,12 @@ import {
   fetchAdminTenantReports,
   type AdminTenantReport,
 } from '../api/adminTenantReports'
-import { ActionMenu, Badge, Button, FormField, Notification, SelectableList, SelectInput, TextareaInput, TextInput } from './ui'
+import {
+  fetchAdminTenantProviders,
+  type AdminProviderRecord,
+} from '../api/adminTenantProviders'
+import { compatibleGlobalAuditReports } from '../integrationVersions/auditCompatibility'
+import { ActionMenu, Badge, Button, Notification, TextInput } from './ui'
 
 interface AdminTenantVersionedIntegrationProps {
   apiBaseUrl: string | null
@@ -70,11 +74,11 @@ function statusTone(status: IntegrationStatus): 'success' | 'neutral' | 'warning
 }
 
 function providerLabel(provider: string): string {
-  return provider.length === 0
-    ? 'Provider inconnu'
-    : provider === 'n8n'
-      ? 'n8n'
-      : provider.slice(0, 1).toUpperCase() + provider.slice(1)
+  if (provider.length === 0) return 'Provider inconnu'
+  if (provider === 'n8n') return 'n8n'
+  if (provider === 'google_sheets') return 'Google Sheets'
+  if (provider === 'hubspot') return 'HubSpot'
+  return provider.slice(0, 1).toUpperCase() + provider.slice(1).replaceAll('_', ' ')
 }
 
 function integrationLabel(integration: AdminIntegrationSummary | AdminIntegration): string {
@@ -87,8 +91,6 @@ function failureMessage(result: AdminIntegrationFailure, fallback: string): stri
   if (result.code === 'duplicate_audit') return 'Cet audit est déjà associé à cette version.'
   if (result.code === 'too_large') return 'Le fichier dépasse la taille maximale de 1 MiB.'
   if (result.code === 'invalid') return 'Les informations saisies ne sont pas valides.'
-  if (result.code === 'not_found') return 'Cette version ou cette ressource n’existe plus.'
-  if (result.code === 'conflict') return 'Cette action n’est pas disponible pour l’état actuel de la version.'
   if (result.status === 'unauthenticated') return 'Votre session a expiré.'
   if (result.status === 'not_found') return 'Cette version ou cette ressource n’existe plus.'
   if (result.status === 'conflict') return 'Cette action n’est pas disponible pour l’état actuel de la version.'
@@ -96,12 +98,15 @@ function failureMessage(result: AdminIntegrationFailure, fallback: string): stri
   return fallback
 }
 
-function isDraft(integration: AdminIntegration | AdminIntegrationSummary | null): boolean {
-  return integration?.status === 'draft'
-}
-
 function sortIntegrations(integrations: AdminIntegrationSummary[]): AdminIntegrationSummary[] {
   return [...integrations].sort((a, b) => b.version_number - a.version_number || b.updated_at.localeCompare(a.updated_at))
+}
+
+function validDdlTitle(title: string): boolean {
+  return title.trim().length > 0
+    && title === title.trim()
+    && !title.includes('\u0000')
+    && new TextEncoder().encode(title).byteLength <= 120
 }
 
 function StructuralError({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -135,30 +140,16 @@ function DdlPreview({ ddl, onClose }: { ddl: AdminIntegrationDdl; onClose: () =>
   )
 }
 
-function DdlLibrary({
+function ReadOnlyDdlLibrary({
   ddls,
   ddlPreview,
-  isDraftVersion,
-  loadState,
-  mutationPending,
-  onAddAudit,
-  onImport,
-  onPreview,
-  onRetry,
-  onSelect,
   onClosePreview,
+  onPreview,
 }: {
   ddls: AdminIntegrationDdlMetadata[]
   ddlPreview: AdminIntegrationDdl | null
-  isDraftVersion: boolean
-  loadState: LoadState
-  mutationPending: boolean
-  onAddAudit: () => void
-  onImport: () => void
-  onPreview: (ddlId: string) => void
-  onRetry: () => void
-  onSelect: (ddlId: string) => void
   onClosePreview: () => void
+  onPreview: (ddlId: string) => void
 }) {
   return (
     <section aria-labelledby="integration-ddl-title" className="versioned-integration__section">
@@ -167,30 +158,11 @@ function DdlLibrary({
           <p className="versioned-integration__eyebrow">Modèle / DDL</p>
           <h4 id="integration-ddl-title">DDL disponibles</h4>
         </div>
-        {isDraftVersion ? (
-          <ActionMenu label="Ajouter">
-            <button disabled={mutationPending} onClick={onAddAudit} type="button">Ajouter depuis un audit</button>
-            <button disabled={mutationPending} onClick={onImport} type="button">Importer un DDL</button>
-          </ActionMenu>
-        ) : null}
       </div>
-      {loadState === 'loading' ? <p className="versioned-integration__empty" role="status">Chargement des DDL…</p> : null}
-      {loadState === 'error' ? <StructuralError message="Impossible de charger les DDL de cette version." onRetry={onRetry} /> : null}
-      {loadState === 'loaded' && ddls.length === 0 ? <p className="versioned-integration__empty">Aucun DDL n’est encore associé à cette version.</p> : null}
-      {loadState === 'loaded' && ddls.length > 0 ? (
+      {ddls.length === 0 ? <p className="versioned-integration__empty">Aucun DDL n’est associé à cette version.</p> : (
         <div aria-label="Bibliothèque DDL" className="versioned-integration__ddl-list">
           {ddls.map((ddl) => (
-            <div className={`versioned-integration__ddl-row${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}${isDraftVersion ? '' : ' versioned-integration__ddl-row--readonly'}`} key={ddl.id}>
-              {isDraftVersion ? (
-                <input
-                  aria-label={`Sélectionner ${ddl.title}`}
-                  checked={ddl.is_selected}
-                  disabled={mutationPending}
-                  name="selected-ddl"
-                  onChange={() => onSelect(ddl.id)}
-                  type="radio"
-                />
-              ) : null}
+            <div className={`versioned-integration__ddl-row versioned-integration__ddl-row--readonly${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
               <button className="versioned-integration__ddl-title" onClick={() => onPreview(ddl.id)} type="button">
                 <strong>{ddl.title}</strong>
                 <span>
@@ -204,85 +176,14 @@ function DdlLibrary({
             </div>
           ))}
         </div>
-      ) : null}
-      {loadState === 'loaded' && ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={onClosePreview} /> : null}
+      )}
+      {ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={onClosePreview} /> : null}
     </section>
   )
 }
 
 function ingestionSummary(ingestion: AdminIntegrationIngestion): string {
   return `${formatDate(ingestion.started_at)} · ${ingestion.items_received} reçus · ${ingestion.items_inserted} nouveaux · ${ingestion.items_duplicate} doublons`
-}
-
-function ReferenceIngestions({
-  candidates,
-  canEdit,
-  ingestions,
-  loadState,
-  onDelete,
-  onRetry,
-  onSelect,
-  pendingProviderIds,
-}: {
-  candidates: AdminIntegrationIngestion[]
-  canEdit: boolean
-  ingestions: AdminIntegrationIngestion[]
-  loadState: LoadState
-  onDelete: (providerRecordId: string) => void
-  onRetry: () => void
-  onSelect: (ingestion: AdminIntegrationIngestion) => void
-  pendingProviderIds: ReadonlySet<string>
-}) {
-  const groups = useMemo(() => {
-    const ids = new Set([
-      ...ingestions.map((item) => item.tenant_provider_record_id),
-      ...candidates.map((item) => item.tenant_provider_record_id),
-    ])
-    return [...ids].map((id) => ({
-      id,
-      selected: ingestions.find((item) => item.tenant_provider_record_id === id) ?? null,
-      candidates: candidates.filter((item) => item.tenant_provider_record_id === id),
-    }))
-  }, [candidates, ingestions])
-
-  return (
-    <section aria-labelledby="integration-ingestions-title" className="versioned-integration__section">
-      <div className="versioned-integration__section-heading">
-        <div>
-          <p className="versioned-integration__eyebrow">Références d’exécution</p>
-          <h4 id="integration-ingestions-title">Ingestions de référence</h4>
-        </div>
-      </div>
-      {loadState === 'loading' ? <p className="versioned-integration__empty" role="status">Chargement des ingestions…</p> : null}
-      {loadState === 'error' ? <StructuralError message="Impossible de charger les ingestions de référence." onRetry={onRetry} /> : null}
-      {loadState === 'loaded' && groups.length === 0 ? <p className="versioned-integration__empty">Aucune ingestion de référence choisie.</p> : null}
-      {loadState === 'loaded' ? <div className="versioned-integration__ingestion-list">
-        {groups.map(({ id, selected, candidates: groupCandidates }) => {
-          const display = selected ?? groupCandidates[0] ?? null
-          if (display === null) return null
-          return (
-            <div className="versioned-integration__ingestion-row" key={id}>
-              <div>
-                <strong>{providerLabel(display.provider)}</strong>
-                <span>{selected ? ingestionSummary(selected) : 'Aucune ingestion choisie'}</span>
-                {selected?.archived ? <Badge tone="neutral">Archivée</Badge> : null}
-              </div>
-              {canEdit ? (
-                <ActionMenu ariaLabel={`Modifier ${providerLabel(display.provider)}`} label="⋯">
-                  {groupCandidates.map((candidate) => (
-                    <button disabled={pendingProviderIds.has(id)} key={candidate.correlation_id} onClick={() => onSelect(candidate)} type="button">
-                      Choisir {ingestionSummary(candidate)}
-                    </button>
-                  ))}
-                  {selected ? <button disabled={pendingProviderIds.has(id)} onClick={() => onDelete(id)} type="button">Retirer la référence</button> : null}
-                </ActionMenu>
-              ) : null}
-            </div>
-          )
-        })}
-      </div> : null}
-    </section>
-  )
 }
 
 function ReadOnlyVersion({
@@ -333,7 +234,6 @@ function ReadOnlyVersion({
 export function AdminTenantVersionedIntegration({
   apiBaseUrl,
   tenantId,
-  tenantLabel,
   tenantStatus,
   onSessionExpired,
 }: AdminTenantVersionedIntegrationProps) {
@@ -352,111 +252,64 @@ export function AdminTenantVersionedIntegration({
   const [ddlReloadKey, setDdlReloadKey] = useState(0)
   const [ddlPreview, setDdlPreview] = useState<AdminIntegrationDdl | null>(null)
   const [ingestions, setIngestions] = useState<AdminIntegrationIngestion[]>([])
-  const [candidates, setCandidates] = useState<AdminIntegrationIngestion[]>([])
   const [ingestionIntegrationId, setIngestionIntegrationId] = useState<string | null>(null)
   const [ingestionState, setIngestionState] = useState<LoadState>('loading')
   const [ingestionReloadKey, setIngestionReloadKey] = useState(0)
   const [auditReports, setAuditReports] = useState<AdminTenantReport[]>([])
-  const [auditState, setAuditState] = useState<LoadState>('loaded')
+  const [auditState, setAuditState] = useState<LoadState>('loading')
   const [auditReloadKey, setAuditReloadKey] = useState(0)
+  const [availableProviders, setAvailableProviders] = useState<AdminProviderRecord[]>([])
+  const [availableProviderState, setAvailableProviderState] = useState<LoadState>('loading')
+  const [availableProviderReloadKey, setAvailableProviderReloadKey] = useState(0)
+  const [scopeProviders, setScopeProviders] = useState<AdminIntegrationProvider[]>([])
+  const [scopeIntegrationId, setScopeIntegrationId] = useState<string | null>(null)
+  const [scopeProviderState, setScopeProviderState] = useState<LoadState>('loading')
+  const [scopeProviderReloadKey, setScopeProviderReloadKey] = useState(0)
   const [notification, setNotification] = useState<NotificationState>(null)
-  const [pendingMutations, setPendingMutations] = useState<ReadonlySet<string>>(new Set())
-  const [activationConfirmation, setActivationConfirmation] = useState(false)
-  const [displayName, setDisplayName] = useState('')
-  const [designNote, setDesignNote] = useState('')
-  const [newVersionName, setNewVersionName] = useState('')
-  const [cloneSourceId, setCloneSourceId] = useState('')
-  const [addAuditOpen, setAddAuditOpen] = useState(false)
-  const [selectedAuditId, setSelectedAuditId] = useState('')
-  const [importOpen, setImportOpen] = useState(false)
-  const [importTitle, setImportTitle] = useState('')
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importError, setImportError] = useState<string | null>(null)
-  const [importInputKey, setImportInputKey] = useState(0)
+  const [mutationPending, setMutationPending] = useState(false)
+  const [renameId, setRenameId] = useState<string | null>(null)
+  const [renameTitle, setRenameTitle] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [fileInputKey, setFileInputKey] = useState(0)
   const initializedTenant = useRef<string | null>(null)
-  const detailRequest = useRef<AbortController | null>(null)
-  const ddlRequest = useRef<AbortController | null>(null)
-  const ddlPreviewRequest = useRef<AbortController | null>(null)
-  const ingestionRequest = useRef<AbortController | null>(null)
-  const mutationLocks = useRef(new Set<string>())
-  const fileValidationSequence = useRef(0)
   const selectedIdRef = useRef<string | null>(selectedId)
   const viewRef = useRef<IntegrationView>(view)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const scopeMutationVersion = useRef(0)
 
   selectedIdRef.current = selectedId
   viewRef.current = view
 
   const activeIntegration = integrations.find((item) => item.status === 'active') ?? null
   const drafts = integrations.filter((item) => item.status === 'draft')
-  const selectedSummary = selectedId === null
-    ? null
-    : integrations.find((item) => item.id === selectedId) ?? null
+  const selectedSummary = selectedId === null ? null : integrations.find((item) => item.id === selectedId) ?? null
   const currentDetail = selectedId !== null && detailIntegrationId === selectedId ? detail : null
   const currentDdls = selectedId !== null && ddlIntegrationId === selectedId ? ddls : []
-  const currentDdlState: LoadState = selectedId !== null && ddlIntegrationId === selectedId ? ddlState : 'loading'
+  const currentDdlState: LoadState = selectedId !== null && ddlIntegrationId === selectedId ? ddlState : selectedId === null ? 'loaded' : 'loading'
   const currentIngestions = selectedId !== null && ingestionIntegrationId === selectedId ? ingestions : []
-  const currentCandidates = selectedId !== null && ingestionIntegrationId === selectedId ? candidates : []
-  const currentIngestionState: LoadState = selectedId !== null && ingestionIntegrationId === selectedId ? ingestionState : 'loading'
-  const isCurrentDraft = isDraft(currentDetail)
+  const currentIngestionState: LoadState = selectedId !== null && ingestionIntegrationId === selectedId ? ingestionState : selectedId === null ? 'loaded' : 'loading'
   const isArchivedTenant = tenantStatus !== 'active'
-  const canEdit = !isArchivedTenant && isCurrentDraft
-  const versionCreatePending = pendingMutations.has('version-create')
-  const savePending = pendingMutations.has('save-version')
-  const activationPending = pendingMutations.has('activate-version')
-  const draftMutationPending = savePending || activationPending
-  const ddlMutationPending = pendingMutations.has('ddl-mutation')
-  const pendingProviderIds = useMemo(() => new Set(
-    [...pendingMutations]
-      .filter((key) => key.startsWith('ingestion:'))
-      .map((key) => key.slice('ingestion:'.length)),
-  ), [pendingMutations])
-
-  function showNotification(next: NotificationState) {
-    setNotification(next)
-  }
 
   function showFailure(result: AdminIntegrationFailure, fallback: string) {
-    showNotification({ tone: 'error', message: failureMessage(result, fallback) })
-  }
-
-  function beginMutation(key: string): boolean {
-    if (mutationLocks.current.has(key)) return false
-    mutationLocks.current.add(key)
-    setPendingMutations((current) => new Set(current).add(key))
-    setNotification(null)
-    return true
-  }
-
-  function finishMutation(key: string) {
-    mutationLocks.current.delete(key)
-    setPendingMutations((current) => {
-      const next = new Set(current)
-      next.delete(key)
-      return next
-    })
-  }
-
-  function beginDraftMutation(key: 'save-version' | 'activate-version'): boolean {
-    if (mutationLocks.current.has('save-version') || mutationLocks.current.has('activate-version')) return false
-    return beginMutation(key)
-  }
-
-  function clearImportFile() {
-    fileValidationSequence.current += 1
-    setImportFile(null)
-    setImportInputKey((current) => current + 1)
+    setNotification({ tone: 'error', message: failureMessage(result, fallback) })
   }
 
   function applyIntegration(next: AdminIntegration) {
     setDetail(next)
     setDetailIntegrationId(next.id)
-    setIntegrations((current) => {
-      const summary: AdminIntegrationSummary = next
-      const existing = current.some((item) => item.id === next.id)
-      const updated = existing ? current.map((item) => item.id === next.id ? summary : item) : [summary, ...current]
-      return [...updated].sort((a, b) => b.version_number - a.version_number || b.updated_at.localeCompare(a.updated_at))
-    })
+    setIntegrations((current) => sortIntegrations(
+      current.some((item) => item.id === next.id)
+        ? current.map((item) => item.id === next.id ? next : item)
+        : [next, ...current],
+    ))
     setSelectedId(next.id)
+  }
+
+  function applySelectedDdl(integrationId: string, ddlId: string) {
+    setDdls((current) => current.map((ddl) => ({ ...ddl, is_selected: ddl.id === ddlId })))
+    setDetail((current) => current?.id === integrationId ? { ...current, selected_ddl_id: ddlId } : current)
+    setIntegrations((current) => current.map((item) => item.id === integrationId ? { ...item, selected_ddl_id: ddlId } : item))
   }
 
   useEffect(() => {
@@ -466,7 +319,6 @@ export function AdminTenantVersionedIntegration({
       initializedTenant.current = tenantId
       setIntegrations([])
       setSelectedId(null)
-      setCloneSourceId('')
       setView('create')
     }
     setListState('loading')
@@ -481,38 +333,32 @@ export function AdminTenantVersionedIntegration({
         return
       }
       const sorted = sortIntegrations(result.integrations)
+      const active = sorted.find((item) => item.status === 'active') ?? null
+      const draft = sorted.find((item) => item.status === 'draft') ?? null
       setIntegrations(sorted)
-      const active = sorted.find((item) => item.status === 'active')
-      const draft = sorted.find((item) => item.status === 'draft')
       if (tenantChanged) {
         setView(active ? 'active' : 'create')
         setSelectedId(active?.id ?? draft?.id ?? null)
       } else {
         setSelectedId((current) => {
           if (viewRef.current === 'active') return active?.id ?? null
-          if (current && sorted.some((item) => item.id === current)) return current
           if (viewRef.current === 'create') return draft?.id ?? null
-          return sorted[0]?.id ?? null
+          return current && sorted.some((item) => item.id === current) ? current : sorted[0]?.id ?? null
         })
       }
-      setCloneSourceId((current) => sorted.some((item) => item.id === current) ? current : sorted[0]?.id ?? '')
       setListState('loaded')
     })
     return () => controller.abort()
   }, [apiBaseUrl, listReloadKey, onSessionExpired, tenantId])
 
   useEffect(() => {
-    detailRequest.current?.abort()
     setDetail(null)
     setDetailIntegrationId(selectedId)
-    setDisplayName('')
-    setDesignNote('')
     if (selectedId === null) {
       setDetailState('loaded')
       return undefined
     }
     const controller = new AbortController()
-    detailRequest.current = controller
     setDetailState('loading')
     void fetchAdminIntegration(apiBaseUrl, tenantId, selectedId, controller.signal).then((result) => {
       if (controller.signal.aborted) return
@@ -522,21 +368,16 @@ export function AdminTenantVersionedIntegration({
       }
       if (result.status !== 'loaded') {
         setDetailState('error')
-        setDetail(null)
         return
       }
       setDetail(result.integration)
       setDetailIntegrationId(selectedId)
-      setDisplayName(result.integration.display_name)
-      setDesignNote(result.integration.design_note ?? '')
       setDetailState('loaded')
     })
     return () => controller.abort()
   }, [apiBaseUrl, detailReloadKey, onSessionExpired, selectedId, tenantId])
 
   useEffect(() => {
-    ddlRequest.current?.abort()
-    ddlPreviewRequest.current?.abort()
     setDdls([])
     setDdlIntegrationId(selectedId)
     setDdlPreview(null)
@@ -545,7 +386,6 @@ export function AdminTenantVersionedIntegration({
       return undefined
     }
     const controller = new AbortController()
-    ddlRequest.current = controller
     setDdlState('loading')
     void fetchAdminIntegrationDdls(apiBaseUrl, tenantId, selectedId, controller.signal).then((result) => {
       if (controller.signal.aborted) return
@@ -565,41 +405,34 @@ export function AdminTenantVersionedIntegration({
   }, [apiBaseUrl, ddlReloadKey, onSessionExpired, selectedId, tenantId])
 
   useEffect(() => {
-    ingestionRequest.current?.abort()
     setIngestions([])
-    setCandidates([])
     setIngestionIntegrationId(selectedId)
-    if (selectedId === null) {
+    if (selectedId === null || view === 'create') {
       setIngestionState('loaded')
       return undefined
     }
     const controller = new AbortController()
-    ingestionRequest.current = controller
     setIngestionState('loading')
-    void Promise.all([
-      fetchAdminIntegrationIngestions(apiBaseUrl, tenantId, selectedId, controller.signal),
-      fetchAdminIntegrationIngestionCandidates(apiBaseUrl, tenantId, selectedId, controller.signal),
-    ]).then(([ingestionResult, candidateResult]) => {
+    void fetchAdminIntegrationIngestions(apiBaseUrl, tenantId, selectedId, controller.signal).then((result) => {
       if (controller.signal.aborted) return
-      if (ingestionResult.status === 'unauthenticated' || candidateResult.status === 'unauthenticated') {
+      if (result.status === 'unauthenticated') {
         onSessionExpired()
         return
       }
-      if (ingestionResult.status !== 'loaded' || candidateResult.status !== 'loaded') {
+      if (result.status !== 'loaded') {
         setIngestionState('error')
         return
       }
-      setIngestions(ingestionResult.ingestions)
-      setCandidates(candidateResult.ingestions)
+      setIngestions(result.ingestions)
       setIngestionIntegrationId(selectedId)
       setIngestionState('loaded')
     })
     return () => controller.abort()
-  }, [apiBaseUrl, ingestionReloadKey, onSessionExpired, selectedId, tenantId])
+  }, [apiBaseUrl, ingestionReloadKey, onSessionExpired, selectedId, tenantId, view])
 
   useEffect(() => {
     setAuditReports([])
-    if (selectedId === null || !canEdit) {
+    if (view !== 'create' || isArchivedTenant) {
       setAuditState('loaded')
       return undefined
     }
@@ -615,153 +448,351 @@ export function AdminTenantVersionedIntegration({
         setAuditState('error')
         return
       }
-      setAuditReports(result.reports.filter((report) => report.status === 'completed'))
+      setAuditReports(result.reports)
       setAuditState('loaded')
     })
     return () => controller.abort()
-  }, [apiBaseUrl, auditReloadKey, canEdit, onSessionExpired, selectedId, tenantId])
+  }, [apiBaseUrl, auditReloadKey, isArchivedTenant, onSessionExpired, tenantId, view])
 
-  useEffect(() => () => {
-    detailRequest.current?.abort()
-    ddlRequest.current?.abort()
-    ddlPreviewRequest.current?.abort()
-    ingestionRequest.current?.abort()
-  }, [])
+  useEffect(() => {
+    setAvailableProviders([])
+    if (view !== 'create' || isArchivedTenant) {
+      setAvailableProviderState('loaded')
+      return undefined
+    }
+    const controller = new AbortController()
+    setAvailableProviderState('loading')
+    void fetchAdminTenantProviders(apiBaseUrl, tenantId, controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setAvailableProviderState('error')
+        return
+      }
+      setAvailableProviders([...result.providers].sort((first, second) => (
+        first.name.localeCompare(second.name, 'fr') || first.id.localeCompare(second.id)
+      )))
+      setAvailableProviderState('loaded')
+    })
+    return () => controller.abort()
+  }, [apiBaseUrl, availableProviderReloadKey, isArchivedTenant, onSessionExpired, tenantId, view])
+
+  useEffect(() => {
+    setScopeProviders([])
+    setScopeIntegrationId(selectedId)
+    if (view !== 'create' || selectedId === null || isArchivedTenant) {
+      setScopeProviderState('loaded')
+      return undefined
+    }
+    const controller = new AbortController()
+    const requestMutationVersion = scopeMutationVersion.current
+    setScopeProviderState('loading')
+    void fetchAdminIntegrationProviders(
+      apiBaseUrl, tenantId, selectedId, controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted
+        || requestMutationVersion !== scopeMutationVersion.current) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setScopeProviderState('error')
+        return
+      }
+      setScopeProviders(result.providers)
+      setScopeIntegrationId(selectedId)
+      setScopeProviderState('loaded')
+    })
+    return () => controller.abort()
+  }, [
+    apiBaseUrl, isArchivedTenant, onSessionExpired, scopeProviderReloadKey,
+    selectedId, tenantId, view,
+  ])
 
   function selectView(nextView: IntegrationView) {
     setView(nextView)
     setNotification(null)
-    setActivationConfirmation(false)
+    setRenameId(null)
+    setDeleteId(null)
     if (nextView === 'active') {
       setSelectedId(activeIntegration?.id ?? null)
-      return
+    } else if (nextView === 'create') {
+      setSelectedId(drafts[0]?.id ?? null)
+    } else {
+      setSelectedId((current) => current && integrations.some((item) => item.id === current) ? current : integrations[0]?.id ?? null)
     }
-    if (nextView === 'create') {
-      setSelectedId((current) => drafts.some((item) => item.id === current) ? current : drafts[0]?.id ?? null)
-      return
-    }
-    setSelectedId((current) => current && integrations.some((item) => item.id === current) ? current : integrations[0]?.id ?? null)
   }
 
-  async function createEmpty() {
-    if (!beginMutation('version-create')) return
+  async function ensureDraft(): Promise<AdminIntegrationSummary | null> {
+    const draft = integrations.find((item) => item.status === 'draft') ?? null
+    if (draft !== null) {
+      if (selectedIdRef.current !== draft.id) setSelectedId(draft.id)
+      return draft
+    }
+    const result = await createAdminIntegration(apiBaseUrl, tenantId)
+    if (result.status === 'unauthenticated') {
+      onSessionExpired()
+      return null
+    }
+    if (result.status !== 'loaded') {
+      showFailure(result, 'Le DDL ne peut pas être préparé pour le moment.')
+      return null
+    }
+    applyIntegration(result.integration)
+    setDdlIntegrationId(result.integration.id)
+    setDdls([])
+    setDdlState('loaded')
+    setScopeIntegrationId(result.integration.id)
+    setScopeProviders([])
+    setScopeProviderState('loaded')
+    return result.integration
+  }
+
+  async function toggleProvider(providerRecordId: string, selected: boolean) {
+    if (mutationPending || scopeProviderState !== 'loaded') return
+    const currentIds = scopeIntegrationId === selectedId
+      ? scopeProviders.map((provider) => provider.tenant_provider_record_id)
+      : []
+    const desiredIds = selected
+      ? [...currentIds, providerRecordId]
+      : currentIds.filter((providerId) => providerId !== providerRecordId)
+    if (new Set(desiredIds).size === new Set(currentIds).size
+      && desiredIds.every((providerId) => currentIds.includes(providerId))) return
+
+    setMutationPending(true)
+    setNotification(null)
     try {
-      const result = await createAdminIntegration(apiBaseUrl, tenantId, newVersionName)
+      const draft = await ensureDraft()
+      if (draft === null) return
+      const result = await replaceAdminIntegrationProviders(
+        apiBaseUrl, tenantId, draft.id, desiredIds,
+      )
       if (result.status === 'unauthenticated') {
         onSessionExpired()
         return
       }
       if (result.status !== 'loaded') {
-        showFailure(result, 'La version ne peut pas être créée pour le moment.')
+        showFailure(result, 'Le périmètre des providers ne peut pas être enregistré.')
         return
       }
-      setNewVersionName('')
-      applyIntegration(result.integration)
-      setView('create')
-      showNotification({ tone: 'success', message: 'Version brouillon créée.' })
-    } finally {
-      finishMutation('version-create')
-    }
-  }
-
-  async function cloneVersion() {
-    if (!cloneSourceId || !beginMutation('version-create')) return
-    try {
-      const source = integrations.find((item) => item.id === cloneSourceId)
-      const result = await cloneAdminIntegration(apiBaseUrl, tenantId, cloneSourceId)
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        showFailure(result, 'La version ne peut pas être clonée pour le moment.')
-        return
-      }
-      applyIntegration(result.integration)
-      setView('create')
-      showNotification({ tone: 'success', message: source ? `${integrationLabel(result.integration)} basée sur ${integrationLabel(source)}.` : 'Version brouillon clonée.' })
-    } finally {
-      finishMutation('version-create')
-    }
-  }
-
-  async function saveDraft() {
-    if (currentDetail === null || !canEdit || !beginDraftMutation('save-version')) return
-    try {
-      const result = await patchAdminIntegration(apiBaseUrl, tenantId, currentDetail.id, {
-        display_name: displayName,
-        design_note: designNote,
-      })
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        showFailure(result, 'La version ne peut pas être enregistrée pour le moment.')
-        return
-      }
-      applyIntegration(result.integration)
-      showNotification({ tone: 'success', message: 'Version enregistrée.' })
-    } finally {
-      finishMutation('save-version')
-    }
-  }
-
-  async function activateDraft() {
-    if (currentDetail === null || !canEdit || !beginDraftMutation('activate-version')) return
-    try {
-      const result = await activateAdminIntegration(apiBaseUrl, tenantId, currentDetail.id)
-      setActivationConfirmation(false)
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        showFailure(result, 'La version ne peut pas être activée pour le moment.')
-        return
-      }
-      const canonical = await fetchAdminIntegrations(apiBaseUrl, tenantId)
-      if (canonical.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (canonical.status !== 'loaded') {
-        setListState('error')
-        return
-      }
-      const sorted = sortIntegrations(canonical.integrations)
-      const active = sorted.find((item) => item.status === 'active') ?? null
-      setIntegrations(sorted)
-      setListState('loaded')
-      setView('active')
-      setSelectedId(active?.id ?? result.integration.id)
-      setDetailIntegrationId(null)
-      setDdlIntegrationId(null)
-      setIngestionIntegrationId(null)
+      scopeMutationVersion.current += 1
+      setScopeIntegrationId(draft.id)
+      setScopeProviders(result.providers)
+      setScopeProviderState('loaded')
+      setDdls((current) => current.map((ddl) => ({ ...ddl, is_selected: false })))
+      setDetail((current) => current?.id === draft.id
+        ? { ...current, selected_ddl_id: null }
+        : current)
+      setIntegrations((current) => current.map((integration) => integration.id === draft.id
+        ? { ...integration, selected_ddl_id: null }
+        : integration))
+      setIngestions([])
       setDdlPreview(null)
-      setDetailReloadKey((current) => current + 1)
-      setDdlReloadKey((current) => current + 1)
-      setIngestionReloadKey((current) => current + 1)
-      showNotification({ tone: 'success', message: 'Version activée. L’ancienne version reste conservée dans l’historique.' })
+      setRenameId(null)
+      setDeleteId(null)
+      setNotification({ tone: 'success', message: 'Périmètre des providers enregistré.' })
     } finally {
-      finishMutation('activate-version')
+      setMutationPending(false)
+    }
+  }
+
+  async function selectExistingDdl(integrationId: string, ddlId: string) {
+    const result = await selectAdminIntegrationDdl(apiBaseUrl, tenantId, integrationId, ddlId)
+    if (result.status === 'unauthenticated') {
+      onSessionExpired()
+      return false
+    }
+    if (result.status !== 'loaded') {
+      showFailure(result, 'Le DDL ne peut pas être sélectionné pour le moment.')
+      return false
+    }
+    applySelectedDdl(integrationId, ddlId)
+    return true
+  }
+
+  async function selectAuditDdl(report: AdminTenantReport) {
+    if (mutationPending || currentDdlState === 'loading') return
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      const draft = await ensureDraft()
+      if (draft === null) return
+      const knownDdls = ddlIntegrationId === draft.id ? ddls : []
+      let artifact = knownDdls.find((ddl) => ddl.kind === 'source' && ddl.source_report_id === report.id) ?? null
+      if (artifact === null) {
+        const addResult = await addAdminIntegrationDdlFromAudit(apiBaseUrl, tenantId, draft.id, report.id)
+        if (addResult.status === 'unauthenticated') {
+          onSessionExpired()
+          return
+        }
+        if (addResult.status !== 'loaded') {
+          showFailure(addResult, 'Le DDL de l’audit ne peut pas être préparé.')
+          return
+        }
+        artifact = addResult.ddl
+        setDdlIntegrationId(draft.id)
+        setDdls((current) => current.some((ddl) => ddl.id === artifact?.id) ? current : [...current, artifact as AdminIntegrationDdlMetadata])
+      }
+      if (await selectExistingDdl(draft.id, artifact.id)) {
+        setNotification({ tone: 'success', message: 'DDL sélectionné.' })
+      }
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
+  async function selectImportedDdl(ddlId: string) {
+    if (mutationPending || selectedId === null) return
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      if (await selectExistingDdl(selectedId, ddlId)) {
+        setNotification({ tone: 'success', message: 'DDL sélectionné.' })
+      }
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
+  async function handleUpload(file: File | undefined) {
+    setFileInputKey((current) => current + 1)
+    if (file === undefined || mutationPending) return
+    setNotification(null)
+    if (!file.name.toLowerCase().endsWith('.sql')) {
+      setNotification({ tone: 'error', message: 'Le fichier doit être au format .sql.' })
+      return
+    }
+    if (!validDdlTitle(file.name)) {
+      setNotification({ tone: 'error', message: 'Le nom du fichier doit contenir au maximum 120 octets UTF-8.' })
+      return
+    }
+    if (file.size > MAX_DDL_BYTES) {
+      setNotification({ tone: 'error', message: 'Le fichier dépasse la taille maximale de 1 MiB.' })
+      return
+    }
+    setMutationPending(true)
+    try {
+      const content = await file.text()
+      const validation = getDdlValidationError(content)
+      if (validation === 'empty') {
+        setNotification({ tone: 'error', message: 'Le fichier SQL est vide.' })
+        return
+      }
+      if (validation === 'too_large') {
+        setNotification({ tone: 'error', message: 'Le fichier dépasse la taille maximale de 1 MiB.' })
+        return
+      }
+      if (validation !== null) {
+        setNotification({ tone: 'error', message: 'Le fichier SQL ne peut pas être importé.' })
+        return
+      }
+      const draft = await ensureDraft()
+      if (draft === null) return
+      const result = await importAdminIntegrationDdl(apiBaseUrl, tenantId, draft.id, file.name, content)
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        showFailure(result, 'Le DDL ne peut pas être importé.')
+        return
+      }
+      setDdlIntegrationId(draft.id)
+      setDdls((current) => [...current.filter((ddl) => ddl.id !== result.ddl.id), result.ddl])
+      setNotification({ tone: 'success', message: `${file.name} a été chargé.` })
+    } catch {
+      setNotification({ tone: 'error', message: 'Le fichier SQL ne peut pas être importé.' })
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
+  function startRename(ddl: AdminIntegrationDdlMetadata) {
+    setRenameId(ddl.id)
+    setRenameTitle(ddl.title)
+    setRenameError(null)
+    setDeleteId(null)
+  }
+
+  async function saveRename(ddlId: string) {
+    if (selectedId === null || mutationPending) return
+    const normalized = renameTitle.trim()
+    if (!validDdlTitle(normalized)) {
+      setRenameError('Le titre est obligatoire et limité à 120 octets UTF-8.')
+      return
+    }
+    if (currentDdls.some((ddl) => ddl.id !== ddlId && ddl.title.trim().toLocaleLowerCase('fr-FR') === normalized.toLocaleLowerCase('fr-FR'))) {
+      setRenameError('Ce titre existe déjà. Choisissez un autre titre.')
+      return
+    }
+    setMutationPending(true)
+    setRenameError(null)
+    try {
+      const result = await renameAdminIntegrationDdl(apiBaseUrl, tenantId, selectedId, ddlId, normalized)
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setRenameError(failureMessage(result, 'Le DDL ne peut pas être renommé.'))
+        return
+      }
+      setDdls((current) => current.map((ddl) => ddl.id === ddlId ? result.ddl : ddl))
+      setRenameId(null)
+      setNotification({ tone: 'success', message: 'DDL renommé.' })
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
+  async function confirmDelete(ddlId: string) {
+    if (selectedId === null || mutationPending) return
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      const integrationId = selectedId
+      const result = await deleteAdminIntegrationDdl(apiBaseUrl, tenantId, integrationId, ddlId)
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'deleted') {
+        showFailure(result, 'Le DDL ne peut pas être supprimé.')
+        return
+      }
+      const [detailResult, ddlResult] = await Promise.all([
+        fetchAdminIntegration(apiBaseUrl, tenantId, integrationId),
+        fetchAdminIntegrationDdls(apiBaseUrl, tenantId, integrationId),
+      ])
+      if (detailResult.status === 'loaded') applyIntegration(detailResult.integration)
+      if (ddlResult.status === 'loaded') {
+        setDdlIntegrationId(integrationId)
+        setDdls(ddlResult.ddls)
+      } else {
+        setDdls((current) => current.filter((ddl) => ddl.id !== ddlId))
+      }
+      setDeleteId(null)
+      setRenameId(null)
+      setNotification({ tone: 'success', message: 'DDL supprimé.' })
+    } finally {
+      setMutationPending(false)
     }
   }
 
   async function openDdlPreview(ddlId: string) {
     if (ddlPreview?.id === ddlId) {
-      ddlPreviewRequest.current?.abort()
       setDdlPreview(null)
       return
     }
     if (selectedId === null || currentDdlState !== 'loaded') return
-    ddlPreviewRequest.current?.abort()
     const requestIntegrationId = selectedId
-    const controller = new AbortController()
-    ddlPreviewRequest.current = controller
     setNotification(null)
-    const result = await fetchAdminIntegrationDdl(apiBaseUrl, tenantId, requestIntegrationId, ddlId, controller.signal)
-    if (controller.signal.aborted || selectedIdRef.current !== requestIntegrationId) return
+    const result = await fetchAdminIntegrationDdl(apiBaseUrl, tenantId, requestIntegrationId, ddlId)
+    if (selectedIdRef.current !== requestIntegrationId) return
     if (result.status === 'unauthenticated') {
       onSessionExpired()
       return
@@ -773,379 +804,137 @@ export function AdminTenantVersionedIntegration({
     setDdlPreview(result.ddl)
   }
 
-  async function selectDdl(ddlId: string) {
-    if (selectedId === null || !canEdit || !beginMutation('ddl-mutation')) return
-    const integrationId = selectedId
-    try {
-      const result = await selectAdminIntegrationDdl(apiBaseUrl, tenantId, integrationId, ddlId)
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        showFailure(result, 'Le DDL ne peut pas être sélectionné pour le moment.')
-        return
-      }
-      setDetailReloadKey((current) => current + 1)
-      setDdlReloadKey((current) => current + 1)
-      showNotification({ tone: 'success', message: 'DDL sélectionné pour cette version.' })
-    } finally {
-      finishMutation('ddl-mutation')
-    }
-  }
-
-  async function addAuditDdl() {
-    if (selectedId === null || !selectedAuditId || !canEdit || !beginMutation('ddl-mutation')) return
-    const integrationId = selectedId
-    try {
-      const result = await addAdminIntegrationDdlFromAudit(apiBaseUrl, tenantId, integrationId, selectedAuditId)
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        showFailure(result, 'Le DDL de l’audit ne peut pas être ajouté.')
-        return
-      }
-      setAddAuditOpen(false)
-      setSelectedAuditId('')
-      setDdlReloadKey((current) => current + 1)
-      showNotification({ tone: 'success', message: 'Le DDL a été ajouté à la bibliothèque sans être sélectionné.' })
-    } finally {
-      finishMutation('ddl-mutation')
-    }
-  }
-
-  async function importDdl() {
-    if (selectedId === null || !canEdit) return
-    if (importTitle.trim() === '') {
-      setImportError('Le titre du DDL est obligatoire.')
-      return
-    }
-    if (importFile === null) {
-      setImportError('Sélectionnez un fichier SQL valide.')
-      return
-    }
-    if (!beginMutation('ddl-mutation')) return
-    const integrationId = selectedId
-    try {
-      const content = await importFile.text()
-      const validation = getDdlValidationError(content)
-      if (validation === 'empty') {
-        clearImportFile()
-        setImportError('Le fichier SQL est vide.')
-        return
-      }
-      if (validation === 'too_large') {
-        clearImportFile()
-        setImportError('Le fichier dépasse la taille maximale de 1 MiB.')
-        return
-      }
-      if (validation !== null) {
-        clearImportFile()
-        setImportError('Le fichier SQL ne peut pas être importé.')
-        return
-      }
-      const result = await importAdminIntegrationDdl(apiBaseUrl, tenantId, integrationId, importTitle, content)
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        if (result.code === 'duplicate_content' || result.code === 'too_large' || result.code === 'invalid') clearImportFile()
-        setImportError(failureMessage(result, 'Le DDL ne peut pas être importé.'))
-        return
-      }
-      setImportOpen(false)
-      setImportTitle('')
-      clearImportFile()
-      setImportError(null)
-      setDdlReloadKey((current) => current + 1)
-      showNotification({ tone: 'success', message: 'Le DDL a été importé sans être sélectionné automatiquement.' })
-    } catch {
-      clearImportFile()
-      setImportError('Le fichier SQL ne peut pas être importé.')
-    } finally {
-      finishMutation('ddl-mutation')
-    }
-  }
-
-  async function selectIngestion(ingestion: AdminIntegrationIngestion) {
-    if (selectedId === null || !canEdit) return
-    const mutationKey = `ingestion:${ingestion.tenant_provider_record_id}`
-    if (!beginMutation(mutationKey)) return
-    const integrationId = selectedId
-    try {
-      const result = await selectAdminIntegrationIngestion(
-        apiBaseUrl, tenantId, integrationId, ingestion.tenant_provider_record_id, ingestion.correlation_id,
-      )
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'loaded') {
-        showFailure(result, 'Cette ingestion ne peut pas être référencée.')
-        return
-      }
-      setIngestionReloadKey((current) => current + 1)
-      showNotification({ tone: 'success', message: 'La référence d’ingestion a été mise à jour pour cette version.' })
-    } finally {
-      finishMutation(mutationKey)
-    }
-  }
-
-  async function deleteIngestion(providerRecordId: string) {
-    if (selectedId === null || !canEdit) return
-    const mutationKey = `ingestion:${providerRecordId}`
-    if (!beginMutation(mutationKey)) return
-    const integrationId = selectedId
-    try {
-      const result = await deleteAdminIntegrationIngestion(apiBaseUrl, tenantId, integrationId, providerRecordId)
-      if (result.status === 'unauthenticated') {
-        onSessionExpired()
-        return
-      }
-      if (result.status !== 'deleted') {
-        showFailure(result, 'La référence d’ingestion ne peut pas être retirée.')
-        return
-      }
-      setIngestionReloadKey((current) => current + 1)
-      showNotification({ tone: 'success', message: 'La référence a été retirée de la version.' })
-    } finally {
-      finishMutation(mutationKey)
-    }
-  }
-
-  function startImport() {
-    if (ddlMutationPending) return
-    setImportOpen(true)
-    setAddAuditOpen(false)
-    setImportError(null)
-  }
-
-  async function handleFile(file: File | undefined) {
-    const sequence = fileValidationSequence.current + 1
-    fileValidationSequence.current = sequence
-    setImportFile(null)
-    setImportError(null)
-    if (file === undefined) {
-      setImportInputKey((current) => current + 1)
-      return
-    }
-    if (!file.name.toLowerCase().endsWith('.sql')) {
-      setImportInputKey((current) => current + 1)
-      setImportError('Le fichier doit être au format .sql.')
-      return
-    }
-    if (file.size > MAX_DDL_BYTES) {
-      setImportInputKey((current) => current + 1)
-      setImportError('Le fichier dépasse la taille maximale de 1 MiB.')
-      return
-    }
-    try {
-      const validation = getDdlValidationError(await file.text())
-      if (fileValidationSequence.current !== sequence) return
-      if (validation === 'empty') {
-        setImportInputKey((current) => current + 1)
-        setImportError('Le fichier SQL est vide.')
-        return
-      }
-      if (validation === 'too_large') {
-        setImportInputKey((current) => current + 1)
-        setImportError('Le fichier dépasse la taille maximale de 1 MiB.')
-        return
-      }
-      if (validation !== null) {
-        setImportInputKey((current) => current + 1)
-        setImportError('Le fichier SQL ne peut pas être importé.')
-        return
-      }
-      setImportFile(file)
-    } catch {
-      if (fileValidationSequence.current !== sequence) return
-      setImportInputKey((current) => current + 1)
-      setImportError('Le fichier SQL ne peut pas être importé.')
-    }
-  }
-
-  function renderCreateControls() {
-    const selectedDraftId = selectedSummary?.status === 'draft' ? selectedSummary.id : undefined
-    return (
-      <section aria-labelledby="integration-create-title" className="versioned-integration__create-manager">
-        <div className="versioned-integration__section-heading">
-          <div>
-            <p className="versioned-integration__eyebrow">Atelier de version</p>
-            <h4 id="integration-create-title">Créer ou reprendre</h4>
-          </div>
-        </div>
-        <div className="versioned-integration__draft-picker">
-          <h5>Brouillons existants</h5>
-          {drafts.length > 0 ? (
-            <SelectableList
-              ariaLabel="Brouillons existants"
-              name="integration-draft"
-              onChange={(value, checked) => { if (checked) setSelectedId(value) }}
-              options={drafts.map((draft) => {
-                const basedOn = draft.based_on_integration_id
-                  ? integrations.find((item) => item.id === draft.based_on_integration_id) ?? null
-                  : null
-                return {
-                  value: draft.id,
-                  title: integrationLabel(draft),
-                  description: basedOn ? `Basée sur ${integrationLabel(basedOn)}` : 'Version initiale',
-                  status: <Badge tone="warning">Brouillon</Badge>,
-                }
-              })}
-              selectedValue={selectedDraftId}
-            />
-          ) : <p className="versioned-integration__compact-note">Aucun brouillon en cours.</p>}
-        </div>
-        <div className="versioned-integration__creation-grid">
-          <div className="versioned-integration__creation-option">
-            <FormField htmlFor="new-version-name" label="Nouvelle version vide" hint="Nom facultatif : le backend peut générer le nom.">
-              <TextInput disabled={versionCreatePending} id="new-version-name" onChange={(event) => setNewVersionName(event.target.value)} value={newVersionName} />
-            </FormField>
-            <Button loading={versionCreatePending} onClick={() => void createEmpty()} variant="primary">Créer une version vide</Button>
-          </div>
-          {integrations.length > 0 ? <div className="versioned-integration__creation-option">
-            <FormField htmlFor="integration-clone-source" label="Créer depuis une version">
-              <SelectInput disabled={versionCreatePending} id="integration-clone-source" onChange={(event) => setCloneSourceId(event.target.value)} value={cloneSourceId}>
-                {integrations.map((integration) => <option key={integration.id} value={integration.id}>{integrationLabel(integration)} · {statusLabel(integration.status)}</option>)}
-              </SelectInput>
-            </FormField>
-            <Button disabled={versionCreatePending} onClick={() => void cloneVersion()} variant="secondary">Cloner cette version</Button>
-          </div> : null}
-        </div>
-      </section>
-    )
-  }
-
-  function renderImportForm() {
-    if (!importOpen || !isCurrentDraft) return null
-    return (
-      <section aria-label="Importer un DDL" className="versioned-integration__inline-form">
-        <div>
-          <h5>Importer un DDL</h5>
-          <p>Fichier `.sql` non vide, 1 MiB maximum.</p>
-        </div>
-        <FormField htmlFor="integration-ddl-import-title" label="Titre">
-          <TextInput id="integration-ddl-import-title" onChange={(event) => setImportTitle(event.target.value)} value={importTitle} />
-        </FormField>
-        <label className="versioned-integration__file-label" htmlFor="integration-ddl-file">Fichier .sql</label>
-        <input accept=".sql,text/plain,application/sql" disabled={ddlMutationPending} id="integration-ddl-file" key={importInputKey} onChange={(event) => void handleFile(event.target.files?.[0])} type="file" />
-        {importFile ? <span>{importFile.name}</span> : null}
-        {importError ? <p className="versioned-integration__inline-error" role="alert">{importError}</p> : null}
-        <div className="versioned-integration__form-actions">
-          <Button disabled={ddlMutationPending} onClick={() => { setImportOpen(false); setImportError(null); clearImportFile() }} variant="ghost">Annuler</Button>
-          <Button loading={ddlMutationPending} onClick={() => void importDdl()} variant="primary">Importer</Button>
-        </div>
-      </section>
-    )
-  }
-
-  function renderAuditForm() {
-    if (!addAuditOpen || !isCurrentDraft) return null
-    return (
-      <section aria-label="Ajouter un audit" className="versioned-integration__inline-form">
-        {auditState === 'loading' ? <p role="status">Chargement des audits…</p> : null}
-        {auditState === 'error' ? <StructuralError message="Impossible de charger les audits disponibles." onRetry={() => setAuditReloadKey((current) => current + 1)} /> : null}
-        {auditState === 'loaded' ? <>
-          <FormField htmlFor="integration-audit-source" label="Audit publié">
-            <SelectInput disabled={ddlMutationPending} id="integration-audit-source" onChange={(event) => setSelectedAuditId(event.target.value)} value={selectedAuditId}>
-              <option value="">Choisir un audit</option>
-              {auditReports.map((report) => <option key={report.id} value={report.id}>{report.title} · {providerLabel(report.provider)} · {formatDate(report.report_date)}</option>)}
-            </SelectInput>
-          </FormField>
-          {auditReports.length === 0 ? <p>Aucun audit publié n’est disponible.</p> : null}
-          <div className="versioned-integration__form-actions">
-            <Button disabled={ddlMutationPending} onClick={() => setAddAuditOpen(false)} variant="ghost">Annuler</Button>
-            <Button disabled={!selectedAuditId} loading={ddlMutationPending} onClick={() => void addAuditDdl()} variant="primary">Ajouter</Button>
-          </div>
-        </> : null}
-      </section>
-    )
-  }
-
-  function renderDraftEditor() {
-    if (currentDetail === null || !isCurrentDraft) return null
-    const basedOn = currentDetail.based_on_integration_id
-      ? integrations.find((item) => item.id === currentDetail.based_on_integration_id) ?? null
-      : null
-    return (
-      <>
-        <div className="versioned-integration__version-heading">
-          <div>
-            <p className="versioned-integration__eyebrow">Version {currentDetail.version_number}</p>
-            <h4>{currentDetail.display_name}</h4>
-            {basedOn ? <p>Basée sur {integrationLabel(basedOn)}</p> : null}
-          </div>
-          <Badge tone="warning">Brouillon</Badge>
-        </div>
-        <section aria-labelledby="draft-settings-title" className="versioned-integration__section">
-          <div className="versioned-integration__section-heading"><h4 id="draft-settings-title">Paramètres de version</h4><Button disabled={draftMutationPending} loading={savePending} onClick={() => void saveDraft()} size="compact" variant="secondary">Enregistrer</Button></div>
-          <div className="versioned-integration__form-grid">
-            <FormField htmlFor="integration-display-name" label="Nom de version">
-              <TextInput disabled={draftMutationPending} id="integration-display-name" onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
-            </FormField>
-            <FormField htmlFor="integration-design-note" label="Note de conception" hint="Cette note est visible avec la version et n’est pas un secret.">
-              <TextareaInput disabled={draftMutationPending} id="integration-design-note" maxLength={8192} onChange={(event) => setDesignNote(event.target.value)} rows={4} value={designNote} />
-            </FormField>
-          </div>
-        </section>
-        <DdlLibrary ddls={currentDdls} ddlPreview={currentDdlState === 'loaded' ? ddlPreview : null} isDraftVersion={canEdit} loadState={currentDdlState} mutationPending={ddlMutationPending} onAddAudit={() => { setAddAuditOpen(true); setImportOpen(false) }} onClosePreview={() => setDdlPreview(null)} onImport={startImport} onPreview={(ddlId) => void openDdlPreview(ddlId)} onRetry={() => setDdlReloadKey((current) => current + 1)} onSelect={(ddlId) => void selectDdl(ddlId)} />
-        {renderAuditForm()}
-        {renderImportForm()}
-        <ReferenceIngestions candidates={currentCandidates} canEdit={canEdit} ingestions={currentIngestions} loadState={currentIngestionState} onDelete={(id) => void deleteIngestion(id)} onRetry={() => setIngestionReloadKey((current) => current + 1)} onSelect={(ingestion) => void selectIngestion(ingestion)} pendingProviderIds={pendingProviderIds} />
-        <section className="versioned-integration__activation">
-          <div><h4>Activation</h4><p>La version active actuelle sera conservée comme archivée. Aucun historique ne sera supprimé.</p></div>
-          {activationConfirmation ? (
-            <div aria-label="Confirmation d’activation" className="versioned-integration__confirmation" role="alertdialog">
-              <strong>Activer {currentDetail.display_name} ?</strong>
-              <p>Cette version draft deviendra active et l’ancienne version active sera archivée.</p>
-              <div><Button disabled={activationPending} onClick={() => setActivationConfirmation(false)} variant="ghost">Annuler</Button><Button loading={activationPending} onClick={() => void activateDraft()} variant="primary">Confirmer l’activation</Button></div>
-            </div>
-          ) : <Button disabled={isArchivedTenant || draftMutationPending} onClick={() => setActivationConfirmation(true)} variant="primary">Activer cette version</Button>}
-        </section>
-      </>
-    )
-  }
-
   function renderCreateView() {
-    if (isArchivedTenant) {
-      return (
-        <section aria-labelledby="archived-integration-title" className="versioned-integration__empty-create">
-          <p className="versioned-integration__eyebrow">Atelier de version</p>
-          <h4 id="archived-integration-title">Client archivé</h4>
-          <p>Les versions restent consultables dans Active et Versions, mais aucune création ni modification n’est disponible.</p>
-        </section>
-      )
-    }
-    const hasSelectedDraft = selectedSummary?.status === 'draft'
+    const selectedProviderIds = scopeIntegrationId === selectedId
+      ? scopeProviders.map((provider) => provider.tenant_provider_record_id)
+      : []
+    const compatibleAudits = compatibleGlobalAuditReports(
+      auditReports, selectedProviderIds,
+    )
+    const importedDdls = currentDdls.filter((ddl) => ddl.kind === 'imported')
+    const providersLoading = availableProviderState === 'loading'
+      || (selectedId !== null && scopeProviderState === 'loading')
+    const ddlLoading = auditState === 'loading'
+      || (selectedId !== null && currentDdlState === 'loading')
+    const hasSelectedProvider = selectedProviderIds.length > 0
+
     return (
-      <>
-        {renderCreateControls()}
-        {hasSelectedDraft
-          ? renderVersionDetails(false)
-          : <p className="versioned-integration__compact-note">Créez une version ou choisissez un brouillon existant pour reprendre sa préparation.</p>}
-      </>
+      <div className="versioned-integration__create-workflow">
+        <section aria-labelledby="integration-provider-step-title" className="versioned-integration__ddl-step">
+          <div className="versioned-integration__ddl-step-heading">
+            <h4 id="integration-provider-step-title">Étape 1 — Choisir les providers à intégrer</h4>
+          </div>
+          {isArchivedTenant ? <p className="versioned-integration__empty">Ce client archivé est en lecture seule.</p> : null}
+          {!isArchivedTenant && availableProviderState === 'error' ? <StructuralError message="Impossible de charger les providers." onRetry={() => setAvailableProviderReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && scopeProviderState === 'error' ? <StructuralError message="Impossible de charger le périmètre des providers." onRetry={() => setScopeProviderReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && providersLoading ? <p className="versioned-integration__empty" role="status">Chargement des providers…</p> : null}
+          {!isArchivedTenant && !providersLoading && availableProviderState !== 'error' && scopeProviderState !== 'error' ? (
+            availableProviders.length === 0 ? (
+              <p className="versioned-integration__empty">Aucune connexion provider disponible.</p>
+            ) : (
+              <div aria-label="Providers disponibles" className="versioned-integration__provider-list">
+                {availableProviders.map((provider) => {
+                  const checked = selectedProviderIds.includes(provider.id)
+                  return (
+                    <label className={`versioned-integration__provider-row${checked ? ' versioned-integration__provider-row--selected' : ''}`} key={provider.id}>
+                      <input
+                        aria-label={`Sélectionner ${provider.name}`}
+                        checked={checked}
+                        disabled={mutationPending || (provider.status !== 'active' && !checked)}
+                        onChange={(event) => void toggleProvider(provider.id, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span><strong>{provider.name}</strong><small>{providerLabel(provider.provider)}</small></span>
+                      {provider.status !== 'active' ? <Badge tone="neutral">Inactive</Badge> : null}
+                    </label>
+                  )
+                })}
+              </div>
+            )
+          ) : null}
+        </section>
+
+        <section aria-labelledby="integration-ddl-step-title" className="versioned-integration__ddl-step">
+          <div className="versioned-integration__ddl-step-heading">
+            <h4 id="integration-ddl-step-title">Étape 2 — Choisir un DDL</h4>
+            <Button disabled={isArchivedTenant || mutationPending || !hasSelectedProvider} loading={mutationPending} onClick={() => fileInputRef.current?.click()} variant="primary">Charger un DDL</Button>
+            <input
+              accept=".sql,text/plain,application/sql"
+              aria-label="Fichier DDL à charger"
+              className="versioned-integration__file-input"
+              disabled={isArchivedTenant || mutationPending || !hasSelectedProvider}
+              key={fileInputKey}
+              onChange={(event) => void handleUpload(event.target.files?.[0])}
+              ref={fileInputRef}
+              type="file"
+            />
+          </div>
+          {!isArchivedTenant && !providersLoading && !hasSelectedProvider ? <p className="versioned-integration__empty">Sélectionnez au moins un provider à l’étape 1.</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && auditState === 'error' ? <StructuralError message="Impossible de charger le DDL d’audit." onRetry={() => setAuditReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && hasSelectedProvider && currentDdlState === 'error' ? <StructuralError message="Impossible de charger les DDL." onRetry={() => setDdlReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && hasSelectedProvider && ddlLoading ? <p className="versioned-integration__empty" role="status">Chargement des DDL…</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && !ddlLoading && auditState !== 'error' && currentDdlState !== 'error' ? (
+            <div aria-label="DDL disponibles" className="versioned-integration__ddl-list versioned-integration__ddl-list--editable">
+              {compatibleAudits.length === 0 ? <p className="versioned-integration__ddl-empty">Aucun audit global compatible avec les providers sélectionnés.</p> : null}
+              {compatibleAudits.map((report, index) => {
+                const artifact = currentDdls.find((ddl) => ddl.kind === 'source' && ddl.source_report_id === report.id) ?? null
+                return (
+                  <div className={`versioned-integration__ddl-row${artifact?.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={report.id}>
+                    <input aria-label={`Sélectionner DDL audit — ${report.title}`} checked={artifact?.is_selected ?? false} disabled={mutationPending} name="selected-ddl" onChange={() => void selectAuditDdl(report)} type="radio" />
+                    {artifact ? (
+                      <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(artifact.id)} type="button"><strong>DDL audit — {report.title}</strong><span>Source : Audit</span></button>
+                    ) : <div className="versioned-integration__ddl-title"><strong>DDL audit — {report.title}</strong><span>Source : Audit</span></div>}
+                    {index === 0 ? <Badge tone="neutral">Par défaut</Badge> : null}
+                  </div>
+                )
+              })}
+              {importedDdls.map((ddl) => (
+                <div className={`versioned-integration__ddl-row versioned-integration__ddl-row--imported${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
+                  <input aria-label={`Sélectionner ${ddl.title}`} checked={ddl.is_selected} disabled={mutationPending} name="selected-ddl" onChange={() => void selectImportedDdl(ddl.id)} type="radio" />
+                  {renameId === ddl.id ? (
+                    <div className="versioned-integration__rename-form">
+                      <TextInput aria-label="Nouveau titre du DDL" disabled={mutationPending} onChange={(event) => setRenameTitle(event.target.value)} value={renameTitle} />
+                      {renameError ? <p role="alert">{renameError}</p> : null}
+                      <div><Button disabled={mutationPending} onClick={() => { setRenameId(null); setRenameError(null) }} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void saveRename(ddl.id)} size="compact" variant="secondary">Enregistrer</Button></div>
+                    </div>
+                  ) : (
+                    <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(ddl.id)} type="button"><strong>{ddl.title}</strong><span>Source : Import manuel</span></button>
+                  )}
+                  {deleteId === ddl.id ? (
+                    <div aria-label={`Confirmer la suppression de ${ddl.title}`} className="versioned-integration__delete-confirmation" role="alertdialog">
+                      <span>Supprimer ce DDL ?</span>
+                      <div><Button disabled={mutationPending} onClick={() => setDeleteId(null)} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void confirmDelete(ddl.id)} size="compact" variant="danger">Supprimer</Button></div>
+                    </div>
+                  ) : renameId === ddl.id ? null : (
+                    <ActionMenu ariaLabel={`Actions pour ${ddl.title}`} label="⋯">
+                      <button onClick={() => startRename(ddl)} type="button">Renommer</button>
+                      <button onClick={() => { setDeleteId(ddl.id); setRenameId(null); setRenameError(null) }} type="button">Supprimer</button>
+                    </ActionMenu>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={() => setDdlPreview(null)} /> : null}
+        </section>
+      </div>
     )
   }
 
-  function renderVersionDetails(readOnly = true) {
+  function renderVersionDetails() {
     if (detailState === 'loading' || detailIntegrationId !== selectedId) return <p className="versioned-integration__empty" role="status">Chargement de la version…</p>
     if (currentDetail === null || detailState === 'error') return <StructuralError message="Impossible de charger cette version." onRetry={() => setDetailReloadKey((current) => current + 1)} />
-    const basedOn = currentDetail.based_on_integration_id
-      ? integrations.find((item) => item.id === currentDetail.based_on_integration_id) ?? null
-      : null
-    if (!readOnly && canEdit) return renderDraftEditor()
     if (currentDdlState === 'loading' || currentIngestionState === 'loading') return <p className="versioned-integration__empty" role="status">Chargement des données de la version…</p>
     if (currentDdlState === 'error' || currentIngestionState === 'error') {
       return <StructuralError message="Impossible de charger les données de cette version." onRetry={() => { setDdlReloadKey((current) => current + 1); setIngestionReloadKey((current) => current + 1) }} />
     }
+    const basedOn = currentDetail.based_on_integration_id
+      ? integrations.find((item) => item.id === currentDetail.based_on_integration_id) ?? null
+      : null
     return (
       <>
         <ReadOnlyVersion basedOn={basedOn} ddls={currentDdls} ingestions={currentIngestions} integration={currentDetail} />
-        <DdlLibrary ddls={currentDdls} ddlPreview={ddlPreview} isDraftVersion={false} loadState="loaded" mutationPending={false} onAddAudit={() => undefined} onClosePreview={() => setDdlPreview(null)} onImport={() => undefined} onPreview={(ddlId) => void openDdlPreview(ddlId)} onRetry={() => setDdlReloadKey((current) => current + 1)} onSelect={() => undefined} />
+        <ReadOnlyDdlLibrary ddls={currentDdls} ddlPreview={ddlPreview} onClosePreview={() => setDdlPreview(null)} onPreview={(ddlId) => void openDdlPreview(ddlId)} />
       </>
     )
   }
@@ -1161,8 +950,7 @@ export function AdminTenantVersionedIntegration({
   return (
     <section aria-labelledby="tenant-versioned-integration-title" className="versioned-integration">
       <div className="versioned-integration__heading">
-        <div><p className="versioned-integration__eyebrow">Modèle versionné</p><h3 id="tenant-versioned-integration-title">Intégration</h3><p>Construisez une version reproductible à partir des DDL et ingestions réellement disponibles.</p></div>
-        <span className="versioned-integration__tenant">{tenantLabel}</span>
+        <h3 id="tenant-versioned-integration-title">Intégration</h3>
       </div>
       {notification ? <Notification onDismiss={() => setNotification(null)} tone={notification.tone}>{notification.message}</Notification> : null}
       <nav aria-label="Vues de l’intégration" className="versioned-integration__tabs">
@@ -1175,7 +963,7 @@ export function AdminTenantVersionedIntegration({
         <div className="versioned-integration__content">{renderCreateView()}</div>
       ) : view === 'active' ? (
         <div className="versioned-integration__content">
-          {activeIntegration ? renderVersionDetails(true) : <div className="versioned-integration__empty"><h4>Aucune intégration active.</h4><p>Une intégration apparaîtra ici après son activation.</p></div>}
+          {activeIntegration ? renderVersionDetails() : <div className="versioned-integration__empty"><h4>Aucune intégration active.</h4><p>Une intégration apparaîtra ici après son activation.</p></div>}
         </div>
       ) : (
         <div className="versioned-integration__versions-layout">
@@ -1185,7 +973,10 @@ export function AdminTenantVersionedIntegration({
               return <button aria-current={selectedId === integration.id ? 'true' : undefined} className={selectedId === integration.id ? 'versioned-integration__version-row versioned-integration__version-row--selected' : 'versioned-integration__version-row'} key={integration.id} onClick={() => setSelectedId(integration.id)} type="button"><strong>{integration.display_name}</strong><span>v{integration.version_number} · {statusLabel(integration.status)}</span><small>{basedOn ? `Basée sur ${integrationLabel(basedOn)}` : 'Version initiale'}</small></button>
             })}
           </div>
-          <div className="versioned-integration__content">{selectedSummary ? renderVersionDetails(true) : <p className="versioned-integration__empty">Sélectionnez une version.</p>}{!isArchivedTenant && currentDetail?.status === 'draft' && selectedSummary?.id === currentDetail.id ? <Button onClick={() => { setView('create'); setSelectedId(currentDetail.id) }} variant="secondary">Reprendre dans Créer</Button> : null}</div>
+          <div className="versioned-integration__content">
+            {selectedSummary ? renderVersionDetails() : <p className="versioned-integration__empty">Sélectionnez une version.</p>}
+            {!isArchivedTenant && currentDetail?.status === 'draft' && selectedSummary?.id === currentDetail.id ? <Button onClick={() => selectView('create')} variant="secondary">Reprendre dans Créer</Button> : null}
+          </div>
         </div>
       )}
     </section>

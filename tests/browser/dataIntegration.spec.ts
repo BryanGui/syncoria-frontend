@@ -3,14 +3,15 @@ import { test, expect, type Page } from '@playwright/test'
 const tenantId = '11111111-1111-4111-8111-111111111111'
 const activeId = '22222222-2222-4222-8222-222222222222'
 const draftId = '33333333-3333-4333-8333-333333333333'
-const otherDraftId = '44444444-4444-4444-8444-444444444444'
 const archivedId = '55555555-5555-4555-8555-555555555555'
 const sourceDdlId = '66666666-6666-4666-8666-666666666666'
 const importedDdlId = '77777777-7777-4777-8777-777777777777'
-const addedDdlId = '88888888-8888-4888-8888-888888888888'
-const providerRecordId = '99999999-9999-4999-8999-999999999999'
-const n1CorrelationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-const n2CorrelationId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const generatedDdlId = '88888888-8888-4888-8888-888888888888'
+const generatedDraftId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const providerAId = '99999999-9999-4999-8999-999999999999'
+const providerBId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const providerCId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+const correlationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const prefix = `/admin/tenants/${tenantId}`
 
 type IntegrationStatus = 'draft' | 'active' | 'archived'
@@ -57,6 +58,45 @@ interface Ingestion {
   created_at: string
 }
 
+interface AuditReport {
+  id: string
+  title: string
+  provider: string
+  correlation_id?: string
+  tenant_provider_record_id?: string
+  report_date: string
+  status: 'completed' | 'archived'
+  sources_analyzed: number
+  sources_retained: number
+  sources_excluded: number
+  records_retained: number
+  decisions_required: number
+  scope_kind: 'individual' | 'global'
+  tenant_provider_record_ids: string[]
+  created_at: string
+  has_usable_ddl: boolean
+}
+
+interface ProviderRecord {
+  id: string
+  tenant_id: string
+  provider: string
+  audit_supported: boolean
+  initial_ingestion_supported: boolean
+  credential_type: string
+  name: string
+  status: string
+  configuration: Record<string, string>
+  credential_configured: boolean
+  created_at: string
+  updated_at: string
+  last_verified_at: string | null
+  last_verification_status: string | null
+  last_verification_http_status: number | null
+  last_verification_code: string | null
+  last_verification_message: string | null
+}
+
 interface RecordedRequest {
   path: string
   method: string
@@ -88,16 +128,14 @@ function integration(
 
 const active = integration(activeId, 1, 'active', 'Novalia Talents v1')
 const draft = integration(draftId, 2, 'draft', 'Novalia Talents v2')
-const otherDraft = integration(otherDraftId, 3, 'draft', 'Novalia Talents v3')
-const archived = integration(archivedId, 1, 'archived', 'Novalia historique', {
-  namespace_key: 'legacy',
-  based_on_integration_id: null,
+const archived = integration(archivedId, 3, 'archived', 'Novalia historique', {
+  namespace_key: 'v3',
   selected_ddl_id: sourceDdlId,
 })
 
 const sourceDdl: Ddl = {
   id: sourceDdlId,
-  title: 'Audit Notion',
+  title: 'Notion — Audit Notion — 2026-09-16 [abc123]',
   kind: 'source',
   source_report_id: 'audit-notion-2026-09-16',
   source_filename: null,
@@ -111,57 +149,109 @@ const sourceDdl: Ddl = {
 
 const importedDdl: Ddl = {
   id: importedDdlId,
-  title: 'DDL importé v2',
+  title: 'novalia-modele-v1.sql',
   kind: 'imported',
   source_report_id: null,
-  source_filename: 'novalia-v2.sql',
+  source_filename: null,
   created_at: '2026-09-17T10:00:00Z',
   is_selected: false,
   source_provider: null,
   source_audit_title: null,
   source_report_date: null,
-  ddl_content: '-- imported\nCREATE TABLE v2_table (id integer);\n',
+  ddl_content: '-- imported\nCREATE TABLE v1_table (id integer);\n',
 }
 
-function ingestion(correlationId: string, day: number, received: number): Ingestion {
+const ingestion: Ingestion = {
+  tenant_provider_record_id: providerAId,
+  provider: 'notion',
+  correlation_id: correlationId,
+  status: 'completed',
+  archived: false,
+  started_at: '2026-09-16T09:00:00Z',
+  completed_at: '2026-09-16T09:01:00Z',
+  items_received: 10,
+  items_inserted: 8,
+  items_duplicate: 2,
+  created_at: '2026-09-16T09:02:00Z',
+}
+
+function provider(id: string, providerSlug: string, name: string): ProviderRecord {
   return {
-    tenant_provider_record_id: providerRecordId,
-    provider: 'notion',
-    correlation_id: correlationId,
-    status: 'completed',
-    archived: false,
-    started_at: `2026-09-${day}T09:00:00Z`,
-    completed_at: `2026-09-${day}T09:01:00Z`,
-    items_received: received,
-    items_inserted: received - 2,
-    items_duplicate: 2,
-    created_at: `2026-09-${day}T09:02:00Z`,
+    id,
+    tenant_id: tenantId,
+    provider: providerSlug,
+    audit_supported: true,
+    initial_ingestion_supported: true,
+    credential_type: 'api_key',
+    name,
+    status: 'active',
+    configuration: {},
+    credential_configured: true,
+    created_at: '2026-09-10T10:00:00Z',
+    updated_at: '2026-09-10T10:00:00Z',
+    last_verified_at: null,
+    last_verification_status: null,
+    last_verification_http_status: null,
+    last_verification_code: null,
+    last_verification_message: null,
   }
 }
 
-const n1 = ingestion(n1CorrelationId, 16, 10)
-const n2 = ingestion(n2CorrelationId, 17, 20)
+const providerRecords = [
+  provider(providerAId, 'notion', 'Notion RH'),
+  provider(providerBId, 'google_sheets', 'Sheets candidats'),
+  provider(providerCId, 'hubspot', 'HubSpot CRM'),
+]
+
+function auditReport(
+  id: string,
+  title: string,
+  scopeKind: AuditReport['scope_kind'],
+  providerIds: string[],
+  createdAt: string,
+  status: AuditReport['status'] = 'completed',
+): AuditReport {
+  return {
+    id,
+    title,
+    provider: 'multi',
+    report_date: createdAt.slice(0, 10),
+    status,
+    sources_analyzed: 3,
+    sources_retained: 2,
+    sources_excluded: 1,
+    records_retained: 10,
+    decisions_required: 0,
+    scope_kind: scopeKind,
+    tenant_provider_record_ids: providerIds,
+    created_at: createdAt,
+    has_usable_ddl: true,
+  }
+}
+
+const auditReports: AuditReport[] = [
+  auditReport('audit-individual-a', 'Audit individual A', 'individual', [providerAId], '2026-09-18T13:00:00Z'),
+  auditReport('audit-global-a', 'Audit global A', 'global', [providerAId], '2026-09-18T12:00:00Z'),
+  auditReport('audit-global-ab-old', 'Audit global A+B ancien', 'global', [providerAId, providerBId], '2026-09-16T09:00:00Z'),
+  auditReport('audit-notion-2026-09-16', 'Audit Notion', 'global', [providerBId, providerAId], '2026-09-18T10:00:00Z'),
+  auditReport('audit-global-abc', 'Audit global A+B+C', 'global', [providerAId, providerBId, providerCId], '2026-09-18T11:00:00Z'),
+  auditReport('audit-global-ab-archived', 'Audit global A+B archivé', 'global', [providerAId, providerBId], '2026-09-18T14:00:00Z', 'archived'),
+]
 
 interface BackendOptions {
   tenantStatus?: 'active' | 'archived'
   integrations?: Integration[]
   ddls?: Record<string, Ddl[]>
   ingestions?: Record<string, Ingestion[]>
-  candidates?: Record<string, Ingestion[]>
-  ddlFailures?: Record<string, number>
-  candidateFailures?: Record<string, number>
-  slowIntegrationIds?: string[]
-  slowDelay?: number
-  mutationDelay?: number
-  importErrors?: string[]
-  addAuditErrors?: string[]
+  reports?: AuditReport[]
+  providers?: ProviderRecord[]
+  providerScopes?: Record<string, string[]>
 }
 
 interface MockBackend {
   integrations: Integration[]
   ddls: Record<string, Ddl[]>
-  ingestions: Record<string, Ingestion[]>
-  candidates: Record<string, Ingestion[]>
+  providerScopes: Record<string, string[]>
   requests: RecordedRequest[]
 }
 
@@ -177,42 +267,29 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     status: options.tenantStatus ?? 'active',
   }
   const integrations = (options.integrations ?? [active, draft]).map((item) => ({ ...item }))
-  const defaultDdls: Record<string, Ddl[]> = {
-    [activeId]: [sourceDdl],
-    [draftId]: [importedDdl],
-  }
-  const defaultIngestions: Record<string, Ingestion[]> = {
-    [activeId]: [n1],
-    [draftId]: [n1],
-  }
-  const defaultCandidates: Record<string, Ingestion[]> = {
-    [activeId]: [],
-    [draftId]: [n2],
-  }
   const backend: MockBackend = {
     integrations,
-    ddls: copyCollections(options.ddls ?? defaultDdls),
-    ingestions: copyCollections(options.ingestions ?? defaultIngestions),
-    candidates: copyCollections(options.candidates ?? defaultCandidates),
+    ddls: copyCollections(options.ddls ?? {
+      [activeId]: [sourceDdl],
+      [draftId]: [importedDdl],
+    }),
+    providerScopes: Object.fromEntries(Object.entries(options.providerScopes ?? {
+      [activeId]: [providerAId],
+      [draftId]: [providerAId, providerBId],
+    }).map(([key, values]) => [key, [...values]])),
     requests: [],
   }
+  const ingestions = copyCollections(options.ingestions ?? {
+    [activeId]: [ingestion],
+    [draftId]: [],
+  })
+  const reports = (options.reports ?? auditReports).map((report) => ({ ...report }))
+  const providers = (options.providers ?? providerRecords).map((item) => ({ ...item }))
   for (const item of integrations) {
     backend.ddls[item.id] ??= []
-    backend.ingestions[item.id] ??= []
-    backend.candidates[item.id] ??= []
+    ingestions[item.id] ??= []
+    backend.providerScopes[item.id] ??= []
   }
-  const ddlFailures = { ...(options.ddlFailures ?? {}) }
-  const candidateFailures = { ...(options.candidateFailures ?? {}) }
-  const slowIntegrationIds = new Set(options.slowIntegrationIds ?? [])
-  const importErrors = [...(options.importErrors ?? [])]
-  const addAuditErrors = [...(options.addAuditErrors ?? [])]
-  let generatedVersion = Math.max(0, ...integrations.map((item) => item.version_number))
-  let generatedIdIndex = 0
-  const generatedIds = [
-    'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-  ]
 
   await page.context().route('**/*', async (route) => {
     const url = new URL(route.request().url())
@@ -227,38 +304,20 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     if (url.pathname === '/admin/session') return route.fulfill({ json: { authenticated: true } })
     if (url.pathname === '/admin/tenants') return route.fulfill({ json: [tenant] })
     if (url.pathname === prefix) return route.fulfill({ json: tenant })
-    if (url.pathname === `${prefix}/reports`) return route.fulfill({ json: [{
-      id: 'audit-notion-2026-09-16',
-      title: 'Audit Notion',
-      provider: 'notion',
-      correlation_id: n1CorrelationId,
-      tenant_provider_record_id: providerRecordId,
-      report_date: '2026-09-16',
-      status: 'completed',
-      sources_analyzed: 3,
-      sources_retained: 2,
-      sources_excluded: 1,
-      records_retained: 10,
-      decisions_required: 0,
-    }] })
+    if (url.pathname === `${prefix}/reports`) return route.fulfill({ json: reports })
+    if (url.pathname === `${prefix}/providers`) return route.fulfill({ json: providers })
 
     if (url.pathname === `${prefix}/integrations`) {
       if (method === 'GET') return route.fulfill({ json: backend.integrations })
       if (method === 'POST') {
-        if (options.mutationDelay) await new Promise((resolve) => setTimeout(resolve, options.mutationDelay))
-        const payload = (body ?? {}) as { display_name?: string }
-        generatedVersion += 1
         const created = integration(
-          generatedIds[generatedIdIndex++] ?? `f0000000-0000-4000-8000-${String(generatedIdIndex).padStart(12, '0')}`,
-          generatedVersion,
-          'draft',
-          payload.display_name ?? `Novalia Talents v${generatedVersion}`,
+          generatedDraftId, 2, 'draft', 'Client synthétique v2',
           { based_on_integration_id: null, selected_ddl_id: null },
         )
         backend.integrations.unshift(created)
         backend.ddls[created.id] = []
-        backend.ingestions[created.id] = []
-        backend.candidates[created.id] = []
+        ingestions[created.id] = []
+        backend.providerScopes[created.id] = []
         return route.fulfill({ status: 201, json: created })
       }
     }
@@ -269,66 +328,46 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
       const integrationId = parts[0]
       const current = backend.integrations.find((item) => item.id === integrationId)
       if (!current) return route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } })
-      if (method === 'GET' && slowIntegrationIds.has(integrationId)) {
-        await new Promise((resolve) => setTimeout(resolve, options.slowDelay ?? 600))
-      }
 
-      if (parts[1] === 'clone' && method === 'POST') {
-        if (options.mutationDelay) await new Promise((resolve) => setTimeout(resolve, options.mutationDelay))
-        generatedVersion += 1
-        const cloned = integration(
-          generatedIds[generatedIdIndex++] ?? `f0000000-0000-4000-8000-${String(generatedIdIndex).padStart(12, '0')}`,
-          generatedVersion,
-          'draft',
-          `Novalia Talents v${generatedVersion}`,
-          { based_on_integration_id: current.id, selected_ddl_id: current.selected_ddl_id },
-        )
-        backend.integrations.unshift(cloned)
-        backend.ddls[cloned.id] = (backend.ddls[current.id] ?? []).map((ddl) => ({ ...ddl }))
-        backend.ingestions[cloned.id] = (backend.ingestions[current.id] ?? []).map((item) => ({ ...item }))
-        backend.candidates[cloned.id] = (backend.candidates[current.id] ?? []).map((item) => ({ ...item }))
-        return route.fulfill({ status: 201, json: cloned })
-      }
-
-      if (parts[1] === 'activate' && method === 'PUT') {
-        if (options.mutationDelay) await new Promise((resolve) => setTimeout(resolve, options.mutationDelay))
-        backend.integrations = backend.integrations.map((item) => item.id === integrationId
-          ? { ...item, status: 'active' as const, updated_at: '2026-09-18T10:00:00Z' }
-          : item.status === 'active'
-            ? { ...item, status: 'archived' as const, updated_at: '2026-09-18T10:00:00Z' }
-            : item)
-        return route.fulfill({ json: backend.integrations.find((item) => item.id === integrationId) })
+      if (parts[1] === 'providers') {
+        if (method === 'PUT') {
+          const payload = body as { tenant_provider_record_ids: string[] }
+          const previous = backend.providerScopes[integrationId] ?? []
+          const changed = previous.length !== payload.tenant_provider_record_ids.length
+            || previous.some((providerId) => !payload.tenant_provider_record_ids.includes(providerId))
+          backend.providerScopes[integrationId] = [...payload.tenant_provider_record_ids]
+          if (changed) {
+            current.selected_ddl_id = null
+            backend.ddls[integrationId] = (backend.ddls[integrationId] ?? []).map((ddl) => ({ ...ddl, is_selected: false }))
+            ingestions[integrationId] = []
+          }
+        }
+        return route.fulfill({
+          json: (backend.providerScopes[integrationId] ?? []).map((providerId) => {
+            const record = providers.find((item) => item.id === providerId)!
+            return {
+              tenant_provider_record_id: record.id,
+              provider: record.provider,
+              name: record.name,
+              created_at: '2026-09-18T10:00:00Z',
+            }
+          }),
+        })
       }
 
       if (parts[1] === 'ddls') {
-        if (parts.length === 2 && method === 'GET') {
-          if ((ddlFailures[integrationId] ?? 0) > 0) {
-            ddlFailures[integrationId] -= 1
-            return route.fulfill({ status: 503, json: { detail: { code: 'unavailable', message: 'Technical outage.' } } })
-          }
-          return route.fulfill({ json: backend.ddls[integrationId] ?? [] })
-        }
+        if (parts.length === 2 && method === 'GET') return route.fulfill({ json: backend.ddls[integrationId] ?? [] })
         if (parts[2] === 'from-audit' && method === 'POST') {
-          const errorCode = addAuditErrors.shift()
-          if (errorCode) return route.fulfill({ status: 409, json: { detail: { code: errorCode, message: 'Sensitive backend detail.' } } })
-          const added: Ddl = {
-            ...sourceDdl,
-            id: addedDdlId,
-            title: 'Audit Notion ajouté',
-            is_selected: false,
-          }
+          const added = { ...sourceDdl, id: generatedDdlId, is_selected: false }
           backend.ddls[integrationId] = [...(backend.ddls[integrationId] ?? []), added]
           return route.fulfill({ status: 201, json: added })
         }
         if (parts.length === 2 && method === 'POST') {
-          const errorCode = importErrors.shift()
-          if (errorCode) return route.fulfill({ status: 409, json: { detail: { code: errorCode, message: 'SQL supplied by user: SECRET.' } } })
           const payload = body as { title: string; content: string }
           const added: Ddl = {
             ...importedDdl,
-            id: addedDdlId,
+            id: generatedDdlId,
             title: payload.title,
-            source_filename: null,
             is_selected: false,
             ddl_content: payload.content,
           }
@@ -342,47 +381,27 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
           current.selected_ddl_id = ddl.id
           return route.fulfill({ json: { ...ddl, is_selected: true, ddl_content: ddl.ddl_content ?? 'CREATE TABLE selected (id integer);' } })
         }
+        if (parts.length === 3 && method === 'PATCH') {
+          const payload = body as { title: string }
+          ddl.title = payload.title
+          return route.fulfill({ json: ddl })
+        }
+        if (parts.length === 3 && method === 'DELETE') {
+          backend.ddls[integrationId] = backend.ddls[integrationId].filter((item) => item.id !== ddl.id)
+          if (current.selected_ddl_id === ddl.id) {
+            const fallback = backend.ddls[integrationId].find((item) => item.kind === 'source') ?? null
+            current.selected_ddl_id = fallback?.id ?? null
+            backend.ddls[integrationId] = backend.ddls[integrationId].map((item) => ({ ...item, is_selected: item.id === fallback?.id }))
+          }
+          return route.fulfill({ status: 204, body: '' })
+        }
         if (parts.length === 3 && method === 'GET') {
           return route.fulfill({ json: { ...ddl, ddl_content: ddl.ddl_content ?? 'CREATE TABLE preview (id integer);' } })
         }
       }
 
-      if (parts[1] === 'ingestion-candidates' && method === 'GET') {
-        if ((candidateFailures[integrationId] ?? 0) > 0) {
-          candidateFailures[integrationId] -= 1
-          return route.fulfill({ status: 503, json: { detail: { code: 'unavailable', message: 'Technical outage.' } } })
-        }
-        return route.fulfill({ json: backend.candidates[integrationId] ?? [] })
-      }
-
-      if (parts[1] === 'ingestions') {
-        if (parts.length === 2 && method === 'GET') return route.fulfill({ json: backend.ingestions[integrationId] ?? [] })
-        if (parts.length === 3 && method === 'PUT') {
-          const payload = body as { correlation_id: string }
-          const previous = (backend.ingestions[integrationId] ?? []).find((item) => item.tenant_provider_record_id === parts[2])
-          const selected = (backend.candidates[integrationId] ?? []).find((item) => item.correlation_id === payload.correlation_id)
-          if (!selected) return route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } })
-          backend.ingestions[integrationId] = [selected]
-          backend.candidates[integrationId] = [
-            ...(backend.candidates[integrationId] ?? []).filter((item) => item.correlation_id !== selected.correlation_id),
-            ...(previous ? [previous] : []),
-          ]
-          return route.fulfill({ json: selected })
-        }
-        if (parts.length === 3 && method === 'DELETE') {
-          const previous = (backend.ingestions[integrationId] ?? []).find((item) => item.tenant_provider_record_id === parts[2])
-          backend.ingestions[integrationId] = (backend.ingestions[integrationId] ?? []).filter((item) => item.tenant_provider_record_id !== parts[2])
-          if (previous && !(backend.candidates[integrationId] ?? []).some((item) => item.correlation_id === previous.correlation_id)) {
-            backend.candidates[integrationId] = [...(backend.candidates[integrationId] ?? []), previous]
-          }
-          return route.fulfill({ status: 204, body: '' })
-        }
-      }
-
-      if (parts.length === 1 && method === 'PATCH') {
-        const payload = body as { display_name?: string; design_note?: string | null }
-        Object.assign(current, payload, { updated_at: '2026-09-18T10:00:00Z' })
-        return route.fulfill({ json: current })
+      if (parts[1] === 'ingestions' && parts.length === 2 && method === 'GET') {
+        return route.fulfill({ json: ingestions[integrationId] ?? [] })
       }
       if (parts.length === 1 && method === 'GET') return route.fulfill({ json: current })
     }
@@ -397,363 +416,293 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
   return backend
 }
 
-function ddlSection(page: Page) {
-  return page.locator('section.versioned-integration__section').filter({ hasText: 'DDL disponibles' })
+async function openCreate(page: Page) {
+  await page.getByRole('button', { name: 'Créer', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Étape 1 — Choisir les providers à intégrer', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Étape 2 — Choisir un DDL', exact: true })).toBeVisible()
 }
 
-async function openDdlAction(page: Page, action: 'Ajouter depuis un audit' | 'Importer un DDL') {
-  const section = ddlSection(page)
-  await section.locator('.ui-action-menu > summary').click()
-  await section.getByRole('button', { name: action, exact: true }).click()
+function ddlList(page: Page) {
+  return page.locator('[aria-label="DDL disponibles"]')
 }
 
-test('shows the empty Active view when the backend has no active integration', async ({ page }) => {
-  await openIntegration(page, {
-    integrations: [],
-    ddls: {},
-    ingestions: {},
-    candidates: {},
-  })
+function importedRow(page: Page, title: string) {
+  return page.locator('.versioned-integration__ddl-row--imported').filter({ hasText: title })
+}
 
-  await page.getByRole('button', { name: 'Active', exact: true }).click()
-  const integrationPanel = page.locator('section.versioned-integration')
-  await expect(integrationPanel.getByRole('heading', { name: 'Aucune intégration active.', exact: true })).toBeVisible()
-  await expect(integrationPanel.getByText('Une intégration apparaîtra ici après son activation.', { exact: true })).toBeVisible()
-  await expect(integrationPanel.getByText('Actif', { exact: true })).toHaveCount(0)
-  await expect(integrationPanel.getByText('Novalia Talents v1', { exact: true })).toHaveCount(0)
-  await expect(integrationPanel.getByText('DDL sélectionné', { exact: true })).toHaveCount(0)
-  await expect(integrationPanel.getByText('Sources de DDL', { exact: true })).toHaveCount(0)
-  await expect(integrationPanel.getByText('Ingestions de référence', { exact: true })).toHaveCount(0)
-  await expect(integrationPanel.getByText('Note de conception', { exact: true })).toHaveCount(0)
-})
-
-test('shows a genuinely active integration in the Active view', async ({ page }) => {
-  await openIntegration(page, {
+test('creates a draft lazily on the first provider change and persists A then A+B', async ({ page }) => {
+  const backend = await openIntegration(page, {
     integrations: [active],
     ddls: { [activeId]: [sourceDdl] },
-    ingestions: { [activeId]: [n1] },
-    candidates: { [activeId]: [] },
   })
+  await openCreate(page)
 
-  await expect(page.getByRole('button', { name: 'Active', exact: true })).toHaveAttribute('aria-current', 'page')
-  await expect(page.getByRole('heading', { name: 'Novalia Talents v1', exact: true })).toBeVisible()
-  await expect(page.locator('.versioned-integration__version-heading').getByText('Actif', { exact: true })).toBeVisible()
-  await expect(page.getByText('DDL sélectionné', { exact: true })).toBeVisible()
-  await expect(page.getByText('Sources de DDL', { exact: true })).toBeVisible()
-  await expect(page.getByText('Ingestions de référence', { exact: true })).toBeVisible()
-  await expect(page.getByText('Note de conception', { exact: true })).toBeVisible()
-})
-
-test('shows zero drafts without creating one automatically', async ({ page }) => {
-  const backend = await openIntegration(page, { integrations: [active] })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await expect(page.getByText('Aucun brouillon en cours.', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Créer une version vide', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Cloner cette version', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Intégration', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Charger un DDL', exact: true })).toBeDisabled()
+  await expect(page.getByText('Sélectionnez au moins un provider à l’étape 1.', { exact: true })).toBeVisible()
+  for (const obsolete of [
+    'Modèle versionné',
+    'Construisez une version reproductible',
+    'Atelier de version',
+    'Créer ou reprendre',
+    'Brouillons existants',
+    'Nouvelle version vide',
+    'Créer une version vide',
+    'Créer depuis une version',
+    'Cloner cette version',
+  ]) {
+    await expect(page.getByText(obsolete, { exact: false })).toHaveCount(0)
+  }
   expect(backend.requests.filter((request) => request.path === `${prefix}/integrations` && request.method === 'POST')).toHaveLength(0)
-})
 
-for (const draftCount of [1, 2]) {
-  test(`shows and resumes ${draftCount} existing draft${draftCount > 1 ? 's' : ''} without hiding creation choices`, async ({ page }) => {
-    const drafts = draftCount === 1 ? [draft] : [draft, otherDraft]
-    await openIntegration(page, { integrations: [active, ...drafts] })
-    await page.getByRole('button', { name: 'Créer', exact: true }).click()
-    const picker = page.getByRole('radiogroup', { name: 'Brouillons existants', exact: true })
-    await expect(picker.getByRole('radio')).toHaveCount(draftCount)
-    await expect(page.getByRole('button', { name: 'Créer une version vide', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Cloner cette version', exact: true })).toBeVisible()
-    const draftToResume = drafts[drafts.length - 1]
-    await picker.getByRole('radio', { name: new RegExp(draftToResume.display_name) }).check()
-    await expect(page.getByRole('heading', { name: draftToResume.display_name, exact: true })).toBeVisible()
-  })
-}
-
-test('creates an empty version despite an existing draft and blocks double submission', async ({ page }) => {
-  const backend = await openIntegration(page, { mutationDelay: 250 })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await page.getByLabel('Nouvelle version vide').fill('Version créée une fois')
-  await page.getByRole('button', { name: 'Créer une version vide', exact: true }).dblclick()
-  await expect(page.getByRole('heading', { name: 'Version créée une fois', exact: true })).toBeVisible()
+  const providerA = page.getByRole('checkbox', { name: 'Sélectionner Notion RH', exact: true })
+  const providerB = page.getByRole('checkbox', { name: 'Sélectionner Sheets candidats', exact: true })
+  await providerA.click()
+  await expect(providerA).toBeChecked()
   expect(backend.requests.filter((request) => request.path === `${prefix}/integrations` && request.method === 'POST')).toHaveLength(1)
+  await providerB.click()
+  await expect(providerA).toBeChecked()
+  await expect(providerB).toBeChecked()
+  const scopeWrites = backend.requests.filter((request) => request.path.endsWith('/providers') && request.method === 'PUT')
+  expect(scopeWrites.map((request) => request.body)).toEqual([
+    { tenant_provider_record_ids: [providerAId] },
+    { tenant_provider_record_ids: [providerAId, providerBId] },
+  ])
+  expect(backend.integrations.find((item) => item.id === generatedDraftId)?.status).toBe('draft')
+  expect(backend.integrations.some((item) => item.id === generatedDraftId && item.status === 'active')).toBe(false)
 })
 
-test('clones an existing version while another draft already exists', async ({ page }) => {
-  const backend = await openIntegration(page)
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await page.getByLabel('Créer depuis une version').selectOption(activeId)
-  await page.getByRole('button', { name: 'Cloner cette version', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Novalia Talents v3', exact: true })).toBeVisible()
-  await expect(page.locator('.versioned-integration__version-heading').getByText('Basée sur Novalia Talents v1 · v1', { exact: true })).toBeVisible()
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${activeId}/clone` && request.method === 'POST')).toHaveLength(1)
-})
-
-test('activates a draft from the canonical list and leaves exactly one active version', async ({ page }) => {
-  const backend = await openIntegration(page)
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await page.getByRole('button', { name: 'Activer cette version', exact: true }).click()
-  await page.getByRole('button', { name: 'Confirmer l’activation', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Active', exact: true })).toHaveAttribute('aria-current', 'page')
-  await expect(page.getByRole('heading', { name: draft.display_name, exact: true })).toBeVisible()
-  await expect(page.locator('.versioned-integration__version-heading')).toContainText('Actif')
-  await page.getByRole('button', { name: 'Versions', exact: true }).click()
-  const rows = page.locator('.versioned-integration__version-row')
-  const archivedRow = rows.filter({ has: page.locator('strong').filter({ hasText: active.display_name }) })
-  const activeRow = rows.filter({ has: page.locator('strong').filter({ hasText: draft.display_name }) })
-  await expect(archivedRow).toContainText('Archivé')
-  await expect(activeRow).toContainText('Actif')
-  await expect(rows.filter({ hasText: 'Actif' })).toHaveCount(1)
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations` && request.method === 'GET')).toHaveLength(2)
-})
-
-test('maps duplicate_audit and keeps a first audit DDL unselected until explicit selection', async ({ page }) => {
-  const backend = await openIntegration(page, {
-    ddls: { [activeId]: [sourceDdl], [draftId]: [] },
-    addAuditErrors: ['duplicate_audit'],
-  })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await openDdlAction(page, 'Ajouter depuis un audit')
-  const form = page.getByRole('region', { name: 'Ajouter un audit', exact: true })
-  await form.getByLabel('Audit publié').selectOption('audit-notion-2026-09-16')
-  await form.getByRole('button', { name: 'Ajouter', exact: true }).click()
-  await expect(page.getByText('Cet audit est déjà associé à cette version.', { exact: true })).toBeVisible()
-  await expect(page.locator('body')).not.toContainText('Sensitive backend detail')
-  await form.getByRole('button', { name: 'Ajouter', exact: true }).click()
-  const addedRadio = page.getByRole('radio', { name: 'Sélectionner Audit Notion ajouté', exact: true })
-  await expect(addedRadio).not.toBeChecked()
-  await addedRadio.click()
-  await expect(page.getByRole('radio', { name: 'Sélectionner Audit Notion ajouté', exact: true })).toBeChecked()
-  expect(backend.requests.filter((request) => request.path.endsWith(`/ddls/${addedDdlId}/selection`) && request.method === 'PUT')).toHaveLength(1)
-})
-
-test('keeps a valid file after duplicate_title, then imports it unselected and resets the form', async ({ page }) => {
-  await openIntegration(page, { importErrors: ['duplicate_title'] })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await openDdlAction(page, 'Importer un DDL')
-  const form = page.getByRole('region', { name: 'Importer un DDL', exact: true })
-  await form.getByLabel('Titre').fill('Titre existant')
-  await form.getByLabel('Fichier .sql').setInputFiles({
-    name: 'valid.sql',
-    mimeType: 'text/plain',
-    buffer: Buffer.from('CREATE TABLE valid_file (id integer);'),
-  })
-  await form.getByRole('button', { name: 'Importer', exact: true }).click()
-  await expect(form.getByRole('alert')).toHaveText('Ce titre existe déjà. Choisissez un autre titre.')
-  await expect(form.getByText('valid.sql', { exact: true })).toBeVisible()
-  await expect(page.locator('body')).not.toContainText('SQL supplied by user')
-  await form.getByLabel('Titre').fill('Titre disponible')
-  await form.getByRole('button', { name: 'Importer', exact: true }).click()
-  await expect(form).toHaveCount(0)
-  const importedRadio = page.getByRole('radio', { name: 'Sélectionner Titre disponible', exact: true })
-  await expect(importedRadio).not.toBeChecked()
-  await openDdlAction(page, 'Importer un DDL')
-  const resetForm = page.getByRole('region', { name: 'Importer un DDL', exact: true })
-  await expect(resetForm.getByLabel('Titre')).toHaveValue('')
-  await expect(resetForm.getByLabel('Fichier .sql')).toHaveValue('')
-})
-
-test('maps duplicate_content and discards the file that cannot be imported', async ({ page }) => {
-  await openIntegration(page, { importErrors: ['duplicate_content'] })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await openDdlAction(page, 'Importer un DDL')
-  const form = page.getByRole('region', { name: 'Importer un DDL', exact: true })
-  await form.getByLabel('Titre').fill('Contenu dupliqué')
-  await form.getByLabel('Fichier .sql').setInputFiles({
-    name: 'duplicate.sql',
-    mimeType: 'text/plain',
-    buffer: Buffer.from('CREATE TABLE duplicate_content (id integer);'),
-  })
-  await form.getByRole('button', { name: 'Importer', exact: true }).click()
-  await expect(form.getByRole('alert')).toHaveText('Ce DDL est déjà présent dans l’intégration.')
-  await expect(form.getByText('duplicate.sql', { exact: true })).toHaveCount(0)
-  await expect(form.getByLabel('Fichier .sql')).toHaveValue('')
-})
-
-test('replaces a previously valid file with no file when the new selection is invalid', async ({ page }) => {
+test('shows the audit DDL as selectable default provenance without mutation actions', async ({ page }) => {
   await openIntegration(page)
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await openDdlAction(page, 'Importer un DDL')
-  const form = page.getByRole('region', { name: 'Importer un DDL', exact: true })
-  const validFile = { name: 'valid.sql', mimeType: 'text/plain', buffer: Buffer.from('CREATE TABLE valid_file (id integer);') }
+  await openCreate(page)
 
-  await form.getByLabel('Fichier .sql').setInputFiles(validFile)
-  await expect(form.getByText('valid.sql', { exact: true })).toBeVisible()
-  await form.getByLabel('Fichier .sql').setInputFiles({ name: 'wrong.txt', mimeType: 'text/plain', buffer: Buffer.from('not sql') })
-  await expect(form.getByRole('alert')).toHaveText('Le fichier doit être au format .sql.')
-  await expect(form.getByText('valid.sql', { exact: true })).toHaveCount(0)
-  await expect(form.getByLabel('Fichier .sql')).toHaveValue('')
-
-  await form.getByLabel('Fichier .sql').setInputFiles(validFile)
-  await form.getByLabel('Fichier .sql').setInputFiles({ name: 'empty.sql', mimeType: 'text/plain', buffer: Buffer.from(' \n\t') })
-  await expect(form.getByRole('alert')).toHaveText('Le fichier SQL est vide.')
-  await expect(form.getByText('valid.sql', { exact: true })).toHaveCount(0)
-
-  await form.getByLabel('Fichier .sql').setInputFiles(validFile)
-  await form.getByLabel('Fichier .sql').setInputFiles({ name: 'large.sql', mimeType: 'text/plain', buffer: Buffer.alloc(1024 * 1024 + 1, 120) })
-  await expect(form.getByRole('alert')).toHaveText('Le fichier dépasse la taille maximale de 1 MiB.')
-  await expect(form.getByText('valid.sql', { exact: true })).toHaveCount(0)
+  const row = page.locator('.versioned-integration__ddl-row').filter({ hasText: 'DDL audit — Audit Notion' })
+  await expect(row).toBeVisible()
+  await expect(row.getByText('Source : Audit', { exact: true })).toBeVisible()
+  await expect(row.getByText('Par défaut', { exact: true })).toBeVisible()
+  await expect(row.getByRole('radio', { name: 'Sélectionner DDL audit — Audit Notion', exact: true })).toBeVisible()
+  await expect(row.locator('.ui-action-menu')).toHaveCount(0)
+  await expect(row.getByRole('button', { name: /Renommer|Supprimer/ })).toHaveCount(0)
 })
 
-test('reloads selected ingestions and candidates after PUT and DELETE without changing v1', async ({ page }) => {
-  const backend = await openIntegration(page)
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  const ingestionSection = page.locator('section.versioned-integration__section').filter({ hasText: 'Ingestions de référence' })
-  await expect(ingestionSection).toContainText('10 reçus')
-  await ingestionSection.locator('.ui-action-menu > summary').click()
-  await ingestionSection.getByRole('button', { name: /Choisir.*20 reçus/ }).click()
-  const selectedSummary = ingestionSection.locator('.versioned-integration__ingestion-row > div > span')
-  await expect(selectedSummary).toContainText('20 reçus')
-  await expect(selectedSummary).not.toContainText('10 reçus')
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestions` && request.method === 'GET')).toHaveLength(2)
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestion-candidates` && request.method === 'GET')).toHaveLength(2)
-
-  await ingestionSection.locator('.ui-action-menu > summary').click()
-  await expect(ingestionSection.getByRole('button', { name: /Choisir.*10 reçus/ })).toBeVisible()
-  await ingestionSection.getByRole('button', { name: 'Retirer la référence', exact: true }).click()
-  await expect(ingestionSection).toContainText('Aucune ingestion choisie')
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestions` && request.method === 'GET')).toHaveLength(3)
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestion-candidates` && request.method === 'GET')).toHaveLength(3)
-
-  await page.getByRole('button', { name: 'Active', exact: true }).click()
-  await expect(page.locator('.versioned-integration__readonly')).toContainText('10 reçus')
-  await expect(page.locator('.versioned-integration__readonly')).not.toContainText('20 reçus')
-})
-
-test('distinguishes a structural DDL failure from an empty collection and recovers on retry', async ({ page }) => {
-  await openIntegration(page, {
-    ddls: { [activeId]: [sourceDdl], [draftId]: [] },
-    ddlFailures: { [draftId]: 1 },
-  })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  const section = ddlSection(page)
-  const failure = section.getByRole('alert')
-  await expect(failure).toContainText('Impossible de charger les DDL de cette version.')
-  await expect(section).not.toContainText('Aucun DDL n’est encore associé à cette version.')
-  await failure.getByRole('button', { name: 'Réessayer', exact: true }).click()
-  await expect(section.getByText('Aucun DDL n’est encore associé à cette version.', { exact: true })).toBeVisible()
-  await expect(failure).toHaveCount(0)
-})
-
-test('treats a candidates failure as structural and reloads both ingestion collections on retry', async ({ page }) => {
-  const backend = await openIntegration(page, { candidateFailures: { [draftId]: 1 } })
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  const section = page.locator('section.versioned-integration__section').filter({ hasText: 'Ingestions de référence' })
-  const failure = section.getByRole('alert')
-  await expect(failure).toContainText('Impossible de charger les ingestions de référence.')
-  await expect(section).not.toContainText('Aucune ingestion de référence choisie.')
-  await failure.getByRole('button', { name: 'Réessayer', exact: true }).click()
-  await expect(section).toContainText('10 reçus')
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestions` && request.method === 'GET')).toHaveLength(2)
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestion-candidates` && request.method === 'GET')).toHaveLength(2)
-})
-
-test('never lets a late response from version A overwrite version B', async ({ page }) => {
-  const slowDraft = integration(draftId, 2, 'draft', 'Version A lente')
-  const fastDraft = integration(otherDraftId, 3, 'draft', 'Version B rapide')
-  const slowDdl = { ...importedDdl, id: importedDdlId, title: 'DDL lent A' }
-  const fastDdl = { ...importedDdl, id: addedDdlId, title: 'DDL rapide B' }
-  await openIntegration(page, {
-    integrations: [active, slowDraft, fastDraft],
-    ddls: { [activeId]: [sourceDdl], [draftId]: [slowDdl], [otherDraftId]: [fastDdl] },
-    ingestions: { [activeId]: [n1], [draftId]: [n1], [otherDraftId]: [n2] },
-    candidates: { [activeId]: [], [draftId]: [n2], [otherDraftId]: [] },
-    slowIntegrationIds: [draftId],
-    slowDelay: 650,
-  })
-  await page.getByRole('button', { name: 'Versions', exact: true }).click()
-  await page.getByRole('button', { name: /Version A lente/ }).click()
-  await page.getByRole('button', { name: /Version B rapide/ }).click()
-  await expect(page.getByRole('heading', { name: 'Version B rapide', exact: true })).toBeVisible()
-  await expect(page.getByText('DDL rapide B', { exact: true })).toBeVisible()
-  await expect(page.locator('.versioned-integration__readonly')).toContainText('20 reçus')
-  await page.waitForTimeout(800)
-  await expect(page.getByRole('heading', { name: 'Version B rapide', exact: true })).toBeVisible()
-  await expect(page.getByText('DDL lent A', { exact: true })).toHaveCount(0)
-  await expect(page.locator('.versioned-integration__readonly')).not.toContainText('10 reçus')
-})
-
-test('shows real DDL radios only for drafts and keeps read-only DDLs identifiable and previewable', async ({ page }) => {
-  const archivedVersion = { ...archived, version_number: 3, display_name: 'Novalia historique v3' }
-  const archivedDdl = { ...sourceDdl, title: 'Audit archivé', source_audit_title: 'Audit archivé' }
-  await openIntegration(page, {
-    integrations: [active, draft, archivedVersion],
-    ddls: { [activeId]: [sourceDdl], [draftId]: [importedDdl], [archivedId]: [archivedDdl] },
-  })
-
-  const activeLibrary = ddlSection(page)
-  await expect(activeLibrary.locator('input[type="radio"]')).toHaveCount(0)
-  await expect(activeLibrary.locator('.versioned-integration__ddl-radio')).toHaveCount(0)
-  await expect(activeLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
-  const activeTitle = activeLibrary.locator('.versioned-integration__ddl-title').filter({ hasText: 'Audit Notion' })
-  await expect(activeTitle).toBeVisible()
-  await activeTitle.click()
-  await expect(page.getByRole('region', { name: 'Aperçu de Audit Notion', exact: true })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  const draftLibrary = ddlSection(page)
-  await expect(draftLibrary.locator('input[type="radio"]')).toHaveCount(1)
-  await expect(draftLibrary.getByRole('radio', { name: 'Sélectionner DDL importé v2', exact: true })).toBeVisible()
-  await expect(draftLibrary.locator('.versioned-integration__ddl-radio')).toHaveCount(0)
-
-  await page.getByRole('button', { name: 'Versions', exact: true }).click()
-  await page.getByRole('button', { name: /Novalia historique v3/ }).click()
-  const archivedLibrary = ddlSection(page)
-  await expect(archivedLibrary.locator('input[type="radio"]')).toHaveCount(0)
-  await expect(archivedLibrary.locator('.versioned-integration__ddl-radio')).toHaveCount(0)
-  await expect(archivedLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
-  const archivedTitle = archivedLibrary.locator('.versioned-integration__ddl-title').filter({ hasText: 'Audit archivé' })
-  await expect(archivedTitle).toBeVisible()
-  await archivedTitle.click()
-  await expect(page.getByRole('region', { name: 'Aperçu de Audit archivé', exact: true })).toBeVisible()
-})
-
-test('keeps an archived tenant fully consultable and entirely read-only', async ({ page }) => {
+test('offers only exact global A+B audits and marks the newest B+A report once', async ({ page }) => {
+  const existingDefaultDdl: Ddl = {
+    ...sourceDdl,
+    id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    is_selected: false,
+  }
   const backend = await openIntegration(page, {
-    tenantStatus: 'archived',
-    integrations: [active, archived],
-    ddls: { [activeId]: [sourceDdl], [archivedId]: [{ ...sourceDdl }] },
-    ingestions: { [activeId]: [n1], [archivedId]: [n2] },
-    candidates: { [activeId]: [], [archivedId]: [] },
+    ddls: {
+      [activeId]: [sourceDdl],
+      [draftId]: [existingDefaultDdl, importedDdl],
+    },
   })
+  await openCreate(page)
+
+  const list = ddlList(page)
+  await expect(list.getByText('Par défaut', { exact: true })).toHaveCount(1)
+  const newestRow = list.locator('.versioned-integration__ddl-row').filter({ hasText: 'DDL audit — Audit Notion' })
+  await expect(newestRow.getByText('Par défaut', { exact: true })).toBeVisible()
+  await expect(list.getByText('DDL audit — Audit global A+B ancien', { exact: true })).toBeVisible()
+  await expect(list.getByText('DDL audit — Audit individual A', { exact: true })).toHaveCount(0)
+  await expect(list.getByText('DDL audit — Audit global A', { exact: true })).toHaveCount(0)
+  await expect(list.getByText('DDL audit — Audit global A+B+C', { exact: true })).toHaveCount(0)
+  await expect(list.getByText('DDL audit — Audit global A+B archivé', { exact: true })).toHaveCount(0)
+  await expect(list.getByText(importedDdl.title, { exact: true })).toBeVisible()
+  await expect(list.locator('input[type="radio"]:checked')).toHaveCount(0)
+
+  const defaultRadio = list.getByRole('radio', { name: 'Sélectionner DDL audit — Audit Notion', exact: true })
+  await defaultRadio.click()
+  await expect(defaultRadio).toBeChecked()
+  expect(backend.requests.filter((request) => request.path.endsWith('/ddls/from-audit') && request.method === 'POST')).toHaveLength(0)
+  expect(backend.requests.filter((request) => request.path.endsWith(`/${existingDefaultDdl.id}/selection`) && request.method === 'PUT')).toHaveLength(1)
+})
+
+test('loads a SQL file under its exact filename into the same list with a hidden draft', async ({ page }) => {
+  const backend = await openIntegration(page, {
+    integrations: [active],
+    ddls: { [activeId]: [sourceDdl] },
+  })
+  await openCreate(page)
+  await page.getByRole('checkbox', { name: 'Sélectionner Notion RH', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: 'Sélectionner Notion RH', exact: true })).toBeChecked()
+
+  await expect(page.getByLabel('Titre')).toHaveCount(0)
+  await page.getByLabel('Fichier DDL à charger').setInputFiles({
+    name: `${'x'.repeat(117)}.sql`,
+    mimeType: 'text/plain',
+    buffer: Buffer.from('CREATE TABLE rejected_title (id integer);'),
+  })
+  await expect(page.getByText('Le nom du fichier doit contenir au maximum 120 octets UTF-8.', { exact: true })).toBeVisible()
+  expect(backend.requests.filter((request) => request.path.endsWith('/ddls') && request.method === 'POST')).toHaveLength(0)
+  await page.getByLabel('Fichier DDL à charger').setInputFiles({
+    name: 'novalia-modele-v2.sql',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('CREATE TABLE novalia_v2 (id integer);'),
+  })
+
+  const list = ddlList(page)
+  await expect(list.getByText('DDL audit — Audit global A', { exact: true })).toBeVisible()
+  await expect(list.getByText('novalia-modele-v2.sql', { exact: true })).toBeVisible()
+  const imports = backend.requests.filter((request) => request.path.endsWith('/ddls') && request.method === 'POST')
+  expect(imports).toHaveLength(1)
+  expect(imports[0].body).toEqual({
+    title: 'novalia-modele-v2.sql',
+    content: 'CREATE TABLE novalia_v2 (id integer);',
+  })
+  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations` && request.method === 'POST')).toHaveLength(1)
+  expect(backend.integrations.find((item) => item.id === generatedDraftId)?.status).toBe('draft')
+  expect(backend.integrations.some((item) => item.id === generatedDraftId && item.status === 'active')).toBe(false)
+})
+
+test('changing A+B to A+C clears the DDL choice but preserves imported artifacts', async ({ page }) => {
+  const selectedImport = { ...importedDdl, is_selected: true }
+  const selectedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const backend = await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ddls: { [activeId]: [sourceDdl], [draftId]: [selectedImport] },
+  })
+  await openCreate(page)
+
+  const importedRadio = page.getByRole('radio', { name: `Sélectionner ${importedDdl.title}`, exact: true })
+  await expect(importedRadio).toBeChecked()
+  await page.getByRole('checkbox', { name: 'Sélectionner HubSpot CRM', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: 'Sélectionner HubSpot CRM', exact: true })).toBeChecked()
+  await page.getByRole('checkbox', { name: 'Sélectionner Sheets candidats', exact: true }).click()
+
+  await expect(page.getByRole('checkbox', { name: 'Sélectionner Notion RH', exact: true })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Sélectionner HubSpot CRM', exact: true })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Sélectionner Sheets candidats', exact: true })).not.toBeChecked()
+  await expect(importedRadio).not.toBeChecked()
+  await expect(page.getByText(importedDdl.title, { exact: true })).toBeVisible()
+  await expect(page.getByText('Aucun audit global compatible avec les providers sélectionnés.', { exact: true })).toBeVisible()
+  expect(backend.ddls[draftId]).toHaveLength(1)
+  const scopeWrites = backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/providers` && request.method === 'PUT')
+  expect(scopeWrites.at(-1)?.body).toEqual({ tenant_provider_record_ids: [providerAId, providerCId] })
+})
+
+test('offers exactly rename/delete for imported DDLs and performs a real PATCH', async ({ page }) => {
+  const backend = await openIntegration(page)
+  await openCreate(page)
+  const row = importedRow(page, importedDdl.title)
+
+  await row.getByLabel(`Actions pour ${importedDdl.title}`).click()
+  const menu = row.locator('.ui-action-menu__content')
+  await expect(menu.getByRole('button')).toHaveCount(2)
+  await expect(menu.getByRole('button').allTextContents()).resolves.toEqual(['Renommer', 'Supprimer'])
+  await menu.getByRole('button', { name: 'Renommer', exact: true }).click()
+  await page.getByLabel('Nouveau titre du DDL').fill('novalia-modele-renomme.sql')
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+
+  await expect(page.getByText('novalia-modele-renomme.sql', { exact: true })).toBeVisible()
+  const patches = backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ddls/${importedDdlId}` && request.method === 'PATCH')
+  expect(patches).toHaveLength(1)
+  expect(patches[0].body).toEqual({ title: 'novalia-modele-renomme.sql' })
+})
+
+test('confirms deletion, calls DELETE and removes the imported row only after success', async ({ page }) => {
+  const backend = await openIntegration(page)
+  await openCreate(page)
+  const row = importedRow(page, importedDdl.title)
+
+  await row.getByLabel(`Actions pour ${importedDdl.title}`).click()
+  await row.getByRole('button', { name: 'Supprimer', exact: true }).click()
+  const confirmation = row.getByRole('alertdialog')
+  await expect(confirmation.getByText('Supprimer ce DDL ?', { exact: true })).toBeVisible()
+  await confirmation.getByRole('button', { name: 'Supprimer', exact: true }).click()
+
+  await expect(page.getByText(importedDdl.title, { exact: true })).toHaveCount(0)
+  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ddls/${importedDdlId}` && request.method === 'DELETE')).toHaveLength(1)
+})
+
+test('keeps exactly one explicitly selected DDL across successive choices', async ({ page }) => {
+  const backend = await openIntegration(page)
+  await openCreate(page)
+  const auditRadio = page.getByRole('radio', { name: 'Sélectionner DDL audit — Audit Notion', exact: true })
+  const importedRadio = page.getByRole('radio', { name: `Sélectionner ${importedDdl.title}`, exact: true })
+
+  await auditRadio.click()
+  await expect(auditRadio).toBeChecked()
+  await expect(ddlList(page).locator('input[type="radio"]:checked')).toHaveCount(1)
+  await importedRadio.click()
+  await expect(importedRadio).toBeChecked()
+  await expect(auditRadio).not.toBeChecked()
+  await expect(ddlList(page).locator('input[type="radio"]:checked')).toHaveCount(1)
+  expect(backend.requests.filter((request) => request.path.endsWith('/selection') && request.method === 'PUT')).toHaveLength(2)
+})
+
+test('keeps Active and Versions read-only behavior intact', async ({ page }) => {
+  await openIntegration(page, {
+    integrations: [active, draft, archived],
+    ddls: {
+      [activeId]: [sourceDdl],
+      [draftId]: [importedDdl],
+      [archivedId]: [{ ...sourceDdl }],
+    },
+    ingestions: { [activeId]: [ingestion], [draftId]: [], [archivedId]: [] },
+  })
+
   await expect(page.getByRole('heading', { name: active.display_name, exact: true })).toBeVisible()
-  await expect(page.getByText('Audit Notion', { exact: true }).first()).toBeVisible()
-  await page.locator('.versioned-integration__ddl-title').first().click()
-  await expect(page.getByRole('region', { name: 'Aperçu de Audit Notion', exact: true })).toContainText('CREATE TABLE source_table')
-  await expect(page.getByRole('radio', { name: /Sélectionner/ })).toHaveCount(0)
-  await expect(ddlSection(page).locator('.ui-action-menu')).toHaveCount(0)
+  const activeLibrary = page.locator('[aria-label="Bibliothèque DDL"]')
+  await expect(activeLibrary.locator('input[type="radio"]')).toHaveCount(0)
+  await expect(activeLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
+  await activeLibrary.locator('.versioned-integration__ddl-title').click()
+  await expect(page.getByRole('region', { name: `Aperçu de ${sourceDdl.title}`, exact: true })).toBeVisible()
+
   await page.getByRole('button', { name: 'Versions', exact: true }).click()
   await page.getByRole('button', { name: /Novalia historique/ }).click()
-  await expect(page.getByRole('heading', { name: 'Novalia historique', exact: true })).toBeVisible()
-  await expect(page.locator('.versioned-integration__readonly')).toContainText('20 reçus')
-  await page.getByRole('button', { name: 'Créer', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Client archivé', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Créer une version vide', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Cloner cette version', exact: true })).toHaveCount(0)
-  expect(backend.requests.filter((request) => request.path.startsWith(`${prefix}/integrations`) && request.method !== 'GET')).toHaveLength(0)
+  await expect(page.getByRole('heading', { name: archived.display_name, exact: true })).toBeVisible()
+  await expect(page.locator('[aria-label="Bibliothèque DDL"]').locator('input[type="radio"]')).toHaveCount(0)
 })
 
-for (const width of [1440, 390]) {
-  test(`keeps the version workflow within the viewport at ${width}px`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 1000 })
-    await openIntegration(page, { integrations: [active, draft, otherDraft] })
-    const readOnlyLibrary = ddlSection(page)
-    const readOnlyRow = readOnlyLibrary.locator('.versioned-integration__ddl-row').first()
-    await expect(readOnlyRow).toBeVisible()
-    await expect(readOnlyRow.locator('input[type="radio"], .versioned-integration__ddl-radio')).toHaveCount(0)
-    const rowBox = await readOnlyRow.boundingBox()
-    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
-    expect(rowBox).not.toBeNull()
-    expect(rowBox!.x).toBeGreaterThanOrEqual(0)
-    expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(clientWidth)
-    await page.screenshot({ path: testInfo.outputPath(`integration-readonly-${width}.png`), fullPage: true })
-    await page.locator('.versioned-integration__ddl-title').first().click()
-    await expect(page.getByRole('region', { name: 'Aperçu de Audit Notion', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Créer', exact: true }).click()
-    await expect(page.getByRole('radiogroup', { name: 'Brouillons existants', exact: true }).getByRole('radio')).toHaveCount(2)
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`keeps the DDL list and imported menu usable at ${viewport.width}px`, async ({ page }, testInfo) => {
+    const longDdl = {
+      ...importedDdl,
+      title: 'modele-importe-avec-un-titre-tres-long-qui-doit-rester-lisible-sans-deborder-du-viewport.sql',
+    }
+    await page.setViewportSize(viewport)
+    await openIntegration(page, {
+      ddls: { [activeId]: [sourceDdl], [draftId]: [longDdl] },
+    })
+    await openCreate(page)
+
+    const loadButton = page.getByRole('button', { name: 'Charger un DDL', exact: true })
+    const radio = page.getByRole('radio', { name: `Sélectionner ${longDdl.title}`, exact: true })
+    const row = importedRow(page, longDdl.title)
+    await expect(loadButton).toBeVisible()
+    await expect(radio).toBeVisible()
+    await row.getByLabel(`Actions pour ${longDdl.title}`).click()
+    const menu = row.locator('.ui-action-menu__content')
+    await expect(menu.getByRole('button', { name: 'Renommer', exact: true })).toBeVisible()
+    await expect(menu.getByRole('button', { name: 'Supprimer', exact: true })).toBeVisible()
+
+    const menuBox = await menu.boundingBox()
+    expect(menuBox).not.toBeNull()
+    expect(menuBox!.x).toBeGreaterThanOrEqual(0)
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport.width)
+    expect(menuBox!.y).toBeGreaterThanOrEqual(0)
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport.height)
+    const isFullyInsideClippingAncestors = await menu.evaluate((element) => {
+      const menuRect = element.getBoundingClientRect()
+      let ancestor = element.parentElement
+      while (ancestor !== null) {
+        const style = window.getComputedStyle(ancestor)
+        if (/(auto|clip|hidden|scroll)/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`)) {
+          const ancestorRect = ancestor.getBoundingClientRect()
+          if (menuRect.left < ancestorRect.left || menuRect.right > ancestorRect.right
+            || menuRect.top < ancestorRect.top || menuRect.bottom > ancestorRect.bottom) return false
+        }
+        ancestor = ancestor.parentElement
+      }
+      return true
+    })
+    expect(isFullyInsideClippingAncestors).toBe(true)
     const dimensions = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
     }))
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
-    await page.screenshot({ path: testInfo.outputPath(`integration-${width}.png`), fullPage: true })
+    await page.screenshot({ path: testInfo.outputPath(`integration-ddl-step-${viewport.width}.png`), fullPage: true })
   })
 }

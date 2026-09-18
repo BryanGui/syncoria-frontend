@@ -13,6 +13,10 @@ export interface AdminTenantReport {
   decisions_required: number | null
   correlation_id?: string
   tenant_provider_record_id?: string
+  scope_kind: 'individual' | 'global'
+  tenant_provider_record_ids: string[]
+  created_at: string | null
+  has_usable_ddl: boolean
 }
 
 export type AdminTenantReportsResult =
@@ -26,6 +30,10 @@ const uuidPattern = tenantIdPattern
 function isOptionalUuid(value: unknown): value is string | null | undefined {
   return value === undefined || value === null
     || (typeof value === 'string' && uuidPattern.test(value))
+}
+
+function isDateTime(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value))
 }
 
 function parseReport(value: unknown): AdminTenantReport | null {
@@ -43,6 +51,16 @@ function parseReport(value: unknown): AdminTenantReport | null {
   const hasCorrelationId = typeof report.correlation_id === 'string'
   const hasProviderRecordId = typeof report.tenant_provider_record_id === 'string'
   if (hasCorrelationId !== hasProviderRecordId) return null
+  const scopeKind = report.scope_kind ?? 'individual'
+  const providerRecordIds = report.tenant_provider_record_ids ?? []
+  const createdAt = report.created_at ?? null
+  const hasUsableDdl = report.has_usable_ddl ?? false
+  if ((scopeKind !== 'individual' && scopeKind !== 'global')
+    || !Array.isArray(providerRecordIds)
+    || providerRecordIds.some((providerId) => typeof providerId !== 'string' || !uuidPattern.test(providerId))
+    || new Set(providerRecordIds).size !== providerRecordIds.length
+    || (createdAt !== null && !isDateTime(createdAt))
+    || typeof hasUsableDdl !== 'boolean') return null
   return {
     id: report.id, title: report.title, status: report.status,
     provider: report.provider, report_date: report.report_date,
@@ -54,6 +72,10 @@ function parseReport(value: unknown): AdminTenantReport | null {
     ...(typeof report.correlation_id === 'string' ? { correlation_id: report.correlation_id } : {}),
     ...(typeof report.tenant_provider_record_id === 'string'
       ? { tenant_provider_record_id: report.tenant_provider_record_id } : {}),
+    scope_kind: scopeKind,
+    tenant_provider_record_ids: [...providerRecordIds].sort(),
+    created_at: createdAt,
+    has_usable_ddl: hasUsableDdl,
   }
 }
 

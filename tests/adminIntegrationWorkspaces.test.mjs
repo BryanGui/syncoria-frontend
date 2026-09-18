@@ -6,16 +6,20 @@ import {
   addAdminIntegrationDdlFromAudit,
   cloneAdminIntegration,
   createAdminIntegration,
+  deleteAdminIntegrationDdl,
   deleteAdminIntegrationIngestion,
   fetchAdminIntegration,
   fetchAdminIntegrationDdls,
   fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
+  fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
   importAdminIntegrationDdl,
   MAX_DDL_BYTES,
   patchAdminIntegration,
+  renameAdminIntegrationDdl,
+  replaceAdminIntegrationProviders,
   selectAdminIntegrationDdl,
   selectAdminIntegrationIngestion,
 } from '../src/api/adminIntegrations.ts'
@@ -25,6 +29,7 @@ const integrationId = '22222222-2222-4222-8222-222222222222'
 const ddlId = '33333333-3333-4333-8333-333333333333'
 const providerRecordId = '44444444-4444-4444-8444-444444444444'
 const correlationId = '55555555-5555-4555-8555-555555555555'
+const secondProviderRecordId = '66666666-6666-4666-8666-666666666666'
 const ddl = {
   id: ddlId,
   title: 'Novalia global v1',
@@ -103,6 +108,47 @@ test('creates, patches, clones and activates versions without local copying', as
   assert.equal(calls[3].options.method, 'PUT')
 })
 
+test('reads and atomically replaces the exact provider-record set', async () => {
+  const calls = []
+  const providers = [
+    {
+      tenant_provider_record_id: providerRecordId,
+      provider: 'notion',
+      name: 'Notion RH',
+      created_at: '2026-09-18T10:00:00Z',
+    },
+    {
+      tenant_provider_record_id: secondProviderRecordId,
+      provider: 'google_sheets',
+      name: 'Sheets candidats',
+      created_at: '2026-09-18T10:00:00Z',
+    },
+  ]
+  const request = async (url, options) => {
+    calls.push({ url, options })
+    return Response.json(providers)
+  }
+  const loaded = await fetchAdminIntegrationProviders(
+    'https://api.example.com', tenantId, integrationId, undefined, request,
+  )
+  const replaced = await replaceAdminIntegrationProviders(
+    'https://api.example.com', tenantId, integrationId,
+    [providerRecordId, secondProviderRecordId], undefined, request,
+  )
+  assert.equal(loaded.status, 'loaded')
+  assert.equal(replaced.status, 'loaded')
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/providers`)
+  assert.equal(calls[1].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    tenant_provider_record_ids: [providerRecordId, secondProviderRecordId],
+  })
+  assert.deepEqual(await replaceAdminIntegrationProviders(
+    'https://api.example.com', tenantId, integrationId,
+    [providerRecordId, providerRecordId], undefined,
+    () => { throw new Error('must not request') },
+  ), { status: 'invalid' })
+})
+
 test('keeps source and imported DDL in one version-scoped library', async () => {
   const calls = []
   const source = { ...ddl, id: '66666666-6666-4666-8666-666666666666', kind: 'source', source_report_id: 'audit-notion-2026-09-17', source_filename: null, source_provider: 'notion', source_audit_title: 'Audit Notion', source_report_date: '2026-09-17', is_selected: false }
@@ -124,6 +170,47 @@ test('keeps source and imported DDL in one version-scoped library', async () => 
   assert.deepEqual(JSON.parse(calls[1].options.body), { source_report_id: 'audit-notion-2026-09-17' })
   assert.deepEqual(JSON.parse(calls[2].options.body), { title: 'Experiment', content: 'CREATE TABLE experiment (id integer);' })
   assert.equal(calls[3].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddls/${ddlId}/selection`)
+})
+
+test('renames and deletes imported DDLs through the canonical artifact route', async () => {
+  const calls = []
+  const renamed = await renameAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, ddlId, ' renamed.sql ', undefined,
+    async (url, options) => {
+      calls.push({ url, options })
+      return Response.json({ ...ddl, title: 'renamed.sql' })
+    },
+  )
+  const deleted = await deleteAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, ddlId, undefined,
+    async (url, options) => {
+      calls.push({ url, options })
+      return new Response(null, { status: 204 })
+    },
+  )
+
+  assert.equal(renamed.status, 'loaded')
+  assert.equal(renamed.ddl.title, 'renamed.sql')
+  assert.equal(deleted.status, 'deleted')
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddls/${ddlId}`)
+  assert.equal(calls[0].options.method, 'PATCH')
+  assert.deepEqual(JSON.parse(calls[0].options.body), { title: 'renamed.sql' })
+  assert.equal(calls[1].options.method, 'DELETE')
+})
+
+test('preserves the exact upload filename as the imported DDL title', async () => {
+  let body
+  const result = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId,
+    'novalia-modèle-v2.sql', 'CREATE TABLE exact_filename (id integer);', undefined,
+    async (_url, options) => {
+      body = JSON.parse(options.body)
+      return Response.json({ ...ddl, title: 'novalia-modèle-v2.sql' })
+    },
+  )
+
+  assert.equal(result.status, 'loaded')
+  assert.equal(body.title, 'novalia-modèle-v2.sql')
 })
 
 test('replaces one version ingestion reference and never deletes the raw operation', async () => {

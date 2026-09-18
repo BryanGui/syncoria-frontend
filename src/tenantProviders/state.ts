@@ -1,5 +1,4 @@
 import type {
-  AdminProvider,
   AdminProviderConfiguration,
   AdminProviderRecord,
   ProviderVerificationResult,
@@ -8,7 +7,7 @@ import type {
 export type ProviderConnectionState = 'not_configured' | 'pending' | 'ok' | 'error'
 
 export function buildProviderConfiguration(
-  provider: AdminProvider,
+  provider: string,
   rawValue: string,
 ): AdminProviderConfiguration {
   const value = rawValue.trim()
