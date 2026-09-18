@@ -23,6 +23,8 @@ const report = {
   provider: 'notion', report_date: '2026-09-07',
   sources_analyzed: 3, sources_retained: 2, sources_excluded: 1,
   records_retained: 7, decisions_required: 1,
+  scope_kind: 'individual', tenant_provider_record_ids: [],
+  created_at: null, has_usable_ddl: false,
 }
 
 test('loads tenant-scoped metadata using the admin cookie and abort signal', async () => {
@@ -85,9 +87,29 @@ test('distinguishes no reports from failures and expired sessions', async () => 
 })
 
 test('rejects malformed metadata and invalid counts', async () => {
-  for (const payload of [{}, [{ ...report, id: '../other' }], [{ ...report, sources_retained: -1 }], [{ ...report, records_retained: 1.5 }], [{ ...report, status: 'pending' }], [report, report]]) {
+  for (const payload of [{}, [{ ...report, id: '../other' }], [{ ...report, sources_retained: -1 }], [{ ...report, records_retained: 1.5 }], [{ ...report, status: 'pending' }], [{ ...report, scope_kind: 'implicit' }], [{ ...report, tenant_provider_record_ids: ['not-a-uuid'] }], [report, report]]) {
     assert.deepEqual(await fetchAdminTenantReports('https://api.example.com', tenantId, undefined, async () => Response.json(payload)), { status: 'error' })
   }
+})
+
+test('keeps normalized global report scope deterministic', async () => {
+  const first = '44444444-4444-4444-8444-444444444444'
+  const second = '22222222-2222-4222-8222-222222222222'
+  const globalReport = {
+    ...report,
+    scope_kind: 'global',
+    tenant_provider_record_ids: [first, second],
+    created_at: '2026-09-18T10:00:00Z',
+    has_usable_ddl: true,
+  }
+  const result = await fetchAdminTenantReports(
+    'https://api.example.com', tenantId, undefined,
+    async () => Response.json([globalReport]),
+  )
+  assert.equal(result.status, 'loaded')
+  assert.deepEqual(result.reports[0].tenant_provider_record_ids, [second, first])
+  assert.equal(result.reports[0].scope_kind, 'global')
+  assert.equal(result.reports[0].has_usable_ddl, true)
 })
 
 test('allows omission of the decision counter via null', async () => {

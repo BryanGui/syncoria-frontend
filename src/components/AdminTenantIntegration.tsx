@@ -35,18 +35,30 @@ interface ProviderDefinition {
   ]
 }
 
-function getProviderDefinition(provider: AdminProvider): ProviderDefinition {
-  return provider === 'notion'
-    ? {
+function getProviderDefinition(provider: string): ProviderDefinition {
+  if (provider === 'notion') {
+    return {
       title: 'Notion',
       secretLabel: 'Token Notion',
       credentialTypes: [{ value: 'integration_token', label: 'Token' }],
     }
-    : {
+  }
+  if (provider === 'n8n') {
+    return {
       title: 'n8n',
       secretLabel: 'Clé API n8n',
       credentialTypes: [{ value: 'api_key', label: 'Clé API' }],
     }
+  }
+  return {
+    title: provider === 'google_sheets'
+      ? 'Google Sheets'
+      : provider === 'hubspot'
+        ? 'HubSpot'
+        : provider,
+    secretLabel: 'Identifiant de connexion',
+    credentialTypes: [{ value: 'api_key', label: 'Clé API' }],
+  }
 }
 
 type FormMode = 'edit' | 'credential' | null

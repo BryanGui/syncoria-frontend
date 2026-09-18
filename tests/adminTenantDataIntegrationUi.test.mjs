@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
+import { compatibleGlobalAuditReports } from '../src/integrationVersions/auditCompatibility.ts'
+
 const component = await readFile(new URL('../src/components/AdminTenantVersionedIntegration.tsx', import.meta.url), 'utf8')
 const api = await readFile(new URL('../src/api/adminIntegrations.ts', import.meta.url), 'utf8')
+const auditCompatibility = await readFile(new URL('../src/integrationVersions/auditCompatibility.ts', import.meta.url), 'utf8')
 const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
 const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
 const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
@@ -18,8 +21,15 @@ test('exposes the versioned integration workflow in the dedicated admin section'
   assert.match(component, /setView\(active \? 'active' : 'create'\)/)
 })
 
-test('shows the single step-one DDL list with explicit selection and preview', () => {
-  assert.match(component, /Étape 1 — Choisir un DDL/)
+test('shows provider scope before the single DDL list with explicit selection and preview', () => {
+  assert.match(component, /Étape 1 — Choisir les providers à intégrer/)
+  assert.match(component, /Étape 2 — Choisir un DDL/)
+  assert.match(component, /replaceAdminIntegrationProviders/)
+  assert.match(auditCompatibility, /scope_kind !== 'global'/)
+  assert.match(auditCompatibility, /tenant_provider_record_ids/)
+  assert.match(auditCompatibility, /second\.created_at/)
+  assert.match(component, /Aucun audit global compatible avec les providers sélectionnés/)
+  assert.match(component, /Sélectionnez au moins un provider à l’étape 1/)
   assert.match(component, /Charger un DDL/)
   assert.match(component, /aria-label="DDL disponibles"/)
   assert.match(component, /Source : Audit/)
@@ -35,9 +45,44 @@ test('resolves a hidden draft only on the first meaningful action', () => {
   assert.match(component, /async function ensureDraft/)
   assert.match(component, /await ensureDraft\(\)/)
   assert.match(component, /createAdminIntegration/)
+  assert.match(component, /async function toggleProvider/)
   assert.match(component, /based_on_integration_id/)
   assert.doesNotMatch(component, /cloneAdminIntegration|activateAdminIntegration|Créer une version vide|Cloner cette version/)
   assert.doesNotMatch(component, /window\.location\.reload|window\.location\.hash/)
+})
+
+test('filters exact global audit sets and breaks created-at ties by report id', () => {
+  const providerA = '11111111-1111-4111-8111-111111111111'
+  const providerB = '22222222-2222-4222-8222-222222222222'
+  const report = (id, scopeKind, providerIds, createdAt, status = 'completed') => ({
+    id,
+    title: id,
+    provider: 'multi',
+    report_date: '2026-09-18',
+    status,
+    sources_analyzed: 1,
+    sources_retained: 1,
+    sources_excluded: 0,
+    records_retained: 1,
+    decisions_required: 0,
+    scope_kind: scopeKind,
+    tenant_provider_record_ids: providerIds,
+    created_at: createdAt,
+    has_usable_ddl: true,
+  })
+  const reports = [
+    report('audit-a', 'global', [providerA, providerB], '2026-09-18T10:00:00Z'),
+    report('audit-z', 'global', [providerB, providerA], '2026-09-18T10:00:00Z'),
+    report('individual', 'individual', [providerA, providerB], '2026-09-19T10:00:00Z'),
+    report('partial', 'global', [providerA], '2026-09-19T10:00:00Z'),
+    { ...report('without-ddl', 'global', [providerA, providerB], '2026-09-19T10:00:00Z'), has_usable_ddl: false },
+    report('archived', 'global', [providerA, providerB], '2026-09-19T10:00:00Z', 'archived'),
+  ]
+
+  assert.deepEqual(
+    compatibleGlobalAuditReports(reports, [providerA, providerB]).map(({ id }) => id),
+    ['audit-z', 'audit-a'],
+  )
 })
 
 test('supports imported DDL rename and confirmed server deletion only', () => {

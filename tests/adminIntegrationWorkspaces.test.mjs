@@ -12,12 +12,14 @@ import {
   fetchAdminIntegrationDdls,
   fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
+  fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
   importAdminIntegrationDdl,
   MAX_DDL_BYTES,
   patchAdminIntegration,
   renameAdminIntegrationDdl,
+  replaceAdminIntegrationProviders,
   selectAdminIntegrationDdl,
   selectAdminIntegrationIngestion,
 } from '../src/api/adminIntegrations.ts'
@@ -27,6 +29,7 @@ const integrationId = '22222222-2222-4222-8222-222222222222'
 const ddlId = '33333333-3333-4333-8333-333333333333'
 const providerRecordId = '44444444-4444-4444-8444-444444444444'
 const correlationId = '55555555-5555-4555-8555-555555555555'
+const secondProviderRecordId = '66666666-6666-4666-8666-666666666666'
 const ddl = {
   id: ddlId,
   title: 'Novalia global v1',
@@ -103,6 +106,47 @@ test('creates, patches, clones and activates versions without local copying', as
   assert.deepEqual(JSON.parse(calls[1].options.body), { display_name: 'v2', design_note: 'Note' })
   assert.equal(calls[2].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/clone`)
   assert.equal(calls[3].options.method, 'PUT')
+})
+
+test('reads and atomically replaces the exact provider-record set', async () => {
+  const calls = []
+  const providers = [
+    {
+      tenant_provider_record_id: providerRecordId,
+      provider: 'notion',
+      name: 'Notion RH',
+      created_at: '2026-09-18T10:00:00Z',
+    },
+    {
+      tenant_provider_record_id: secondProviderRecordId,
+      provider: 'google_sheets',
+      name: 'Sheets candidats',
+      created_at: '2026-09-18T10:00:00Z',
+    },
+  ]
+  const request = async (url, options) => {
+    calls.push({ url, options })
+    return Response.json(providers)
+  }
+  const loaded = await fetchAdminIntegrationProviders(
+    'https://api.example.com', tenantId, integrationId, undefined, request,
+  )
+  const replaced = await replaceAdminIntegrationProviders(
+    'https://api.example.com', tenantId, integrationId,
+    [providerRecordId, secondProviderRecordId], undefined, request,
+  )
+  assert.equal(loaded.status, 'loaded')
+  assert.equal(replaced.status, 'loaded')
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/providers`)
+  assert.equal(calls[1].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    tenant_provider_record_ids: [providerRecordId, secondProviderRecordId],
+  })
+  assert.deepEqual(await replaceAdminIntegrationProviders(
+    'https://api.example.com', tenantId, integrationId,
+    [providerRecordId, providerRecordId], undefined,
+    () => { throw new Error('must not request') },
+  ), { status: 'invalid' })
 })
 
 test('keeps source and imported DDL in one version-scoped library', async () => {

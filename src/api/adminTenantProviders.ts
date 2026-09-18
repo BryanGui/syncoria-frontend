@@ -13,7 +13,7 @@ export interface AdminProviderConfiguration {
 export interface AdminProviderRecord {
   id: string
   tenant_id: string
-  provider: AdminProvider
+  provider: string
   audit_supported: boolean
   initial_ingestion_supported: boolean
   credential_type: string | null
@@ -33,7 +33,7 @@ export interface AdminProviderRecord {
 export interface ProviderVerificationResult {
   status: 'ok' | 'error'
   checked_at: string
-  provider: AdminProvider
+  provider: string
   http_status: number | null
   code: string | null
   message: string | null
@@ -113,7 +113,8 @@ function parseProviderRecord(value: unknown): AdminProviderRecord | null {
   if (
     typeof value.id !== 'string'
     || typeof value.tenant_id !== 'string'
-    || (value.provider !== 'notion' && value.provider !== 'n8n')
+    || typeof value.provider !== 'string'
+    || !/^[a-z0-9_-]{1,64}$/.test(value.provider)
     || !isNullableString(value.credential_type)
     || typeof value.name !== 'string'
     || typeof value.status !== 'string'
@@ -159,7 +160,8 @@ function parseVerification(value: unknown): ProviderVerificationResult | null {
   if (
     (value.status !== 'ok' && value.status !== 'error')
     || typeof value.checked_at !== 'string'
-    || (value.provider !== 'notion' && value.provider !== 'n8n')
+    || typeof value.provider !== 'string'
+    || !/^[a-z0-9_-]{1,64}$/.test(value.provider)
     || !isNullableNumber(httpStatus)
     || !isNullableString(code)
     || !isNullableString(message)

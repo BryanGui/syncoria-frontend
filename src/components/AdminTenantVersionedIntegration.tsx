@@ -8,17 +8,20 @@ import {
   fetchAdminIntegrationDdl,
   fetchAdminIntegrationDdls,
   fetchAdminIntegrationIngestions,
+  fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
   importAdminIntegrationDdl,
   MAX_DDL_BYTES,
   renameAdminIntegrationDdl,
+  replaceAdminIntegrationProviders,
   selectAdminIntegrationDdl,
   type AdminIntegration,
   type AdminIntegrationDdl,
   type AdminIntegrationDdlMetadata,
   type AdminIntegrationFailure,
   type AdminIntegrationIngestion,
+  type AdminIntegrationProvider,
   type AdminIntegrationSummary,
   type IntegrationStatus,
 } from '../api/adminIntegrations'
@@ -26,6 +29,11 @@ import {
   fetchAdminTenantReports,
   type AdminTenantReport,
 } from '../api/adminTenantReports'
+import {
+  fetchAdminTenantProviders,
+  type AdminProviderRecord,
+} from '../api/adminTenantProviders'
+import { compatibleGlobalAuditReports } from '../integrationVersions/auditCompatibility'
 import { ActionMenu, Badge, Button, Notification, TextInput } from './ui'
 
 interface AdminTenantVersionedIntegrationProps {
@@ -66,11 +74,11 @@ function statusTone(status: IntegrationStatus): 'success' | 'neutral' | 'warning
 }
 
 function providerLabel(provider: string): string {
-  return provider.length === 0
-    ? 'Provider inconnu'
-    : provider === 'n8n'
-      ? 'n8n'
-      : provider.slice(0, 1).toUpperCase() + provider.slice(1)
+  if (provider.length === 0) return 'Provider inconnu'
+  if (provider === 'n8n') return 'n8n'
+  if (provider === 'google_sheets') return 'Google Sheets'
+  if (provider === 'hubspot') return 'HubSpot'
+  return provider.slice(0, 1).toUpperCase() + provider.slice(1).replaceAll('_', ' ')
 }
 
 function integrationLabel(integration: AdminIntegrationSummary | AdminIntegration): string {
@@ -250,6 +258,13 @@ export function AdminTenantVersionedIntegration({
   const [auditReports, setAuditReports] = useState<AdminTenantReport[]>([])
   const [auditState, setAuditState] = useState<LoadState>('loading')
   const [auditReloadKey, setAuditReloadKey] = useState(0)
+  const [availableProviders, setAvailableProviders] = useState<AdminProviderRecord[]>([])
+  const [availableProviderState, setAvailableProviderState] = useState<LoadState>('loading')
+  const [availableProviderReloadKey, setAvailableProviderReloadKey] = useState(0)
+  const [scopeProviders, setScopeProviders] = useState<AdminIntegrationProvider[]>([])
+  const [scopeIntegrationId, setScopeIntegrationId] = useState<string | null>(null)
+  const [scopeProviderState, setScopeProviderState] = useState<LoadState>('loading')
+  const [scopeProviderReloadKey, setScopeProviderReloadKey] = useState(0)
   const [notification, setNotification] = useState<NotificationState>(null)
   const [mutationPending, setMutationPending] = useState(false)
   const [renameId, setRenameId] = useState<string | null>(null)
@@ -261,6 +276,7 @@ export function AdminTenantVersionedIntegration({
   const selectedIdRef = useRef<string | null>(selectedId)
   const viewRef = useRef<IntegrationView>(view)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const scopeMutationVersion = useRef(0)
 
   selectedIdRef.current = selectedId
   viewRef.current = view
@@ -432,11 +448,70 @@ export function AdminTenantVersionedIntegration({
         setAuditState('error')
         return
       }
-      setAuditReports(result.reports.filter((report) => report.status === 'completed'))
+      setAuditReports(result.reports)
       setAuditState('loaded')
     })
     return () => controller.abort()
   }, [apiBaseUrl, auditReloadKey, isArchivedTenant, onSessionExpired, tenantId, view])
+
+  useEffect(() => {
+    setAvailableProviders([])
+    if (view !== 'create' || isArchivedTenant) {
+      setAvailableProviderState('loaded')
+      return undefined
+    }
+    const controller = new AbortController()
+    setAvailableProviderState('loading')
+    void fetchAdminTenantProviders(apiBaseUrl, tenantId, controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setAvailableProviderState('error')
+        return
+      }
+      setAvailableProviders([...result.providers].sort((first, second) => (
+        first.name.localeCompare(second.name, 'fr') || first.id.localeCompare(second.id)
+      )))
+      setAvailableProviderState('loaded')
+    })
+    return () => controller.abort()
+  }, [apiBaseUrl, availableProviderReloadKey, isArchivedTenant, onSessionExpired, tenantId, view])
+
+  useEffect(() => {
+    setScopeProviders([])
+    setScopeIntegrationId(selectedId)
+    if (view !== 'create' || selectedId === null || isArchivedTenant) {
+      setScopeProviderState('loaded')
+      return undefined
+    }
+    const controller = new AbortController()
+    const requestMutationVersion = scopeMutationVersion.current
+    setScopeProviderState('loading')
+    void fetchAdminIntegrationProviders(
+      apiBaseUrl, tenantId, selectedId, controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted
+        || requestMutationVersion !== scopeMutationVersion.current) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setScopeProviderState('error')
+        return
+      }
+      setScopeProviders(result.providers)
+      setScopeIntegrationId(selectedId)
+      setScopeProviderState('loaded')
+    })
+    return () => controller.abort()
+  }, [
+    apiBaseUrl, isArchivedTenant, onSessionExpired, scopeProviderReloadKey,
+    selectedId, tenantId, view,
+  ])
 
   function selectView(nextView: IntegrationView) {
     setView(nextView)
@@ -471,7 +546,58 @@ export function AdminTenantVersionedIntegration({
     setDdlIntegrationId(result.integration.id)
     setDdls([])
     setDdlState('loaded')
+    setScopeIntegrationId(result.integration.id)
+    setScopeProviders([])
+    setScopeProviderState('loaded')
     return result.integration
+  }
+
+  async function toggleProvider(providerRecordId: string, selected: boolean) {
+    if (mutationPending || scopeProviderState !== 'loaded') return
+    const currentIds = scopeIntegrationId === selectedId
+      ? scopeProviders.map((provider) => provider.tenant_provider_record_id)
+      : []
+    const desiredIds = selected
+      ? [...currentIds, providerRecordId]
+      : currentIds.filter((providerId) => providerId !== providerRecordId)
+    if (new Set(desiredIds).size === new Set(currentIds).size
+      && desiredIds.every((providerId) => currentIds.includes(providerId))) return
+
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      const draft = await ensureDraft()
+      if (draft === null) return
+      const result = await replaceAdminIntegrationProviders(
+        apiBaseUrl, tenantId, draft.id, desiredIds,
+      )
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        showFailure(result, 'Le périmètre des providers ne peut pas être enregistré.')
+        return
+      }
+      scopeMutationVersion.current += 1
+      setScopeIntegrationId(draft.id)
+      setScopeProviders(result.providers)
+      setScopeProviderState('loaded')
+      setDdls((current) => current.map((ddl) => ({ ...ddl, is_selected: false })))
+      setDetail((current) => current?.id === draft.id
+        ? { ...current, selected_ddl_id: null }
+        : current)
+      setIntegrations((current) => current.map((integration) => integration.id === draft.id
+        ? { ...integration, selected_ddl_id: null }
+        : integration))
+      setIngestions([])
+      setDdlPreview(null)
+      setRenameId(null)
+      setDeleteId(null)
+      setNotification({ tone: 'success', message: 'Périmètre des providers enregistré.' })
+    } finally {
+      setMutationPending(false)
+    }
   }
 
   async function selectExistingDdl(integrationId: string, ddlId: string) {
@@ -679,74 +805,119 @@ export function AdminTenantVersionedIntegration({
   }
 
   function renderCreateView() {
-    const defaultAudit = auditReports[0] ?? null
-    const defaultAuditDdl = defaultAudit
-      ? currentDdls.find((ddl) => ddl.kind === 'source' && ddl.source_report_id === defaultAudit.id) ?? null
-      : null
+    const selectedProviderIds = scopeIntegrationId === selectedId
+      ? scopeProviders.map((provider) => provider.tenant_provider_record_id)
+      : []
+    const compatibleAudits = compatibleGlobalAuditReports(
+      auditReports, selectedProviderIds,
+    )
     const importedDdls = currentDdls.filter((ddl) => ddl.kind === 'imported')
-    const isLoading = auditState === 'loading' || (selectedId !== null && currentDdlState === 'loading')
+    const providersLoading = availableProviderState === 'loading'
+      || (selectedId !== null && scopeProviderState === 'loading')
+    const ddlLoading = auditState === 'loading'
+      || (selectedId !== null && currentDdlState === 'loading')
+    const hasSelectedProvider = selectedProviderIds.length > 0
 
     return (
-      <section aria-labelledby="integration-ddl-step-title" className="versioned-integration__ddl-step">
-        <div className="versioned-integration__ddl-step-heading">
-          <h4 id="integration-ddl-step-title">Étape 1 — Choisir un DDL</h4>
-          <Button disabled={isArchivedTenant || mutationPending} loading={mutationPending} onClick={() => fileInputRef.current?.click()} variant="primary">Charger un DDL</Button>
-          <input
-            accept=".sql,text/plain,application/sql"
-            aria-label="Fichier DDL à charger"
-            className="versioned-integration__file-input"
-            disabled={isArchivedTenant || mutationPending}
-            key={fileInputKey}
-            onChange={(event) => void handleUpload(event.target.files?.[0])}
-            ref={fileInputRef}
-            type="file"
-          />
-        </div>
-        {isArchivedTenant ? <p className="versioned-integration__empty">Ce client archivé est en lecture seule.</p> : null}
-        {!isArchivedTenant && auditState === 'error' ? <StructuralError message="Impossible de charger le DDL d’audit." onRetry={() => setAuditReloadKey((current) => current + 1)} /> : null}
-        {!isArchivedTenant && currentDdlState === 'error' ? <StructuralError message="Impossible de charger les DDL." onRetry={() => setDdlReloadKey((current) => current + 1)} /> : null}
-        {!isArchivedTenant && isLoading ? <p className="versioned-integration__empty" role="status">Chargement des DDL…</p> : null}
-        {!isArchivedTenant && !isLoading && auditState !== 'error' && currentDdlState !== 'error' ? (
-          <div aria-label="DDL disponibles" className="versioned-integration__ddl-list versioned-integration__ddl-list--editable">
-            {defaultAudit ? (
-              <div className={`versioned-integration__ddl-row${defaultAuditDdl?.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`}>
-                <input aria-label={`Sélectionner DDL audit — ${defaultAudit.title}`} checked={defaultAuditDdl?.is_selected ?? false} disabled={mutationPending} name="selected-ddl" onChange={() => void selectAuditDdl(defaultAudit)} type="radio" />
-                {defaultAuditDdl ? (
-                  <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(defaultAuditDdl.id)} type="button"><strong>DDL audit — {defaultAudit.title}</strong><span>Source : Audit</span></button>
-                ) : <div className="versioned-integration__ddl-title"><strong>DDL audit — {defaultAudit.title}</strong><span>Source : Audit</span></div>}
-                <Badge tone="neutral">Par défaut</Badge>
-              </div>
-            ) : null}
-            {importedDdls.map((ddl) => (
-              <div className={`versioned-integration__ddl-row versioned-integration__ddl-row--imported${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
-                <input aria-label={`Sélectionner ${ddl.title}`} checked={ddl.is_selected} disabled={mutationPending} name="selected-ddl" onChange={() => void selectImportedDdl(ddl.id)} type="radio" />
-                {renameId === ddl.id ? (
-                  <div className="versioned-integration__rename-form">
-                    <TextInput aria-label="Nouveau titre du DDL" disabled={mutationPending} onChange={(event) => setRenameTitle(event.target.value)} value={renameTitle} />
-                    {renameError ? <p role="alert">{renameError}</p> : null}
-                    <div><Button disabled={mutationPending} onClick={() => { setRenameId(null); setRenameError(null) }} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void saveRename(ddl.id)} size="compact" variant="secondary">Enregistrer</Button></div>
-                  </div>
-                ) : (
-                  <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(ddl.id)} type="button"><strong>{ddl.title}</strong><span>Source : Import manuel</span></button>
-                )}
-                {deleteId === ddl.id ? (
-                  <div aria-label={`Confirmer la suppression de ${ddl.title}`} className="versioned-integration__delete-confirmation" role="alertdialog">
-                    <span>Supprimer ce DDL ?</span>
-                    <div><Button disabled={mutationPending} onClick={() => setDeleteId(null)} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void confirmDelete(ddl.id)} size="compact" variant="danger">Supprimer</Button></div>
-                  </div>
-                ) : renameId === ddl.id ? null : (
-                  <ActionMenu ariaLabel={`Actions pour ${ddl.title}`} label="⋯">
-                    <button onClick={() => startRename(ddl)} type="button">Renommer</button>
-                    <button onClick={() => { setDeleteId(ddl.id); setRenameId(null); setRenameError(null) }} type="button">Supprimer</button>
-                  </ActionMenu>
-                )}
-              </div>
-            ))}
-            {defaultAudit === null && importedDdls.length === 0 ? <p className="versioned-integration__ddl-empty">Aucun DDL disponible.</p> : null}
+      <div className="versioned-integration__create-workflow">
+        <section aria-labelledby="integration-provider-step-title" className="versioned-integration__ddl-step">
+          <div className="versioned-integration__ddl-step-heading">
+            <h4 id="integration-provider-step-title">Étape 1 — Choisir les providers à intégrer</h4>
           </div>
-        ) : null}
-        {ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={() => setDdlPreview(null)} /> : null}
-      </section>
+          {isArchivedTenant ? <p className="versioned-integration__empty">Ce client archivé est en lecture seule.</p> : null}
+          {!isArchivedTenant && availableProviderState === 'error' ? <StructuralError message="Impossible de charger les providers." onRetry={() => setAvailableProviderReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && scopeProviderState === 'error' ? <StructuralError message="Impossible de charger le périmètre des providers." onRetry={() => setScopeProviderReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && providersLoading ? <p className="versioned-integration__empty" role="status">Chargement des providers…</p> : null}
+          {!isArchivedTenant && !providersLoading && availableProviderState !== 'error' && scopeProviderState !== 'error' ? (
+            availableProviders.length === 0 ? (
+              <p className="versioned-integration__empty">Aucune connexion provider disponible.</p>
+            ) : (
+              <div aria-label="Providers disponibles" className="versioned-integration__provider-list">
+                {availableProviders.map((provider) => {
+                  const checked = selectedProviderIds.includes(provider.id)
+                  return (
+                    <label className={`versioned-integration__provider-row${checked ? ' versioned-integration__provider-row--selected' : ''}`} key={provider.id}>
+                      <input
+                        aria-label={`Sélectionner ${provider.name}`}
+                        checked={checked}
+                        disabled={mutationPending || (provider.status !== 'active' && !checked)}
+                        onChange={(event) => void toggleProvider(provider.id, event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span><strong>{provider.name}</strong><small>{providerLabel(provider.provider)}</small></span>
+                      {provider.status !== 'active' ? <Badge tone="neutral">Inactive</Badge> : null}
+                    </label>
+                  )
+                })}
+              </div>
+            )
+          ) : null}
+        </section>
+
+        <section aria-labelledby="integration-ddl-step-title" className="versioned-integration__ddl-step">
+          <div className="versioned-integration__ddl-step-heading">
+            <h4 id="integration-ddl-step-title">Étape 2 — Choisir un DDL</h4>
+            <Button disabled={isArchivedTenant || mutationPending || !hasSelectedProvider} loading={mutationPending} onClick={() => fileInputRef.current?.click()} variant="primary">Charger un DDL</Button>
+            <input
+              accept=".sql,text/plain,application/sql"
+              aria-label="Fichier DDL à charger"
+              className="versioned-integration__file-input"
+              disabled={isArchivedTenant || mutationPending || !hasSelectedProvider}
+              key={fileInputKey}
+              onChange={(event) => void handleUpload(event.target.files?.[0])}
+              ref={fileInputRef}
+              type="file"
+            />
+          </div>
+          {!isArchivedTenant && !providersLoading && !hasSelectedProvider ? <p className="versioned-integration__empty">Sélectionnez au moins un provider à l’étape 1.</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && auditState === 'error' ? <StructuralError message="Impossible de charger le DDL d’audit." onRetry={() => setAuditReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && hasSelectedProvider && currentDdlState === 'error' ? <StructuralError message="Impossible de charger les DDL." onRetry={() => setDdlReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && hasSelectedProvider && ddlLoading ? <p className="versioned-integration__empty" role="status">Chargement des DDL…</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && !ddlLoading && auditState !== 'error' && currentDdlState !== 'error' ? (
+            <div aria-label="DDL disponibles" className="versioned-integration__ddl-list versioned-integration__ddl-list--editable">
+              {compatibleAudits.length === 0 ? <p className="versioned-integration__ddl-empty">Aucun audit global compatible avec les providers sélectionnés.</p> : null}
+              {compatibleAudits.map((report, index) => {
+                const artifact = currentDdls.find((ddl) => ddl.kind === 'source' && ddl.source_report_id === report.id) ?? null
+                return (
+                  <div className={`versioned-integration__ddl-row${artifact?.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={report.id}>
+                    <input aria-label={`Sélectionner DDL audit — ${report.title}`} checked={artifact?.is_selected ?? false} disabled={mutationPending} name="selected-ddl" onChange={() => void selectAuditDdl(report)} type="radio" />
+                    {artifact ? (
+                      <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(artifact.id)} type="button"><strong>DDL audit — {report.title}</strong><span>Source : Audit</span></button>
+                    ) : <div className="versioned-integration__ddl-title"><strong>DDL audit — {report.title}</strong><span>Source : Audit</span></div>}
+                    {index === 0 ? <Badge tone="neutral">Par défaut</Badge> : null}
+                  </div>
+                )
+              })}
+              {importedDdls.map((ddl) => (
+                <div className={`versioned-integration__ddl-row versioned-integration__ddl-row--imported${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
+                  <input aria-label={`Sélectionner ${ddl.title}`} checked={ddl.is_selected} disabled={mutationPending} name="selected-ddl" onChange={() => void selectImportedDdl(ddl.id)} type="radio" />
+                  {renameId === ddl.id ? (
+                    <div className="versioned-integration__rename-form">
+                      <TextInput aria-label="Nouveau titre du DDL" disabled={mutationPending} onChange={(event) => setRenameTitle(event.target.value)} value={renameTitle} />
+                      {renameError ? <p role="alert">{renameError}</p> : null}
+                      <div><Button disabled={mutationPending} onClick={() => { setRenameId(null); setRenameError(null) }} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void saveRename(ddl.id)} size="compact" variant="secondary">Enregistrer</Button></div>
+                    </div>
+                  ) : (
+                    <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(ddl.id)} type="button"><strong>{ddl.title}</strong><span>Source : Import manuel</span></button>
+                  )}
+                  {deleteId === ddl.id ? (
+                    <div aria-label={`Confirmer la suppression de ${ddl.title}`} className="versioned-integration__delete-confirmation" role="alertdialog">
+                      <span>Supprimer ce DDL ?</span>
+                      <div><Button disabled={mutationPending} onClick={() => setDeleteId(null)} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void confirmDelete(ddl.id)} size="compact" variant="danger">Supprimer</Button></div>
+                    </div>
+                  ) : renameId === ddl.id ? null : (
+                    <ActionMenu ariaLabel={`Actions pour ${ddl.title}`} label="⋯">
+                      <button onClick={() => startRename(ddl)} type="button">Renommer</button>
+                      <button onClick={() => { setDeleteId(ddl.id); setRenameId(null); setRenameError(null) }} type="button">Supprimer</button>
+                    </ActionMenu>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={() => setDdlPreview(null)} /> : null}
+        </section>
+      </div>
     )
   }
 

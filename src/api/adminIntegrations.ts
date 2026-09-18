@@ -56,6 +56,13 @@ export interface AdminIntegrationIngestion {
   created_at?: string
 }
 
+export interface AdminIntegrationProvider {
+  tenant_provider_record_id: string
+  provider: string
+  name: string
+  created_at: string
+}
+
 export type AdminIntegrationFailureStatus =
   | 'unauthenticated'
   | 'not_found'
@@ -98,6 +105,10 @@ export type AdminIntegrationIngestionListResult =
 
 export type AdminIntegrationIngestionResult =
   | { status: 'loaded'; ingestion: AdminIntegrationIngestion }
+  | AdminIntegrationFailure
+
+export type AdminIntegrationProviderListResult =
+  | { status: 'loaded'; providers: AdminIntegrationProvider[] }
   | AdminIntegrationFailure
 
 export type AdminIntegrationDeleteIngestionResult =
@@ -226,6 +237,20 @@ function parseIngestion(value: unknown): AdminIntegrationIngestion | null {
     items_inserted: value.items_inserted as number,
     items_duplicate: value.items_duplicate as number,
     ...(typeof value.created_at === 'string' ? { created_at: value.created_at } : {}),
+  }
+}
+
+function parseIntegrationProvider(value: unknown): AdminIntegrationProvider | null {
+  if (!isObject(value)
+    || !uuidPattern.test(String(value.tenant_provider_record_id))
+    || !isBoundedString(value.provider, 64)
+    || !isBoundedString(value.name, 200)
+    || !isDateTime(value.created_at)) return null
+  return {
+    tenant_provider_record_id: value.tenant_provider_record_id as string,
+    provider: value.provider as string,
+    name: value.name as string,
+    created_at: value.created_at as string,
   }
 }
 
@@ -382,6 +407,56 @@ export async function createAdminIntegration(
     }, 'create_integration', (value) => parseIntegration(value, tenantId), signal, request, logger,
   )
   return result.status === 'loaded' ? { status: 'loaded', integration: result.value } : result
+}
+
+export async function fetchAdminIntegrationProviders(
+  apiBaseUrl: string | null,
+  tenantId: string,
+  integrationId: string,
+  signal?: AbortSignal,
+  request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationProviderListResult> {
+  if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
+  const result = await requestArray(
+    apiBaseUrl, tenantId, `${integrationEndpoint(tenantId, integrationId)}/providers`,
+    'load_integration_providers', parseIntegrationProvider, signal, request, logger,
+  )
+  return result.status === 'loaded'
+    ? { status: 'loaded', providers: result.values }
+    : result
+}
+
+export async function replaceAdminIntegrationProviders(
+  apiBaseUrl: string | null,
+  tenantId: string,
+  integrationId: string,
+  providerRecordIds: string[],
+  signal?: AbortSignal,
+  request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationProviderListResult> {
+  if (!validIdentifiers(tenantId, integrationId)
+    || providerRecordIds.length > 100
+    || providerRecordIds.some((providerId) => !uuidPattern.test(providerId))
+    || new Set(providerRecordIds).size !== providerRecordIds.length) return { status: 'invalid' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, `${integrationEndpoint(tenantId, integrationId)}/providers`, {
+      method: 'PUT',
+      body: JSON.stringify({ tenant_provider_record_ids: providerRecordIds }),
+      headers: { 'Content-Type': 'application/json' },
+    }, 'replace_integration_providers',
+    (value) => Array.isArray(value) ? value.map(parseIntegrationProvider) : null,
+    signal, request, logger,
+  )
+  if (result.status !== 'loaded' || !Array.isArray(result.value)
+    || result.value.some((provider) => provider === null)) {
+    return result.status === 'loaded' ? { status: 'error' } : result
+  }
+  return {
+    status: 'loaded',
+    providers: result.value as AdminIntegrationProvider[],
+  }
 }
 
 export async function patchAdminIntegration(
