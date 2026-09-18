@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchAdminTenantProviderAudit,
   fetchLatestAdminTenantProviderAudit,
@@ -16,6 +16,7 @@ import {
   type AdminTenantReportsResult,
 } from '../api/adminTenantReports'
 import { ActionMenu } from './ui/ActionMenu'
+import { SelectableList } from './ui/SelectableList'
 import { formatLocalCalendarDate, formatReportDate } from '../tenantReports/model'
 
 interface AdminTenantReportsProps {
@@ -202,23 +203,22 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
         <fieldset className="tenant-audit__field tenant-audit__provider-list" disabled={auditActive || isLaunching || providerState !== 'loaded'}>
           <legend className="tenant-audit__provider-label">Provider à auditer</legend>
           <div aria-describedby="audit-provider-help" className="tenant-audit__provider-options">
-            {providers.map((provider) => {
-              const selectable = provider.status === 'active' && provider.audit_supported
-              const availabilityLabel = selectable ? 'Auditable' : provider.status !== 'active' ? 'Indisponible' : 'Non auditable'
-              return (
-                <label className={selectable ? 'tenant-audit__provider-option' : 'tenant-audit__provider-option tenant-audit__provider-option--disabled'} key={provider.id}>
-                  <input
-                    checked={selectedProviderId === provider.id}
-                    disabled={!selectable}
-                    name="audit-provider"
-                    onChange={() => setSelectedProviderId(provider.id)}
-                    type="radio"
-                    value={provider.id}
-                  />
-                  <span><strong>{providerLabel(provider.provider)} — {provider.name}</strong><small>{availabilityLabel}</small></span>
-                </label>
-              )
-            })}
+            <SelectableList
+              ariaLabel="Providers à auditer"
+              name="audit-provider"
+              onChange={(providerId, checked) => { if (checked) setSelectedProviderId(providerId) }}
+              options={providers.map((provider) => {
+                const selectable = provider.status === 'active' && provider.audit_supported
+                const availabilityLabel = selectable ? 'Auditable' : provider.status !== 'active' ? 'Indisponible' : 'Non auditable'
+                return {
+                  disabled: !selectable,
+                  status: <span className="tenant-audit__provider-status">{availabilityLabel}</span>,
+                  title: `${providerLabel(provider.provider)} — ${provider.name}`,
+                  value: provider.id,
+                }
+              })}
+              selectedValue={selectedProviderId}
+            />
           </div>
           <small id="audit-provider-help">Les connexions non auditables ou indisponibles restent visibles mais ne peuvent pas être sélectionnées.</small>
         </fieldset>
@@ -327,34 +327,17 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
                   'noopener,noreferrer',
                 )
               }
-              const handleRowClick = (event: MouseEvent<HTMLElement>) => {
-                const target = event.target as HTMLElement
-                if (target.closest('.ui-action-menu') || target.closest('button, a, input, select, textarea')) return
-                openReport()
-              }
-              const handleRowKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-                if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
-                  event.preventDefault()
-                  openReport()
-                }
-              }
               return (
                 <li className="tenant-audit__history-row" key={report.id}>
                   <article
                     aria-label={`${report.title} — ${formatReportDate(report.report_date)}`}
                     className="tenant-audit__history-item"
-                    onClick={handleRowClick}
-                    onKeyDown={handleRowKeyDown}
-                    role="group"
-                    tabIndex={0}
                   >
                     <div className="tenant-audit__history-summary">
-                      <div className="tenant-audit__history-main">
-                        <button className="tenant-audit__history-title" onClick={openReport} type="button">
-                          {report.title} — {formatReportDate(report.report_date)}
-                        </button>
+                      <button className="tenant-audit__open-report" onClick={openReport} type="button">
+                        <strong className="tenant-audit__history-title">{report.title} — {formatReportDate(report.report_date)}</strong>
                         <span>{providerLabel(report.provider)} · <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></span>
-                      </div>
+                      </button>
                       <div className="tenant-audit__history-stat">
                         <strong className={report.status === 'archived' ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>
                           {reportStatusLabel(report.status)}

@@ -115,7 +115,8 @@ test('reports remain available through the admin integration audit step', () => 
 
 test('uses the backend audit capability instead of a provider-specific launcher branch', () => {
   assert.match(auditReportsSource, /audit_supported/)
-  assert.match(auditReportsSource, /type="radio"/)
+  assert.match(auditReportsSource, /<SelectableList/)
+  assert.match(auditReportsSource, /ariaLabel="Providers à auditer"/)
   assert.match(auditReportsSource, /provider\.status === 'active'/)
   assert.doesNotMatch(auditReportsSource, /<select/)
   assert.doesNotMatch(auditReportsSource, /provider\.provider\s*[!=]==?\s*['"]notion['"]/
@@ -133,6 +134,8 @@ test('restores only active audit operations in the launcher', () => {
 test('keeps report actions in the compact row menu without spacing hacks', async () => {
   assert.match(auditReportsSource, /ActionMenu ariaLabel="Actions de l’audit" label="⋯"/)
   assert.match(auditReportsSource, /tenant-audit__history-summary/)
+  assert.match(auditReportsSource, /tenant-audit__open-report/)
+  assert.doesNotMatch(auditReportsSource, /handleRowClick|handleRowKeyDown/)
   const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
   assert.doesNotMatch(styles, /tenant-audit__history-actions--primary[^\n]*nth-child/)
 })
