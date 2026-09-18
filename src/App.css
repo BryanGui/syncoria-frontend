@@ -3484,6 +3484,11 @@ button.navigation__link {
 .ui-action-menu__content > a:hover,
 .ui-action-menu__content > a:focus-visible { background: var(--color-surface-hover); color: var(--color-text-primary); }
 
+.tenant-audit__history-item .ui-action-menu__content {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
 /* Versioned integration workspace. */
 .versioned-integration {
   display: grid;
