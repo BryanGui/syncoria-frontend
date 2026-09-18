@@ -345,6 +345,14 @@ test('renders every provider inside one keyboard-usable selectable list', async 
 
 test('history is the primary entry point and exposes direct actions per audit', async ({ page }) => {
   await openAudit(page)
+  await page.evaluate(() => {
+    const trackedWindow = window as typeof window & { __openedReportUrls: string[] }
+    trackedWindow.__openedReportUrls = []
+    trackedWindow.open = ((url?: string | URL) => {
+      trackedWindow.__openedReportUrls.push(String(url))
+      return null
+    }) as typeof window.open
+  })
   await expect(page.getByRole('heading', { name: 'Client synthétique', exact: true })).toBeVisible()
   await expect(page.locator('body')).not.toContainText('Espace tenant')
   await expect(page.locator('body')).not.toContainText('Intégration\nPréparez les données du provider')
@@ -356,10 +364,29 @@ test('history is the primary entry point and exposes direct actions per audit', 
   await expect(drive).toContainText('Terminé')
   await expect(history).not.toContainText(/\d+ audits?\b/)
   await drive.locator('.ui-action-menu > summary').click()
+  expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
+  await expect(drive.locator('.ui-action-menu__content > *')).toHaveCount(5)
   for (const action of ['Télécharger le PDF', 'Télécharger le DDL', 'Télécharger l’ER', 'Renommer', 'Archiver']) {
     await expect(drive.getByRole(action === 'Télécharger le PDF' ? 'link' : 'button', { name: action, exact: true })).toBeVisible()
   }
   await expect(page.getByRole('region', { name: 'Rapport sélectionné', exact: true })).toHaveCount(0)
+})
+
+test('keeps every modern action visible when the menu opens on the last audit row', async ({ page }) => {
+  await openAudit(page)
+  const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
+  const workspace = page.locator('.tenant-workspace')
+  const audit = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
+  await audit.locator('.ui-action-menu > summary').click()
+  const workspaceBox = await workspace.boundingBox()
+  expect(workspaceBox).not.toBeNull()
+  for (const action of ['Télécharger le PDF', 'Télécharger le DDL', 'Télécharger l’ER', 'Renommer', 'Archiver']) {
+    const item = audit.getByRole(action === 'Télécharger le PDF' ? 'link' : 'button', { name: action, exact: true })
+    const itemBox = await item.boundingBox()
+    expect(itemBox).not.toBeNull()
+    expect(itemBox!.y).toBeGreaterThanOrEqual(workspaceBox!.y)
+    expect(itemBox!.y + itemBox!.height).toBeLessThanOrEqual(workspaceBox!.y + workspaceBox!.height)
+  }
 })
 
 test('separates archives and removes an archived audit from the main history', async ({ page }) => {
@@ -388,7 +415,10 @@ test('separates archives and removes an archived audit from the main history', a
   const archived = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '07/09/2026' })
   await expect(archived).toContainText('Archivé')
   await archived.locator('.ui-action-menu > summary').click()
+  await expect(archived.locator('.ui-action-menu__content > *')).toHaveCount(4)
   await expect(archived.getByRole('link', { name: 'Télécharger le PDF', exact: true })).toBeVisible()
+  await expect(archived.getByRole('button', { name: 'Télécharger le DDL', exact: true })).toBeVisible()
+  await expect(archived.getByRole('button', { name: 'Télécharger l’ER', exact: true })).toBeVisible()
   await expect(archived.getByRole('button', { name: 'Renommer', exact: true })).toBeVisible()
   await expect(archived.getByRole('button', { name: 'Archiver', exact: true })).toHaveCount(0)
   expect(requests.filter((r) => r.method === 'POST')).toEqual([{ path: `${prefix}/reports/${report.id}/archive`, method: 'POST' }])
@@ -439,7 +469,7 @@ test('separates the non-interactive audit row from the report action and menu', 
 })
 
 test('keeps the audit menu and artifact downloads isolated from the row action', async ({ page }) => {
-  await openAudit(page)
+  const requests = await openAudit(page)
   await page.evaluate(() => {
     const trackedWindow = window as typeof window & { __openedReportUrls: string[] }
     trackedWindow.__openedReportUrls = []
@@ -453,19 +483,26 @@ test('keeps the audit menu and artifact downloads isolated from the row action',
   const menu = drive.locator('.ui-action-menu')
   await menu.locator('summary').click()
   expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
+  expect(requests.filter((request) => request.path.endsWith('/audits/77777777-7777-4777-8777-777777777777/report') && request.method === 'GET')).toHaveLength(0)
   const ddlDownload = page.waitForEvent('download')
   await drive.getByRole('button', { name: 'Télécharger le DDL', exact: true }).click()
-  const downloaded = await (await ddlDownload).path()
+  const ddl = await ddlDownload
+  expect(ddl.suggestedFilename()).toMatch(/\.sql$/)
+  const downloaded = await ddl.path()
   expect(downloaded).not.toBeNull()
   expect(await readFile(downloaded!, 'utf8')).toBe('-- Audit Drive\nCREATE TABLE "Audit Drive" ();\n')
+  expect(requests.filter((request) => request.path.endsWith('/audits/77777777-7777-4777-8777-777777777777/report') && request.method === 'GET')).toHaveLength(1)
   expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
   await expect(menu).not.toHaveAttribute('open', '')
   await menu.locator('summary').click()
   const erJsonDownload = page.waitForEvent('download')
   await drive.getByRole('button', { name: 'Télécharger l’ER', exact: true }).click()
-  const erJsonPath = await (await erJsonDownload).path()
+  const er = await erJsonDownload
+  expect(er.suggestedFilename()).toMatch(/\.json$/)
+  const erJsonPath = await er.path()
   expect(erJsonPath).not.toBeNull()
   expect(JSON.parse(await readFile(erJsonPath!, 'utf8'))).toEqual(structuredReport('Audit Drive', null).raw_er)
+  expect(requests.filter((request) => request.path.endsWith('/audits/77777777-7777-4777-8777-777777777777/report') && request.method === 'GET')).toHaveLength(2)
   expect(await page.evaluate(() => (window as typeof window & { __openedReportUrls: string[] }).__openedReportUrls)).toEqual([])
 })
 
@@ -490,9 +527,10 @@ for (const width of [1440, 390]) {
     await expect(activeRows).toHaveCount(3)
     const row = activeRows.first()
     const reportAction = row.locator('.tenant-audit__open-report')
-    const menu = row.locator('.ui-action-menu')
+    const menuRow = activeRows.last()
+    const menu = menuRow.locator('.ui-action-menu')
     const trigger = menu.locator('summary')
-    const pdfAction = row.getByRole('link', { name: 'Télécharger le PDF', exact: true })
+    const pdfAction = menuRow.getByRole('link', { name: 'Télécharger le PDF', exact: true })
     await expect(row).toBeVisible()
     await expect(reportAction).toBeVisible()
     await expect(reportAction).toContainText('Audit Drive')
@@ -563,14 +601,25 @@ for (const width of [1440, 390]) {
 
     await trigger.click()
     await expect(menu).toHaveAttribute('open', '')
-    await expect(pdfAction).toBeVisible()
-    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
-    for (const element of [trigger, menu.locator('.ui-action-menu__content')]) {
+    await expect(menu.locator('.ui-action-menu__content > *')).toHaveCount(5)
+    const actionLabels = ['Télécharger le PDF', 'Télécharger le DDL', 'Télécharger l’ER', 'Renommer', 'Archiver']
+    const actions = actionLabels.map((label) => menuRow.getByRole(label === 'Télécharger le PDF' ? 'link' : 'button', { name: label, exact: true }))
+    for (const action of actions) await expect(action).toBeVisible()
+    const viewport = page.viewportSize()
+    expect(viewport).not.toBeNull()
+    const workspaceBox = await page.locator('.tenant-workspace').boundingBox()
+    expect(workspaceBox).not.toBeNull()
+    for (const element of [trigger, menu.locator('.ui-action-menu__content'), ...actions]) {
       const box = await element.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.x).toBeGreaterThanOrEqual(0)
-      expect(box!.x + box!.width).toBeLessThanOrEqual(clientWidth)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width)
+      expect(box!.y).toBeGreaterThanOrEqual(0)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height)
+      expect(box!.y).toBeGreaterThanOrEqual(workspaceBox!.y)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(workspaceBox!.y + workspaceBox!.height)
     }
+    await page.screenshot({ path: testInfo.outputPath(`audit-menu-open-${width}.png`) })
     const dimensions = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -675,8 +724,10 @@ test('keeps report actions available for a legacy report without audit reference
   const history = page.getByRole('region', { name: 'Historique des audits', exact: true })
   const legacy = history.locator('.tenant-audit__history-item', { hasText: 'Audit Notion' }).filter({ hasText: '01/07/2026' })
   await legacy.locator('.ui-action-menu > summary').click()
+  await expect(legacy.locator('.ui-action-menu__content > *')).toHaveCount(2)
   await expect(legacy.getByRole('button', { name: 'Renommer', exact: true })).toHaveCount(0)
   await expect(legacy.getByRole('link', { name: 'Télécharger le PDF', exact: true })).toBeVisible()
+  await expect(legacy.getByRole('button', { name: 'Archiver', exact: true })).toBeVisible()
   await expect(legacy.getByRole('button', { name: 'Télécharger le DDL', exact: true })).toHaveCount(0)
   await expect(legacy.getByRole('button', { name: 'Télécharger l’ER', exact: true })).toHaveCount(0)
 })
