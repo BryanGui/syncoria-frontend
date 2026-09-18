@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
 const notionId = '22222222-2222-4222-8222-222222222222'
@@ -132,6 +132,60 @@ async function openIngestion(page: Page): Promise<{ requests: string[] }> {
   return { requests }
 }
 
+async function expectArchiveMenuFullyVisible(page: Page, row: Locator, nextRow?: Locator) {
+  const menu = row.locator('.ui-action-menu__content')
+  const archive = row.getByRole('button', { name: 'Archiver', exact: true })
+  await expect(menu).toBeVisible()
+  await expect(archive).toBeVisible()
+
+  const viewport = page.viewportSize()
+  const menuBox = await menu.boundingBox()
+  const archiveBox = await archive.boundingBox()
+  expect(viewport).not.toBeNull()
+  expect(menuBox).not.toBeNull()
+  expect(archiveBox).not.toBeNull()
+  expect(menuBox!.x).toBeGreaterThanOrEqual(0)
+  expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width)
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height)
+  expect(archiveBox!.y).toBeGreaterThanOrEqual(menuBox!.y)
+  expect(archiveBox!.y + archiveBox!.height).toBeLessThanOrEqual(menuBox!.y + menuBox!.height)
+
+  const menuIsUnobscured = await menu.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const inset = 2
+    return [
+      [box.left + box.width / 2, box.top + inset],
+      [box.left + box.width / 2, box.bottom - inset],
+      [box.left + inset, box.top + box.height / 2],
+      [box.right - inset, box.top + box.height / 2],
+    ].every(([x, y]) => {
+      const hit = document.elementFromPoint(x, y)
+      return hit !== null && (hit === element || element.contains(hit))
+    })
+  })
+  expect(menuIsUnobscured).toBe(true)
+
+  if (nextRow) {
+    const nextRowBox = await nextRow.boundingBox()
+    expect(nextRowBox).not.toBeNull()
+    const overlapTop = Math.max(menuBox!.y, nextRowBox!.y)
+    const overlapBottom = Math.min(menuBox!.y + menuBox!.height, nextRowBox!.y + nextRowBox!.height)
+    if (overlapBottom > overlapTop) {
+      const menuIsAboveNextRow = await menu.evaluate((element, point) => {
+        const hit = document.elementFromPoint(point.x, point.y)
+        return hit !== null && (hit === element || element.contains(hit))
+      }, { x: menuBox!.x + menuBox!.width / 2, y: overlapTop + (overlapBottom - overlapTop) / 2 })
+      expect(menuIsAboveNextRow).toBe(true)
+    }
+  }
+
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
+}
+
 test('displays multi-provider ingestion history and opens each run detail under its row', async ({ page }) => {
   const { requests } = await openIngestion(page)
 
@@ -171,6 +225,39 @@ test('archives a completed run logically and keeps its detail in the separate ar
   await expect(page.getByText('33 s').first()).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Companies', exact: true })).toBeVisible()
 })
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`keeps the ingestion action menu visible when collapsed and expanded at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport)
+    await openIngestion(page)
+    const rows = page.locator('.ingestion-history__item')
+    const completedRow = rows.first()
+    const menu = completedRow.locator('.ui-action-menu')
+
+    await expect(completedRow).toHaveCSS('overflow', 'visible')
+    await expect(completedRow).toHaveCSS('border-radius', '8px')
+    await expect(completedRow.locator('.ingestion-history__detail')).toHaveCount(0)
+    const collapsedHeight = (await completedRow.boundingBox())?.height
+    await menu.locator('summary').click()
+    await expectArchiveMenuFullyVisible(page, completedRow, rows.nth(1))
+    expect((await completedRow.boundingBox())?.height).toBe(collapsedHeight)
+    await page.screenshot({ path: testInfo.outputPath(`ingestion-menu-collapsed-${viewport.width}.png`) })
+
+    await page.keyboard.press('Escape')
+    await expect(menu).not.toHaveAttribute('open', '')
+    await completedRow.locator('.ingestion-history__row-trigger').click()
+    const detail = completedRow.locator('.ingestion-history__detail')
+    await expect(detail).toBeVisible()
+    await expect(detail).toHaveCSS('border-top-width', '1px')
+    await expect(detail).toHaveCSS('border-bottom-left-radius', '7px')
+    await expect(detail).toHaveCSS('border-bottom-right-radius', '7px')
+    const expandedHeight = (await completedRow.boundingBox())?.height
+    await menu.locator('summary').click()
+    await expectArchiveMenuFullyVisible(page, completedRow)
+    expect((await completedRow.boundingBox())?.height).toBe(expandedHeight)
+    await page.screenshot({ path: testInfo.outputPath(`ingestion-menu-expanded-${viewport.width}.png`) })
+  })
+}
 
 test('keeps the launcher functional and avoids horizontal overflow on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
