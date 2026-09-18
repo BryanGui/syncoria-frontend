@@ -56,6 +56,21 @@ interface Ingestion {
   created_at: string
 }
 
+interface AuditReport {
+  id: string
+  title: string
+  provider: string
+  correlation_id: string
+  tenant_provider_record_id: string
+  report_date: string
+  status: 'completed' | 'archived'
+  sources_analyzed: number
+  sources_retained: number
+  sources_excluded: number
+  records_retained: number
+  decisions_required: number
+}
+
 interface RecordedRequest {
   path: string
   method: string
@@ -134,11 +149,27 @@ const ingestion: Ingestion = {
   created_at: '2026-09-16T09:02:00Z',
 }
 
+const auditReport: AuditReport = {
+  id: 'audit-notion-2026-09-16',
+  title: 'Audit Notion',
+  provider: 'notion',
+  correlation_id: correlationId,
+  tenant_provider_record_id: providerRecordId,
+  report_date: '2026-09-16',
+  status: 'completed',
+  sources_analyzed: 3,
+  sources_retained: 2,
+  sources_excluded: 1,
+  records_retained: 10,
+  decisions_required: 0,
+}
+
 interface BackendOptions {
   tenantStatus?: 'active' | 'archived'
   integrations?: Integration[]
   ddls?: Record<string, Ddl[]>
   ingestions?: Record<string, Ingestion[]>
+  reports?: AuditReport[]
 }
 
 interface MockBackend {
@@ -171,6 +202,7 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     [activeId]: [ingestion],
     [draftId]: [],
   })
+  const reports = (options.reports ?? [auditReport]).map((report) => ({ ...report }))
   for (const item of integrations) {
     backend.ddls[item.id] ??= []
     ingestions[item.id] ??= []
@@ -189,20 +221,7 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     if (url.pathname === '/admin/session') return route.fulfill({ json: { authenticated: true } })
     if (url.pathname === '/admin/tenants') return route.fulfill({ json: [tenant] })
     if (url.pathname === prefix) return route.fulfill({ json: tenant })
-    if (url.pathname === `${prefix}/reports`) return route.fulfill({ json: [{
-      id: 'audit-notion-2026-09-16',
-      title: 'Audit Notion',
-      provider: 'notion',
-      correlation_id: correlationId,
-      tenant_provider_record_id: providerRecordId,
-      report_date: '2026-09-16',
-      status: 'completed',
-      sources_analyzed: 3,
-      sources_retained: 2,
-      sources_excluded: 1,
-      records_retained: 10,
-      decisions_required: 0,
-    }] })
+    if (url.pathname === `${prefix}/reports`) return route.fulfill({ json: reports })
 
     if (url.pathname === `${prefix}/integrations`) {
       if (method === 'GET') return route.fulfill({ json: backend.integrations })
@@ -335,6 +354,49 @@ test('shows the audit DDL as selectable default provenance without mutation acti
   await expect(row.getByRole('radio', { name: 'Sélectionner DDL audit — Audit Notion', exact: true })).toBeVisible()
   await expect(row.locator('.ui-action-menu')).toHaveCount(0)
   await expect(row.getByRole('button', { name: /Renommer|Supprimer/ })).toHaveCount(0)
+})
+
+test('shows only the newest completed audit as the default DDL and reuses its draft artifact', async ({ page }) => {
+  const newestReport: AuditReport = {
+    ...auditReport,
+    id: 'audit-notion-2026-09-18',
+    title: 'Audit Notion récent',
+    report_date: '2026-09-18',
+  }
+  const olderReport: AuditReport = {
+    ...auditReport,
+    id: 'audit-notion-2026-09-12',
+    title: 'Audit Notion ancien',
+    report_date: '2026-09-12',
+  }
+  const existingDefaultDdl: Ddl = {
+    ...sourceDdl,
+    id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    source_report_id: newestReport.id,
+    source_audit_title: newestReport.title,
+    source_report_date: newestReport.report_date,
+    is_selected: false,
+  }
+  const backend = await openIntegration(page, {
+    reports: [newestReport, olderReport],
+    ddls: {
+      [activeId]: [sourceDdl],
+      [draftId]: [existingDefaultDdl, importedDdl],
+    },
+  })
+  await openCreate(page)
+
+  const list = ddlList(page)
+  await expect(list.getByText('Par défaut', { exact: true })).toHaveCount(1)
+  await expect(list.getByText(`DDL audit — ${newestReport.title}`, { exact: true })).toBeVisible()
+  await expect(list.getByText(`DDL audit — ${olderReport.title}`, { exact: true })).toHaveCount(0)
+  await expect(list.getByText(importedDdl.title, { exact: true })).toBeVisible()
+
+  const defaultRadio = list.getByRole('radio', { name: `Sélectionner DDL audit — ${newestReport.title}`, exact: true })
+  await defaultRadio.click()
+  await expect(defaultRadio).toBeChecked()
+  expect(backend.requests.filter((request) => request.path.endsWith('/ddls/from-audit') && request.method === 'POST')).toHaveLength(0)
+  expect(backend.requests.filter((request) => request.path.endsWith(`/${existingDefaultDdl.id}/selection`) && request.method === 'PUT')).toHaveLength(1)
 })
 
 test('loads a SQL file under its exact filename into the same list with a hidden draft', async ({ page }) => {

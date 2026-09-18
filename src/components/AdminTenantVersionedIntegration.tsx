@@ -679,11 +679,10 @@ export function AdminTenantVersionedIntegration({
   }
 
   function renderCreateView() {
-    const sourceRows = auditReports.map((report) => ({
-      report,
-      ddl: currentDdls.find((ddl) => ddl.kind === 'source' && ddl.source_report_id === report.id) ?? null,
-    }))
-    const unmatchedSources = currentDdls.filter((ddl) => ddl.kind === 'source' && !auditReports.some((report) => report.id === ddl.source_report_id))
+    const defaultAudit = auditReports[0] ?? null
+    const defaultAuditDdl = defaultAudit
+      ? currentDdls.find((ddl) => ddl.kind === 'source' && ddl.source_report_id === defaultAudit.id) ?? null
+      : null
     const importedDdls = currentDdls.filter((ddl) => ddl.kind === 'imported')
     const isLoading = auditState === 'loading' || (selectedId !== null && currentDdlState === 'loading')
 
@@ -709,22 +708,15 @@ export function AdminTenantVersionedIntegration({
         {!isArchivedTenant && isLoading ? <p className="versioned-integration__empty" role="status">Chargement des DDL…</p> : null}
         {!isArchivedTenant && !isLoading && auditState !== 'error' && currentDdlState !== 'error' ? (
           <div aria-label="DDL disponibles" className="versioned-integration__ddl-list versioned-integration__ddl-list--editable">
-            {sourceRows.map(({ report, ddl }) => (
-              <div className={`versioned-integration__ddl-row${ddl?.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={`audit-${report.id}`}>
-                <input aria-label={`Sélectionner DDL audit — ${report.title}`} checked={ddl?.is_selected ?? false} disabled={mutationPending} name="selected-ddl" onChange={() => void selectAuditDdl(report)} type="radio" />
-                {ddl ? (
-                  <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(ddl.id)} type="button"><strong>DDL audit — {report.title}</strong><span>Source : Audit</span></button>
-                ) : <div className="versioned-integration__ddl-title"><strong>DDL audit — {report.title}</strong><span>Source : Audit</span></div>}
+            {defaultAudit ? (
+              <div className={`versioned-integration__ddl-row${defaultAuditDdl?.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`}>
+                <input aria-label={`Sélectionner DDL audit — ${defaultAudit.title}`} checked={defaultAuditDdl?.is_selected ?? false} disabled={mutationPending} name="selected-ddl" onChange={() => void selectAuditDdl(defaultAudit)} type="radio" />
+                {defaultAuditDdl ? (
+                  <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(defaultAuditDdl.id)} type="button"><strong>DDL audit — {defaultAudit.title}</strong><span>Source : Audit</span></button>
+                ) : <div className="versioned-integration__ddl-title"><strong>DDL audit — {defaultAudit.title}</strong><span>Source : Audit</span></div>}
                 <Badge tone="neutral">Par défaut</Badge>
               </div>
-            ))}
-            {unmatchedSources.map((ddl) => (
-              <div className={`versioned-integration__ddl-row${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
-                <input aria-label={`Sélectionner ${ddl.title}`} checked={ddl.is_selected} disabled={mutationPending} name="selected-ddl" onChange={() => void selectImportedDdl(ddl.id)} type="radio" />
-                <button className="versioned-integration__ddl-title" onClick={() => void openDdlPreview(ddl.id)} type="button"><strong>{ddl.title}</strong><span>Source : Audit</span></button>
-                <Badge tone="neutral">Par défaut</Badge>
-              </div>
-            ))}
+            ) : null}
             {importedDdls.map((ddl) => (
               <div className={`versioned-integration__ddl-row versioned-integration__ddl-row--imported${ddl.is_selected ? ' versioned-integration__ddl-row--selected' : ''}`} key={ddl.id}>
                 <input aria-label={`Sélectionner ${ddl.title}`} checked={ddl.is_selected} disabled={mutationPending} name="selected-ddl" onChange={() => void selectImportedDdl(ddl.id)} type="radio" />
@@ -750,7 +742,7 @@ export function AdminTenantVersionedIntegration({
                 )}
               </div>
             ))}
-            {sourceRows.length === 0 && unmatchedSources.length === 0 && importedDdls.length === 0 ? <p className="versioned-integration__ddl-empty">Aucun DDL disponible.</p> : null}
+            {defaultAudit === null && importedDdls.length === 0 ? <p className="versioned-integration__ddl-empty">Aucun DDL disponible.</p> : null}
           </div>
         ) : null}
         {ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={() => setDdlPreview(null)} /> : null}
