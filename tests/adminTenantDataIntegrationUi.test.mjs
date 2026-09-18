@@ -18,43 +18,45 @@ test('exposes the versioned integration workflow in the dedicated admin section'
   assert.match(component, /setView\(active \? 'active' : 'create'\)/)
 })
 
-test('keeps one version-scoped DDL library with explicit selection and preview', () => {
-  assert.match(component, /DDL disponibles/)
-  assert.match(component, /Ajouter depuis un audit/)
-  assert.match(component, /Importer un DDL/)
-  assert.match(component, /Sélectionner \$\{ddl.title\}/)
+test('shows the single step-one DDL list with explicit selection and preview', () => {
+  assert.match(component, /Étape 1 — Choisir un DDL/)
+  assert.match(component, /Charger un DDL/)
+  assert.match(component, /aria-label="DDL disponibles"/)
+  assert.match(component, /Source : Audit/)
+  assert.match(component, /Source : Import manuel/)
+  assert.match(component, /Par défaut/)
+  assert.match(component, /name="selected-ddl"/)
   assert.match(component, /setDdlPreview\(result.ddl\)/)
   assert.match(component, /Télécharger/)
-  assert.match(component, /Le DDL a été importé sans être sélectionné automatiquement/)
   assert.doesNotMatch(component, /source_ddl|working_ddl|DDL cible|DDL source.*DDL cible/)
 })
 
-test('keeps draft editing, cloning and activation explicit', () => {
-  assert.match(component, /cloneAdminIntegration/)
-  assert.match(component, /patchAdminIntegration/)
-  assert.match(component, /activateAdminIntegration/)
-  assert.match(component, /Confirmation d’activation/)
-  assert.match(component, /Note de conception/)
+test('resolves a hidden draft only on the first meaningful action', () => {
+  assert.match(component, /async function ensureDraft/)
+  assert.match(component, /await ensureDraft\(\)/)
+  assert.match(component, /createAdminIntegration/)
   assert.match(component, /based_on_integration_id/)
+  assert.doesNotMatch(component, /cloneAdminIntegration|activateAdminIntegration|Créer une version vide|Cloner cette version/)
   assert.doesNotMatch(component, /window\.location\.reload|window\.location\.hash/)
 })
 
-test('uses version-scoped ingestion references with replace and remove actions', () => {
-  assert.match(component, /fetchAdminIntegrationIngestionCandidates/)
-  assert.match(component, /selectAdminIntegrationIngestion/)
-  assert.match(component, /deleteAdminIntegrationIngestion/)
-  assert.match(component, /Choisir \{ingestionSummary\(candidate\)\}/)
-  assert.match(component, /Retirer la référence/)
+test('supports imported DDL rename and confirmed server deletion only', () => {
+  assert.match(component, /renameAdminIntegrationDdl/)
+  assert.match(component, /deleteAdminIntegrationDdl/)
+  assert.match(component, /Renommer/)
+  assert.match(component, /Supprimer ce DDL/)
+  assert.match(component, /role="alertdialog"/)
+  assert.match(api, /method: 'PATCH'/)
+  assert.match(api, /deleteAdminIntegrationDdl/)
 })
 
 test('keeps archived tenants read-only and validates imported DDLs', () => {
   assert.match(component, /const isArchivedTenant = tenantStatus !== 'active'/)
-  assert.match(component, /const canEdit = !isArchivedTenant && isCurrentDraft/)
-  assert.match(component, /aucune création ni modification n’est disponible/)
-  assert.match(component, /Les versions restent consultables dans Active et Versions/)
+  assert.match(component, /Ce client archivé est en lecture seule/)
   assert.match(component, /MAX_DDL_BYTES/)
   assert.match(component, /Le fichier doit être au format \.sql/)
   assert.match(component, /Le fichier dépasse la taille maximale de 1 MiB/)
+  assert.match(component, /120 octets UTF-8/)
 })
 
 test('keeps canonical tenant-scoped API paths and redacted failures explicit', () => {

@@ -3519,6 +3519,10 @@ button.navigation__link {
 .versioned-integration__tab:focus-visible { color: var(--color-text-primary); }
 .versioned-integration__tab--active { border-bottom-color: var(--color-accent); color: var(--color-text-primary); }
 .versioned-integration__content { display: grid; gap: var(--space-4); min-width: 0; }
+.versioned-integration__ddl-step { display: grid; gap: 14px; min-width: 0; }
+.versioned-integration__ddl-step-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.versioned-integration__ddl-step-heading h4 { margin: 0; color: var(--color-text-primary); font-size: 1rem; }
+.versioned-integration__file-input { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .versioned-integration__empty,
 .versioned-integration__empty-create { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); color: var(--color-text-secondary); }
 .versioned-integration__empty { margin: 0; font-size: .85rem; }
@@ -3548,6 +3552,15 @@ button.navigation__link {
 .versioned-integration__ddl-title strong { overflow-wrap: anywhere; color: var(--color-text-primary); font-size: .83rem; }
 .versioned-integration__ddl-title span { overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: .75rem; }
 .versioned-integration__ddl-row .ui-badge { flex: 0 0 auto; }
+.versioned-integration__ddl-row .ui-action-menu { z-index: 2; flex: 0 0 auto; }
+.versioned-integration__ddl-row .ui-action-menu[open] { z-index: 4; }
+.versioned-integration__ddl-empty { margin: 0; padding: 14px; background: var(--color-surface); color: var(--color-text-secondary); font-size: .82rem; }
+.versioned-integration__rename-form { min-width: 0; flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; }
+.versioned-integration__rename-form > p { grid-column: 1 / -1; margin: 0; color: var(--color-error); font-size: .76rem; }
+.versioned-integration__rename-form > div { display: flex; gap: 4px; }
+.versioned-integration__delete-confirmation { min-width: 0; flex: 0 1 auto; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.versioned-integration__delete-confirmation > span { color: var(--color-text-body); font-size: .78rem; white-space: nowrap; }
+.versioned-integration__delete-confirmation > div { display: flex; gap: 4px; }
 .versioned-integration__ddl-preview { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); }
 .versioned-integration__preview-heading { align-items: center; }
 .versioned-integration__preview-heading > div { display: flex; align-items: center; gap: 6px; }
@@ -3601,6 +3614,7 @@ button.navigation__link {
 @media (max-width: 720px) {
   .versioned-integration { padding: 16px; }
   .versioned-integration__heading,
+  .versioned-integration__ddl-step-heading,
   .versioned-integration__section-heading,
   .versioned-integration__version-heading,
   .versioned-integration__preview-heading { flex-direction: column; align-items: flex-start; }
@@ -3610,6 +3624,7 @@ button.navigation__link {
   .versioned-integration__versions-layout { grid-template-columns: 1fr; }
   .versioned-integration__activation { grid-template-columns: 1fr; align-items: stretch; }
   .versioned-integration__creation-option .ui-button,
+  .versioned-integration__ddl-step-heading .ui-button,
   .versioned-integration__activation > .ui-button { width: 100%; }
   .versioned-integration__ddl-row,
   .versioned-integration__ingestion-row { align-items: flex-start; }
@@ -3618,6 +3633,12 @@ button.navigation__link {
   .versioned-integration__ddl-row .ui-badge { margin-left: 26px; }
   .versioned-integration__ddl-row--readonly .versioned-integration__ddl-title { flex-basis: 100%; }
   .versioned-integration__ddl-row--readonly .ui-badge { margin-left: 0; }
+  .versioned-integration__ddl-row--imported .versioned-integration__ddl-title { flex-basis: calc(100% - 74px); }
+  .versioned-integration__ddl-row--imported .ui-action-menu { margin-left: auto; }
+  .versioned-integration__ddl-row .ui-action-menu__content { top: auto; bottom: calc(100% + 4px); }
+  .versioned-integration__rename-form { grid-template-columns: 1fr; flex-basis: calc(100% - 26px); }
+  .versioned-integration__rename-form > div { justify-content: flex-end; }
+  .versioned-integration__delete-confirmation { flex: 1 1 100%; flex-wrap: wrap; }
   .versioned-integration__ingestion-row { flex-direction: column; }
   .versioned-integration__ingestion-row .ui-action-menu { align-self: flex-end; }
   .versioned-integration__preview-heading > div { flex-wrap: wrap; }

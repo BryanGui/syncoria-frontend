@@ -6,6 +6,7 @@ import {
   addAdminIntegrationDdlFromAudit,
   cloneAdminIntegration,
   createAdminIntegration,
+  deleteAdminIntegrationDdl,
   deleteAdminIntegrationIngestion,
   fetchAdminIntegration,
   fetchAdminIntegrationDdls,
@@ -16,6 +17,7 @@ import {
   importAdminIntegrationDdl,
   MAX_DDL_BYTES,
   patchAdminIntegration,
+  renameAdminIntegrationDdl,
   selectAdminIntegrationDdl,
   selectAdminIntegrationIngestion,
 } from '../src/api/adminIntegrations.ts'
@@ -124,6 +126,47 @@ test('keeps source and imported DDL in one version-scoped library', async () => 
   assert.deepEqual(JSON.parse(calls[1].options.body), { source_report_id: 'audit-notion-2026-09-17' })
   assert.deepEqual(JSON.parse(calls[2].options.body), { title: 'Experiment', content: 'CREATE TABLE experiment (id integer);' })
   assert.equal(calls[3].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddls/${ddlId}/selection`)
+})
+
+test('renames and deletes imported DDLs through the canonical artifact route', async () => {
+  const calls = []
+  const renamed = await renameAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, ddlId, ' renamed.sql ', undefined,
+    async (url, options) => {
+      calls.push({ url, options })
+      return Response.json({ ...ddl, title: 'renamed.sql' })
+    },
+  )
+  const deleted = await deleteAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId, ddlId, undefined,
+    async (url, options) => {
+      calls.push({ url, options })
+      return new Response(null, { status: 204 })
+    },
+  )
+
+  assert.equal(renamed.status, 'loaded')
+  assert.equal(renamed.ddl.title, 'renamed.sql')
+  assert.equal(deleted.status, 'deleted')
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddls/${ddlId}`)
+  assert.equal(calls[0].options.method, 'PATCH')
+  assert.deepEqual(JSON.parse(calls[0].options.body), { title: 'renamed.sql' })
+  assert.equal(calls[1].options.method, 'DELETE')
+})
+
+test('preserves the exact upload filename as the imported DDL title', async () => {
+  let body
+  const result = await importAdminIntegrationDdl(
+    'https://api.example.com', tenantId, integrationId,
+    'novalia-modèle-v2.sql', 'CREATE TABLE exact_filename (id integer);', undefined,
+    async (_url, options) => {
+      body = JSON.parse(options.body)
+      return Response.json({ ...ddl, title: 'novalia-modèle-v2.sql' })
+    },
+  )
+
+  assert.equal(result.status, 'loaded')
+  assert.equal(body.title, 'novalia-modèle-v2.sql')
 })
 
 test('replaces one version ingestion reference and never deletes the raw operation', async () => {
