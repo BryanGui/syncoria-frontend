@@ -9,6 +9,8 @@ import {
   deleteAdminIntegrationDdl,
   deleteAdminIntegrationIngestion,
   fetchAdminIntegration,
+  fetchAdminIntegrationDdlCandidate,
+  fetchAdminIntegrationDdlCandidates,
   fetchAdminIntegrationDdls,
   fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
@@ -16,11 +18,14 @@ import {
   fetchAdminIntegrations,
   getDdlValidationError,
   importAdminIntegrationDdl,
+  importAdminIntegrationDdlCandidate,
   MAX_DDL_BYTES,
   patchAdminIntegration,
   renameAdminIntegrationDdl,
+  renameAdminIntegrationDdlCandidate,
   replaceAdminIntegrationProviders,
   selectAdminIntegrationDdl,
+  selectAdminIntegrationDdlCandidate,
   selectAdminIntegrationIngestion,
 } from '../src/api/adminIntegrations.ts'
 
@@ -38,6 +43,23 @@ const ddl = {
   source_filename: 'novalia.sql',
   created_at: '2026-09-17T10:00:00Z',
   is_selected: true,
+  source_provider: null,
+  source_audit_title: null,
+  source_report_date: null,
+}
+
+const catalogDdl = {
+  id: ddlId,
+  title: 'novalia.sql',
+  kind: 'imported',
+  source_kind: 'manual',
+  source_report_id: null,
+  source_filename: 'novalia.sql',
+  content_sha256: 'a'.repeat(64),
+  generated_at: '2026-09-18T10:00:00Z',
+  created_at: '2026-09-18T10:00:00Z',
+  is_selected: false,
+  is_default: true,
   source_provider: null,
   source_audit_title: null,
   source_report_date: null,
@@ -170,6 +192,35 @@ test('keeps source and imported DDL in one version-scoped library', async () => 
   assert.deepEqual(JSON.parse(calls[1].options.body), { source_report_id: 'audit-notion-2026-09-17' })
   assert.deepEqual(JSON.parse(calls[2].options.body), { title: 'Experiment', content: 'CREATE TABLE experiment (id integer);' })
   assert.equal(calls[3].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddls/${ddlId}/selection`)
+})
+
+test('uses the exact version-scoped DDL catalogue contract', async () => {
+  const calls = []
+  const request = async (url, options) => {
+    calls.push({ url, options })
+    if (options.method === 'GET' && url.endsWith('/ddl-candidates')) return Response.json([catalogDdl])
+    if (options.method === 'GET') return Response.json({ ...catalogDdl, ddl_content: 'CREATE TABLE catalogued (id integer);' })
+    if (options.method === 'POST' || options.method === 'PATCH') return Response.json(catalogDdl)
+    if (url.endsWith('/selection')) return Response.json({ ...catalogDdl, is_selected: true, ddl_content: 'CREATE TABLE catalogued (id integer);' })
+    return new Response(null, { status: 204 })
+  }
+
+  const listed = await fetchAdminIntegrationDdlCandidates('https://api.example.com', tenantId, integrationId, undefined, request)
+  const detail = await fetchAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ddlId, undefined, request)
+  const imported = await importAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, 'exact file.sql', 'CREATE TABLE catalogued (id integer);', undefined, request)
+  const selected = await selectAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ddlId, undefined, request)
+  const renamed = await renameAdminIntegrationDdlCandidate('https://api.example.com', tenantId, integrationId, ddlId, 'renamed.sql', undefined, request)
+
+  assert.equal(listed.status, 'loaded')
+  assert.equal(detail.status, 'loaded')
+  assert.equal(imported.status, 'loaded')
+  assert.equal(selected.status, 'loaded')
+  assert.equal(renamed.status, 'loaded')
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddl-candidates`)
+  assert.equal(calls[1].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddl-candidates/${ddlId}`)
+  assert.deepEqual(JSON.parse(calls[2].options.body), { title: 'exact file.sql', content: 'CREATE TABLE catalogued (id integer);' })
+  assert.equal(calls[3].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ddl-candidates/${ddlId}/selection`)
+  assert.equal(calls[4].options.method, 'PATCH')
 })
 
 test('renames and deletes imported DDLs through the canonical artifact route', async () => {

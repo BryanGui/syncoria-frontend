@@ -36,6 +36,10 @@ export interface AdminIntegrationDdlMetadata {
   source_provider: string | null
   source_audit_title: string | null
   source_report_date: string | null
+  source_kind?: 'audit' | 'manual'
+  content_sha256?: string
+  generated_at?: string
+  is_default?: boolean
 }
 
 export interface AdminIntegrationDdl extends AdminIntegrationDdlMetadata {
@@ -203,6 +207,31 @@ function parseDdlMetadata(value: unknown): AdminIntegrationDdlMetadata | null {
     source_audit_title: value.source_audit_title as string | null,
     source_report_date: value.source_report_date as string | null,
   }
+}
+
+function parseDdlCandidateMetadata(value: unknown): AdminIntegrationDdlMetadata | null {
+  if (!isObject(value)) return null
+  const candidate = value
+  const metadata = parseDdlMetadata(value)
+  if (metadata === null
+    || (candidate.source_kind !== 'audit' && candidate.source_kind !== 'manual')
+    || typeof candidate.content_sha256 !== 'string'
+    || !/^[a-f0-9]{64}$/.test(candidate.content_sha256)
+    || !isDateTime(candidate.generated_at)
+    || typeof candidate.is_default !== 'boolean') return null
+  return {
+    ...metadata,
+    source_kind: candidate.source_kind,
+    content_sha256: candidate.content_sha256,
+    generated_at: candidate.generated_at,
+    is_default: candidate.is_default,
+  }
+}
+
+function parseDdlCandidate(value: unknown): AdminIntegrationDdl | null {
+  if (!isObject(value) || getDdlValidationError(value.ddl_content) !== null) return null
+  const metadata = parseDdlCandidateMetadata(value)
+  return metadata === null ? null : { ...metadata, ddl_content: value.ddl_content as string }
 }
 
 function parseDdl(value: unknown): AdminIntegrationDdl | null {
@@ -530,6 +559,116 @@ export async function activateAdminIntegration(
 function ddlEndpoint(tenantId: string, integrationId: string, ddlId?: string): string {
   const endpoint = `${integrationEndpoint(tenantId, integrationId)}/ddls`
   return ddlId === undefined ? endpoint : `${endpoint}/${encodeURIComponent(ddlId)}`
+}
+
+function ddlCandidateEndpoint(tenantId: string, integrationId: string, ddlId?: string): string {
+  const endpoint = `${integrationEndpoint(tenantId, integrationId)}/ddl-candidates`
+  return ddlId === undefined ? endpoint : `${endpoint}/${encodeURIComponent(ddlId)}`
+}
+
+export async function fetchAdminIntegrationDdlCandidates(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDdlListResult> {
+  if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
+  const result = await requestArray(
+    apiBaseUrl, tenantId, ddlCandidateEndpoint(tenantId, integrationId),
+    'load_integration_ddl_candidates', (value) => parseDdlCandidateMetadata(value),
+    signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', ddls: result.values } : result
+}
+
+export async function fetchAdminIntegrationDdlCandidate(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string, ddlId: string,
+  signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDdlResult> {
+  if (!validIdentifiers(tenantId, integrationId) || !uuidPattern.test(ddlId)) return { status: 'error' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, ddlCandidateEndpoint(tenantId, integrationId, ddlId),
+    { method: 'GET' }, 'load_integration_ddl_candidate', (value) => parseDdlCandidate(value),
+    signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', ddl: result.value } : result
+}
+
+export async function importAdminIntegrationDdlCandidate(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  title: string, content: string, signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDdlMutationResult> {
+  if (!validIdentifiers(tenantId, integrationId)
+    || title.length === 0 || title.includes('\u0000') || !isBoundedString(title, 120)) return { status: 'invalid' }
+  if (getDdlValidationError(content) !== null) return { status: 'invalid' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, ddlCandidateEndpoint(tenantId, integrationId), {
+      method: 'POST', body: JSON.stringify({ title, content }),
+      headers: { 'Content-Type': 'application/json' },
+    }, 'import_integration_ddl_candidate', (value) => parseDdlCandidateMetadata(value),
+    signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', ddl: result.value } : result
+}
+
+export async function selectAdminIntegrationDdlCandidate(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string, ddlId: string,
+  signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDdlResult> {
+  if (!validIdentifiers(tenantId, integrationId) || !uuidPattern.test(ddlId)) return { status: 'error' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, `${ddlCandidateEndpoint(tenantId, integrationId, ddlId)}/selection`, {
+      method: 'PUT',
+    }, 'select_integration_ddl_candidate', (value) => parseDdlCandidate(value), signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', ddl: result.value } : result
+}
+
+export async function renameAdminIntegrationDdlCandidate(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  ddlId: string, title: string, signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDdlMutationResult> {
+  const normalizedTitle = title.trim()
+  if (!validIdentifiers(tenantId, integrationId) || !uuidPattern.test(ddlId)
+    || normalizedTitle.includes('\u0000') || !isBoundedString(normalizedTitle, 120)) return { status: 'invalid' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, ddlCandidateEndpoint(tenantId, integrationId, ddlId), {
+      method: 'PATCH', body: JSON.stringify({ title: normalizedTitle }),
+      headers: { 'Content-Type': 'application/json' },
+    }, 'rename_integration_ddl_candidate', (value) => parseDdlCandidateMetadata(value), signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', ddl: result.value } : result
+}
+
+export async function deleteAdminIntegrationDdlCandidate(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  ddlId: string, signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDeleteDdlResult> {
+  if (!validIdentifiers(tenantId, integrationId) || !uuidPattern.test(ddlId)) return { status: 'error' }
+  if (apiBaseUrl === null) return { status: 'error' }
+  try {
+    const response = await request(`${apiBaseUrl}${ddlCandidateEndpoint(tenantId, integrationId, ddlId)}`, {
+      method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' }, signal,
+    })
+    const mapped = mapStatus(response.status)
+    if (mapped !== null) {
+      if (mapped === 'unauthenticated') return { status: mapped }
+      const code = await errorCode(response)
+      return code === undefined ? { status: mapped } : { status: mapped, code }
+    }
+    if (!response.ok) {
+      logFailure(logger, 'delete_integration_ddl_candidate', response.status)
+      return { status: 'error' }
+    }
+    return { status: 'deleted' }
+  } catch (error: unknown) {
+    if (!signal?.aborted) logFailure(logger, 'delete_integration_ddl_candidate', undefined, error)
+    return { status: 'error' }
+  }
 }
 
 export async function fetchAdminIntegrationDdls(
