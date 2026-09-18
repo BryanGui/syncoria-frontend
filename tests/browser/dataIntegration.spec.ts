@@ -407,6 +407,43 @@ async function openDdlAction(page: Page, action: 'Ajouter depuis un audit' | 'Im
   await section.getByRole('button', { name: action, exact: true }).click()
 }
 
+test('shows the empty Active view when the backend has no active integration', async ({ page }) => {
+  await openIntegration(page, {
+    integrations: [],
+    ddls: {},
+    ingestions: {},
+    candidates: {},
+  })
+
+  await page.getByRole('button', { name: 'Active', exact: true }).click()
+  const integrationPanel = page.locator('section.versioned-integration')
+  await expect(integrationPanel.getByRole('heading', { name: 'Aucune intégration active.', exact: true })).toBeVisible()
+  await expect(integrationPanel.getByText('Une intégration apparaîtra ici après son activation.', { exact: true })).toBeVisible()
+  await expect(integrationPanel.getByText('Actif', { exact: true })).toHaveCount(0)
+  await expect(integrationPanel.getByText('Novalia Talents v1', { exact: true })).toHaveCount(0)
+  await expect(integrationPanel.getByText('DDL sélectionné', { exact: true })).toHaveCount(0)
+  await expect(integrationPanel.getByText('Sources de DDL', { exact: true })).toHaveCount(0)
+  await expect(integrationPanel.getByText('Ingestions de référence', { exact: true })).toHaveCount(0)
+  await expect(integrationPanel.getByText('Note de conception', { exact: true })).toHaveCount(0)
+})
+
+test('shows a genuinely active integration in the Active view', async ({ page }) => {
+  await openIntegration(page, {
+    integrations: [active],
+    ddls: { [activeId]: [sourceDdl] },
+    ingestions: { [activeId]: [n1] },
+    candidates: { [activeId]: [] },
+  })
+
+  await expect(page.getByRole('button', { name: 'Active', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('heading', { name: 'Novalia Talents v1', exact: true })).toBeVisible()
+  await expect(page.locator('.versioned-integration__version-heading').getByText('Actif', { exact: true })).toBeVisible()
+  await expect(page.getByText('DDL sélectionné', { exact: true })).toBeVisible()
+  await expect(page.getByText('Sources de DDL', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ingestions de référence', { exact: true })).toBeVisible()
+  await expect(page.getByText('Note de conception', { exact: true })).toBeVisible()
+})
+
 test('shows zero drafts without creating one automatically', async ({ page }) => {
   const backend = await openIntegration(page, { integrations: [active] })
   await page.getByRole('button', { name: 'Créer', exact: true }).click()

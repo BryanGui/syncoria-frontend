@@ -1175,7 +1175,7 @@ export function AdminTenantVersionedIntegration({
         <div className="versioned-integration__content">{renderCreateView()}</div>
       ) : view === 'active' ? (
         <div className="versioned-integration__content">
-          {activeIntegration ? renderVersionDetails(true) : <div className="versioned-integration__empty"><h4>Aucune version active</h4><p>Créez puis activez une version depuis l’atelier Créer.</p></div>}
+          {activeIntegration ? renderVersionDetails(true) : <div className="versioned-integration__empty"><h4>Aucune intégration active.</h4><p>Une intégration apparaîtra ici après son activation.</p></div>}
         </div>
       ) : (
         <div className="versioned-integration__versions-layout">
