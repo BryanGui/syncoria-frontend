@@ -710,6 +710,50 @@ test('groups reference ingestions by exact provider record and only changes them
   expect(backend.requests.filter((request) => /\/audits|\/providers\/[^/]+\/ingestions/.test(request.path) && request.method === 'POST')).toHaveLength(0)
 })
 
+test('does not cover or offer an archived draft reference while preserving read-only history', async ({ page }) => {
+  const archivedReference = { ...ingestion, archived: true }
+  const selectedDraft = { ...draft, selected_ddl_id: sourceDdlId }
+  const backend = await openIntegration(page, {
+    integrations: [active, selectedDraft, archived],
+    ddls: {
+      [activeId]: [sourceDdl],
+      [draftId]: [sourceDdl],
+      [archivedId]: [{ ...sourceDdl }],
+    },
+    providerScopes: {
+      [activeId]: [providerAId],
+      [draftId]: [providerAId],
+      [archivedId]: [providerAId],
+    },
+    ingestions: {
+      [activeId]: [archivedReference],
+      [draftId]: [archivedReference],
+      [archivedId]: [archivedReference],
+    },
+    ingestionCandidates: { [draftId]: [] },
+  })
+  await openCreate(page)
+
+  const references = page.locator('[aria-label="Ingestions de référence"]')
+  const notionRhGroup = references.locator('.versioned-integration__ingestion-group').filter({ hasText: 'Notion RH' })
+  await expect(references.getByText('0 / 1 connexion couverte', { exact: true })).toBeVisible()
+  await expect(notionRhGroup.getByText('Référence archivée', { exact: true })).toBeVisible()
+  await expect(notionRhGroup.getByRole('radio')).toHaveCount(0)
+
+  await notionRhGroup.getByRole('button', { name: 'Retirer la référence invalide de Notion RH', exact: true }).click()
+  await expect(references.getByText('0 / 1 connexion couverte', { exact: true })).toBeVisible()
+  await expect(notionRhGroup.getByText('Référence archivée', { exact: true })).toHaveCount(0)
+  await expect(notionRhGroup.getByRole('radio')).toHaveCount(0)
+  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestions/${providerAId}` && request.method === 'DELETE')).toHaveLength(1)
+  expect(backend.requests.filter((request) => /\/audits|\/providers\/[^/]+\/ingestions/.test(request.path) && request.method === 'POST')).toHaveLength(0)
+
+  await page.getByRole('button', { name: 'Active', exact: true }).click()
+  await expect(page.getByText(/Notion.*Archivée/)).toBeVisible()
+  await page.getByRole('button', { name: 'Versions', exact: true }).click()
+  await page.getByRole('button', { name: /Novalia historique/ }).click()
+  await expect(page.getByText(/Notion.*Archivée/)).toBeVisible()
+})
+
 test('shows the audit DDL as selectable default provenance without mutation actions', async ({ page }) => {
   await openIntegration(page)
   await openCreate(page)

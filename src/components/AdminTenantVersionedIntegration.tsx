@@ -191,6 +191,10 @@ function ingestionSummary(ingestion: AdminIntegrationIngestion): string {
   return `${formatDateTime(ingestion.started_at)} · ${ingestion.items_received} reçus · ${ingestion.items_inserted} nouveaux · ${ingestion.items_duplicate} doublons`
 }
 
+function isValidReferenceIngestion(ingestion: AdminIntegrationIngestion): boolean {
+  return ingestion.status === 'completed' && !ingestion.archived
+}
+
 function ReadOnlyVersion({
   basedOn,
   ddls,
@@ -902,7 +906,8 @@ export function AdminTenantVersionedIntegration({
     const referencesLoading = currentIngestionState === 'loading'
       || currentIngestionCandidateState === 'loading'
     const selectedReferenceCount = scopeProviders.filter((provider) => currentIngestions.some(
-      (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id,
+      (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id
+        && isValidReferenceIngestion(ingestion),
     )).length
     const canConfigureReferences = !isArchivedTenant
       && hasSelectedProvider
@@ -1015,14 +1020,21 @@ export function AdminTenantVersionedIntegration({
           {canConfigureReferences && !referencesLoading && (currentIngestionState === 'error' || currentIngestionCandidateState === 'error') ? <StructuralError message="Impossible de charger les ingestions de référence." onRetry={() => { setIngestionReloadKey((current) => current + 1); setIngestionCandidateReloadKey((current) => current + 1) }} /> : null}
           {canConfigureReferences && !referencesLoading && currentIngestionState !== 'error' && currentIngestionCandidateState !== 'error' ? (
             <div aria-label="Ingestions de référence" className="versioned-integration__ingestion-workflow">
-              <p className="versioned-integration__ingestion-coverage">{selectedReferenceCount} / {scopeProviders.length} connexions couvertes</p>
+              <p className="versioned-integration__ingestion-coverage">{selectedReferenceCount} / {scopeProviders.length} {scopeProviders.length === 1 ? 'connexion couverte' : 'connexions couvertes'}</p>
               <div className="versioned-integration__ingestion-groups">
                 {scopeProviders.map((provider) => {
-                  const selectedIngestion = currentIngestions.find(
+                  const linkedIngestion = currentIngestions.find(
                     (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id,
                   ) ?? null
+                  const selectedIngestion = linkedIngestion !== null && isValidReferenceIngestion(linkedIngestion)
+                    ? linkedIngestion
+                    : null
+                  const invalidIngestion = linkedIngestion !== null && !isValidReferenceIngestion(linkedIngestion)
+                    ? linkedIngestion
+                    : null
                   const candidates = currentIngestionCandidates.filter(
-                    (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id,
+                    (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id
+                      && isValidReferenceIngestion(ingestion),
                   )
                   const ingestionsByCorrelation = new Map<string, AdminIntegrationIngestion>()
                   for (const ingestion of candidates) ingestionsByCorrelation.set(ingestion.correlation_id, ingestion)
@@ -1037,6 +1049,15 @@ export function AdminTenantVersionedIntegration({
                         <div><strong>{provider.name}</strong><span>{providerLabel(provider.provider)}</span></div>
                         {selectedIngestion !== null ? <Badge tone="success">Référence sélectionnée</Badge> : <Badge tone="neutral">À sélectionner</Badge>}
                       </header>
+                      {invalidIngestion !== null ? (
+                        <div className="versioned-integration__invalid-ingestion">
+                          <span>
+                            <strong>{invalidIngestion.archived ? 'Référence archivée' : 'Référence devenue invalide'}</strong>
+                            <small>{ingestionSummary(invalidIngestion)}</small>
+                          </span>
+                          <Button aria-label={`Retirer la référence invalide de ${provider.name}`} disabled={mutationPending} onClick={() => void removeSelectedIngestion(provider.tenant_provider_record_id)} size="compact" variant="secondary">Retirer</Button>
+                        </div>
+                      ) : null}
                       {options.length === 0 ? <p className="versioned-integration__ddl-empty">Aucune ingestion terminée disponible pour cette connexion.</p> : (
                         <div className="versioned-integration__ingestion-options">
                           {options.map((ingestion) => {

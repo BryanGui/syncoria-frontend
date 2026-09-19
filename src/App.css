@@ -3599,6 +3599,12 @@ button.navigation__link {
 .versioned-integration__ingestion-option strong { color: var(--color-text-primary); font-size: .8rem; }
 .versioned-integration__ingestion-option small { color: var(--color-text-secondary); font-size: .75rem; line-height: 1.4; }
 .versioned-integration__ingestion-option .ui-button { flex: 0 0 auto; }
+.versioned-integration__invalid-ingestion { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-surface-hover); }
+.versioned-integration__invalid-ingestion > span { min-width: 0; display: grid; gap: 2px; }
+.versioned-integration__invalid-ingestion strong,
+.versioned-integration__invalid-ingestion small { overflow-wrap: anywhere; }
+.versioned-integration__invalid-ingestion strong { color: var(--color-text-primary); font-size: .8rem; }
+.versioned-integration__invalid-ingestion small { color: var(--color-text-secondary); font-size: .75rem; line-height: 1.4; }
 .versioned-integration__activation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 0 0; border-top: 1px solid var(--color-border); }
 .versioned-integration__activation h4 { margin: 0; color: var(--color-text-primary); font-size: .94rem; }
 .versioned-integration__activation p { margin: .3rem 0 0; color: var(--color-text-secondary); font-size: .8rem; }
@@ -3674,6 +3680,8 @@ button.navigation__link {
   .versioned-integration__ingestion-group-heading { align-items: flex-start; }
   .versioned-integration__ingestion-option { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .versioned-integration__ingestion-option .ui-button { grid-column: 2; justify-self: start; }
+  .versioned-integration__invalid-ingestion { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .versioned-integration__invalid-ingestion .ui-button { justify-self: start; }
   .versioned-integration__preview-heading > div { flex-wrap: wrap; }
   .ingestion-history__row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
   .ingestion-history__row-trigger { grid-template-columns: 1fr; gap: 7px; }
