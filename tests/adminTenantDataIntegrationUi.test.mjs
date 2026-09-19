@@ -28,7 +28,7 @@ test('shows provider scope before the single DDL list with explicit selection an
   assert.match(auditCompatibility, /scope_kind !== 'global'/)
   assert.match(auditCompatibility, /tenant_provider_record_ids/)
   assert.match(auditCompatibility, /second\.created_at/)
-  assert.match(component, /Aucun audit global compatible avec les providers sélectionnés/)
+  assert.match(component, /Aucun DDL compatible avec les providers sélectionnés/)
   assert.match(component, /Sélectionnez au moins un provider à l’étape 1/)
   assert.match(component, /Charger un DDL/)
   assert.match(component, /aria-label="DDL disponibles"/)
@@ -86,13 +86,13 @@ test('filters exact global audit sets and breaks created-at ties by report id', 
 })
 
 test('supports imported DDL rename and confirmed server deletion only', () => {
-  assert.match(component, /renameAdminIntegrationDdl/)
-  assert.match(component, /deleteAdminIntegrationDdl/)
+  assert.match(component, /renameAdminIntegrationDdlCandidate/)
+  assert.match(component, /deleteAdminIntegrationDdlCandidate/)
   assert.match(component, /Renommer/)
   assert.match(component, /Supprimer ce DDL/)
   assert.match(component, /role="alertdialog"/)
   assert.match(api, /method: 'PATCH'/)
-  assert.match(api, /deleteAdminIntegrationDdl/)
+  assert.match(api, /deleteAdminIntegrationDdlCandidate/)
 })
 
 test('keeps archived tenants read-only and validates imported DDLs', () => {

@@ -7,6 +7,10 @@ const archivedId = '55555555-5555-4555-8555-555555555555'
 const sourceDdlId = '66666666-6666-4666-8666-666666666666'
 const importedDdlId = '77777777-7777-4777-8777-777777777777'
 const generatedDdlId = '88888888-8888-4888-8888-888888888888'
+const auditNotionDdlId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab'
+const auditGlobalAbOldDdlId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac'
+const auditGlobalADdlId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad'
+const auditGlobalAbcDdlId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae'
 const generatedDraftId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const providerAId = '99999999-9999-4999-8999-999999999999'
 const providerBId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
@@ -41,6 +45,11 @@ interface Ddl {
   source_provider: string | null
   source_audit_title: string | null
   source_report_date: string | null
+  source_kind: 'audit' | 'manual'
+  content_sha256: string
+  generated_at: string
+  is_default?: boolean
+  provider_scope: string[]
   ddl_content?: string
 }
 
@@ -135,7 +144,7 @@ const archived = integration(archivedId, 3, 'archived', 'Novalia historique', {
 
 const sourceDdl: Ddl = {
   id: sourceDdlId,
-  title: 'Notion — Audit Notion — 2026-09-16 [abc123]',
+  title: 'Source DDL',
   kind: 'source',
   source_report_id: 'audit-notion-2026-09-16',
   source_filename: null,
@@ -144,6 +153,10 @@ const sourceDdl: Ddl = {
   source_provider: 'notion',
   source_audit_title: 'Audit Notion',
   source_report_date: '2026-09-16',
+  source_kind: 'audit',
+  content_sha256: '1'.repeat(64),
+  generated_at: '2026-09-16T10:00:00Z',
+  provider_scope: [providerAId],
   ddl_content: '-- source\nCREATE TABLE source_table (id integer);\n',
 }
 
@@ -158,7 +171,56 @@ const importedDdl: Ddl = {
   source_provider: null,
   source_audit_title: null,
   source_report_date: null,
+  source_kind: 'manual',
+  content_sha256: '2'.repeat(64),
+  generated_at: '2026-09-17T10:00:00Z',
+  provider_scope: [providerAId, providerBId],
   ddl_content: '-- imported\nCREATE TABLE v1_table (id integer);\n',
+}
+
+const auditNotionDdl: Ddl = {
+  ...sourceDdl,
+  id: auditNotionDdlId,
+  title: 'DDL audit — Audit Notion',
+  source_report_id: 'audit-notion-2026-09-16',
+  source_audit_title: 'Audit Notion',
+  source_report_date: '2026-09-16',
+  content_sha256: '3'.repeat(64),
+  generated_at: '2026-09-18T13:00:00Z',
+  provider_scope: [providerAId, providerBId],
+  ddl_content: '-- audit\nCREATE TABLE audit_notion (id integer);\n',
+}
+
+const auditGlobalAbOldDdl: Ddl = {
+  ...auditNotionDdl,
+  id: auditGlobalAbOldDdlId,
+  title: 'DDL audit — Audit global A+B ancien',
+  source_report_id: 'audit-global-ab-old',
+  source_audit_title: 'Audit global A+B ancien',
+  content_sha256: '4'.repeat(64),
+  generated_at: '2026-09-16T09:00:00Z',
+}
+
+const auditGlobalADdl: Ddl = {
+  ...sourceDdl,
+  id: auditGlobalADdlId,
+  title: 'DDL audit — Audit global A',
+  source_report_id: 'audit-global-a',
+  source_audit_title: 'Audit global A',
+  content_sha256: '5'.repeat(64),
+  generated_at: '2026-09-18T12:00:00Z',
+  provider_scope: [providerAId],
+}
+
+const auditGlobalAbcDdl: Ddl = {
+  ...auditNotionDdl,
+  id: auditGlobalAbcDdlId,
+  title: 'DDL audit — Audit global A+B+C',
+  source_report_id: 'audit-global-abc',
+  source_audit_title: 'Audit global A+B+C',
+  content_sha256: '6'.repeat(64),
+  generated_at: '2026-09-18T11:00:00Z',
+  provider_scope: [providerAId, providerBId, providerCId],
 }
 
 const ingestion: Ingestion = {
@@ -242,6 +304,7 @@ interface BackendOptions {
   tenantStatus?: 'active' | 'archived'
   integrations?: Integration[]
   ddls?: Record<string, Ddl[]>
+  catalogue?: Ddl[]
   ingestions?: Record<string, Ingestion[]>
   reports?: AuditReport[]
   providers?: ProviderRecord[]
@@ -251,6 +314,7 @@ interface BackendOptions {
 interface MockBackend {
   integrations: Integration[]
   ddls: Record<string, Ddl[]>
+  catalogue: Ddl[]
   providerScopes: Record<string, string[]>
   requests: RecordedRequest[]
 }
@@ -267,12 +331,17 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     status: options.tenantStatus ?? 'active',
   }
   const integrations = (options.integrations ?? [active, draft]).map((item) => ({ ...item }))
+  const catalogue = [...(options.catalogue ?? [
+    sourceDdl, auditNotionDdl, auditGlobalAbOldDdl, auditGlobalADdl,
+    auditGlobalAbcDdl, importedDdl,
+  ])].map((item) => ({ ...item, provider_scope: [...item.provider_scope] }))
   const backend: MockBackend = {
     integrations,
     ddls: copyCollections(options.ddls ?? {
       [activeId]: [sourceDdl],
       [draftId]: [importedDdl],
     }),
+    catalogue,
     providerScopes: Object.fromEntries(Object.entries(options.providerScopes ?? {
       [activeId]: [providerAId],
       [draftId]: [providerAId, providerBId],
@@ -289,6 +358,24 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     backend.ddls[item.id] ??= []
     ingestions[item.id] ??= []
     backend.providerScopes[item.id] ??= []
+  }
+  for (const ddl of Object.values(backend.ddls).flat()) {
+    const replacement = { ...ddl, provider_scope: [...ddl.provider_scope] }
+    const existingIndex = backend.catalogue.findIndex((candidate) => candidate.id === ddl.id)
+    if (existingIndex === -1) backend.catalogue.push(replacement)
+    else backend.catalogue[existingIndex] = replacement
+  }
+
+  const candidateDdlList = (integrationId: string): Ddl[] => {
+    const scope = [...(backend.providerScopes[integrationId] ?? [])].sort()
+    return backend.catalogue
+      .filter((ddl) => JSON.stringify([...ddl.provider_scope].sort()) === JSON.stringify(scope))
+      .sort((first, second) => second.generated_at.localeCompare(first.generated_at) || second.created_at.localeCompare(first.created_at) || second.id.localeCompare(first.id))
+      .map((ddl, index) => ({
+        ...ddl,
+        is_selected: backend.integrations.find((item) => item.id === integrationId)?.selected_ddl_id === ddl.id,
+        is_default: index === 0,
+      }))
   }
 
   await page.context().route('**/*', async (route) => {
@@ -353,6 +440,46 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
             }
           }),
         })
+      }
+
+      if (parts[1] === 'ddl-candidates') {
+        if (parts.length === 2 && method === 'GET') return route.fulfill({ json: candidateDdlList(integrationId) })
+        if (parts.length === 2 && method === 'POST') {
+          const payload = body as { title: string; content: string }
+          const added: Ddl = {
+            ...importedDdl,
+            id: generatedDdlId,
+            title: payload.title,
+            source_filename: payload.title,
+            is_selected: false,
+            is_default: false,
+            generated_at: '2026-09-18T15:00:00Z',
+            provider_scope: [...(backend.providerScopes[integrationId] ?? [])],
+            content_sha256: '7'.repeat(64),
+            ddl_content: payload.content,
+          }
+          backend.catalogue = [...backend.catalogue.filter((item) => item.id !== added.id), added]
+          return route.fulfill({ status: 201, json: added })
+        }
+        const ddl = candidateDdlList(integrationId).find((item) => item.id === parts[2])
+        if (!ddl) return route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } })
+        if (parts[3] === 'selection' && method === 'PUT') {
+          current.selected_ddl_id = ddl.id
+          return route.fulfill({ json: { ...ddl, is_selected: true, ddl_content: ddl.ddl_content ?? 'CREATE TABLE selected (id integer);' } })
+        }
+        if (parts.length === 3 && method === 'PATCH') {
+          const payload = body as { title: string }
+          backend.catalogue = backend.catalogue.map((item) => item.id === ddl.id ? { ...item, title: payload.title } : item)
+          return route.fulfill({ json: candidateDdlList(integrationId).find((item) => item.id === ddl.id) })
+        }
+        if (parts.length === 3 && method === 'DELETE') {
+          backend.catalogue = backend.catalogue.filter((item) => item.id !== ddl.id)
+          if (current.selected_ddl_id === ddl.id) current.selected_ddl_id = null
+          return route.fulfill({ status: 204, body: '' })
+        }
+        if (parts.length === 3 && method === 'GET') {
+          return route.fulfill({ json: { ...ddl, ddl_content: ddl.ddl_content ?? 'CREATE TABLE preview (id integer);' } })
+        }
       }
 
       if (parts[1] === 'ddls') {
@@ -478,7 +605,7 @@ test('shows the audit DDL as selectable default provenance without mutation acti
 
   const row = page.locator('.versioned-integration__ddl-row').filter({ hasText: 'DDL audit — Audit Notion' })
   await expect(row).toBeVisible()
-  await expect(row.getByText('Source : Audit', { exact: true })).toBeVisible()
+  await expect(row.getByText(/Source : Audit/)).toBeVisible()
   await expect(row.getByText('Par défaut', { exact: true })).toBeVisible()
   await expect(row.getByRole('radio', { name: 'Sélectionner DDL audit — Audit Notion', exact: true })).toBeVisible()
   await expect(row.locator('.ui-action-menu')).toHaveCount(0)
@@ -515,7 +642,8 @@ test('offers only exact global A+B audits and marks the newest B+A report once',
   await defaultRadio.click()
   await expect(defaultRadio).toBeChecked()
   expect(backend.requests.filter((request) => request.path.endsWith('/ddls/from-audit') && request.method === 'POST')).toHaveLength(0)
-  expect(backend.requests.filter((request) => request.path.endsWith(`/${existingDefaultDdl.id}/selection`) && request.method === 'PUT')).toHaveLength(1)
+  expect(backend.requests.filter((request) => request.path.endsWith(`/${existingDefaultDdl.id}/selection`) && request.method === 'PUT')).toHaveLength(0)
+  expect(backend.requests.filter((request) => request.path.endsWith(`/${auditNotionDdlId}/selection`) && request.method === 'PUT')).toHaveLength(1)
 })
 
 test('loads a SQL file under its exact filename into the same list with a hidden draft', async ({ page }) => {
@@ -534,7 +662,7 @@ test('loads a SQL file under its exact filename into the same list with a hidden
     buffer: Buffer.from('CREATE TABLE rejected_title (id integer);'),
   })
   await expect(page.getByText('Le nom du fichier doit contenir au maximum 120 octets UTF-8.', { exact: true })).toBeVisible()
-  expect(backend.requests.filter((request) => request.path.endsWith('/ddls') && request.method === 'POST')).toHaveLength(0)
+  expect(backend.requests.filter((request) => request.path.endsWith('/ddl-candidates') && request.method === 'POST')).toHaveLength(0)
   await page.getByLabel('Fichier DDL à charger').setInputFiles({
     name: 'novalia-modele-v2.sql',
     mimeType: 'text/plain',
@@ -544,7 +672,7 @@ test('loads a SQL file under its exact filename into the same list with a hidden
   const list = ddlList(page)
   await expect(list.getByText('DDL audit — Audit global A', { exact: true })).toBeVisible()
   await expect(list.getByText('novalia-modele-v2.sql', { exact: true })).toBeVisible()
-  const imports = backend.requests.filter((request) => request.path.endsWith('/ddls') && request.method === 'POST')
+  const imports = backend.requests.filter((request) => request.path.endsWith('/ddl-candidates') && request.method === 'POST')
   expect(imports).toHaveLength(1)
   expect(imports[0].body).toEqual({
     title: 'novalia-modele-v2.sql',
@@ -573,9 +701,9 @@ test('changing A+B to A+C clears the DDL choice but preserves imported artifacts
   await expect(page.getByRole('checkbox', { name: 'Sélectionner Notion RH', exact: true })).toBeChecked()
   await expect(page.getByRole('checkbox', { name: 'Sélectionner HubSpot CRM', exact: true })).toBeChecked()
   await expect(page.getByRole('checkbox', { name: 'Sélectionner Sheets candidats', exact: true })).not.toBeChecked()
-  await expect(importedRadio).not.toBeChecked()
-  await expect(page.getByText(importedDdl.title, { exact: true })).toBeVisible()
-  await expect(page.getByText('Aucun audit global compatible avec les providers sélectionnés.', { exact: true })).toBeVisible()
+  await expect(importedRadio).toHaveCount(0)
+  await expect(page.getByText('Aucun DDL compatible avec les providers sélectionnés.', { exact: true })).toBeVisible()
+  expect(backend.catalogue.some((ddl) => ddl.id === importedDdlId)).toBe(true)
   expect(backend.ddls[draftId]).toHaveLength(1)
   const scopeWrites = backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/providers` && request.method === 'PUT')
   expect(scopeWrites.at(-1)?.body).toEqual({ tenant_provider_record_ids: [providerAId, providerCId] })
@@ -595,7 +723,7 @@ test('offers exactly rename/delete for imported DDLs and performs a real PATCH',
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click()
 
   await expect(page.getByText('novalia-modele-renomme.sql', { exact: true })).toBeVisible()
-  const patches = backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ddls/${importedDdlId}` && request.method === 'PATCH')
+  const patches = backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ddl-candidates/${importedDdlId}` && request.method === 'PATCH')
   expect(patches).toHaveLength(1)
   expect(patches[0].body).toEqual({ title: 'novalia-modele-renomme.sql' })
 })
@@ -612,7 +740,7 @@ test('confirms deletion, calls DELETE and removes the imported row only after su
   await confirmation.getByRole('button', { name: 'Supprimer', exact: true }).click()
 
   await expect(page.getByText(importedDdl.title, { exact: true })).toHaveCount(0)
-  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ddls/${importedDdlId}` && request.method === 'DELETE')).toHaveLength(1)
+  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ddl-candidates/${importedDdlId}` && request.method === 'DELETE')).toHaveLength(1)
 })
 
 test('keeps exactly one explicitly selected DDL across successive choices', async ({ page }) => {
@@ -646,7 +774,7 @@ test('keeps Active and Versions read-only behavior intact', async ({ page }) => 
   const activeLibrary = page.locator('[aria-label="Bibliothèque DDL"]')
   await expect(activeLibrary.locator('input[type="radio"]')).toHaveCount(0)
   await expect(activeLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
-  await activeLibrary.locator('.versioned-integration__ddl-title').click()
+  await activeLibrary.getByRole('button', { name: new RegExp(sourceDdl.title) }).click()
   await expect(page.getByRole('region', { name: `Aperçu de ${sourceDdl.title}`, exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: 'Versions', exact: true }).click()
