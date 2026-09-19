@@ -3580,6 +3580,31 @@ button.navigation__link {
 .versioned-integration__ingestion-row > div:first-child { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
 .versioned-integration__ingestion-row > div:first-child > span { color: var(--color-text-secondary); font-size: .78rem; }
 .versioned-integration__ingestion-row .ui-action-menu { flex: 0 0 auto; }
+.versioned-integration__ingestion-workflow { display: grid; gap: 10px; }
+.versioned-integration__ingestion-coverage { margin: 0; color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; }
+.versioned-integration__ingestion-groups { display: grid; gap: 12px; }
+.versioned-integration__ingestion-group { min-width: 0; display: grid; gap: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-surface); }
+.versioned-integration__ingestion-group-heading { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.versioned-integration__ingestion-group-heading > div { min-width: 0; display: grid; gap: 2px; }
+.versioned-integration__ingestion-group-heading strong { overflow-wrap: anywhere; color: var(--color-text-primary); font-size: .86rem; }
+.versioned-integration__ingestion-group-heading span { overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: .76rem; }
+.versioned-integration__ingestion-group-heading .ui-badge { flex: 0 0 auto; }
+.versioned-integration__ingestion-options { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-border); }
+.versioned-integration__ingestion-option { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; background: var(--color-surface); }
+.versioned-integration__ingestion-option--selected { background: var(--color-accent-soft); }
+.versioned-integration__ingestion-option > input { width: 16px; height: 16px; margin: 0; }
+.versioned-integration__ingestion-option > span { min-width: 0; display: grid; gap: 2px; }
+.versioned-integration__ingestion-option strong,
+.versioned-integration__ingestion-option small { overflow-wrap: anywhere; }
+.versioned-integration__ingestion-option strong { color: var(--color-text-primary); font-size: .8rem; }
+.versioned-integration__ingestion-option small { color: var(--color-text-secondary); font-size: .75rem; line-height: 1.4; }
+.versioned-integration__ingestion-option .ui-button { flex: 0 0 auto; }
+.versioned-integration__invalid-ingestion { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-small); background: var(--color-surface-hover); }
+.versioned-integration__invalid-ingestion > span { min-width: 0; display: grid; gap: 2px; }
+.versioned-integration__invalid-ingestion strong,
+.versioned-integration__invalid-ingestion small { overflow-wrap: anywhere; }
+.versioned-integration__invalid-ingestion strong { color: var(--color-text-primary); font-size: .8rem; }
+.versioned-integration__invalid-ingestion small { color: var(--color-text-secondary); font-size: .75rem; line-height: 1.4; }
 .versioned-integration__activation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 0 0; border-top: 1px solid var(--color-border); }
 .versioned-integration__activation h4 { margin: 0; color: var(--color-text-primary); font-size: .94rem; }
 .versioned-integration__activation p { margin: .3rem 0 0; color: var(--color-text-secondary); font-size: .8rem; }
@@ -3652,6 +3677,11 @@ button.navigation__link {
   .versioned-integration__delete-confirmation { flex: 1 1 100%; flex-wrap: wrap; }
   .versioned-integration__ingestion-row { flex-direction: column; }
   .versioned-integration__ingestion-row .ui-action-menu { align-self: flex-end; }
+  .versioned-integration__ingestion-group-heading { align-items: flex-start; }
+  .versioned-integration__ingestion-option { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .versioned-integration__ingestion-option .ui-button { grid-column: 2; justify-self: start; }
+  .versioned-integration__invalid-ingestion { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .versioned-integration__invalid-ingestion .ui-button { justify-self: start; }
   .versioned-integration__preview-heading > div { flex-wrap: wrap; }
   .ingestion-history__row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
   .ingestion-history__row-trigger { grid-template-columns: 1fr; gap: 7px; }

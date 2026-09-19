@@ -104,6 +104,21 @@ test('keeps archived tenants read-only and validates imported DDLs', () => {
   assert.match(component, /120 octets UTF-8/)
 })
 
+test('makes the reference dataset an explicit third step scoped by provider record', () => {
+  assert.match(component, /Étape 3 — Constituer le jeu de données de référence/)
+  assert.match(component, /fetchAdminIntegrationIngestions/)
+  assert.match(component, /fetchAdminIntegrationIngestionCandidates/)
+  assert.match(component, /selectAdminIntegrationIngestion/)
+  assert.match(component, /deleteAdminIntegrationIngestion/)
+  assert.match(component, /tenant_provider_record_id === provider\.tenant_provider_record_id/)
+  assert.match(component, /name=\{`selected-ingestion-\$\{provider\.tenant_provider_record_id\}`\}/)
+  assert.match(component, /0 \/ 2 connexions couvertes|connexions couvertes/)
+  assert.match(component, /Sélectionnez un DDL à l’étape 2 avant de constituer le jeu de données de référence/)
+  assert.match(component, /Aucune ingestion terminée disponible pour cette connexion/)
+  assert.match(component, /Retirer l’ingestion de référence/)
+  assert.doesNotMatch(component, /Étape 4/)
+})
+
 test('keeps canonical tenant-scoped API paths and redacted failures explicit', () => {
   assert.match(api, /\/admin\/tenants\/\$\{encodeURIComponent\(tenantId\)\}\/integrations/)
   assert.match(api, /credentials: 'include'/)

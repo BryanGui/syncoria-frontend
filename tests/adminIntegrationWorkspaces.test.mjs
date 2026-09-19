@@ -276,6 +276,7 @@ test('replaces one version ingestion reference and never deletes the raw operati
   assert.equal(result.status, 'loaded')
   assert.deepEqual(JSON.parse(captured.options.body), { correlation_id: correlationId })
   assert.equal(captured.options.method, 'PUT')
+  assert.equal(captured.url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ingestions/${providerRecordId}`)
   assert.equal((await deleteAdminIntegrationIngestion(
     'https://api.example.com', tenantId, integrationId, providerRecordId, undefined,
     async (url, options) => {
@@ -284,6 +285,7 @@ test('replaces one version ingestion reference and never deletes the raw operati
     },
   )).status, 'deleted')
   assert.equal(captured.options.method, 'DELETE')
+  assert.equal(captured.url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/ingestions/${providerRecordId}`)
 })
 
 test('loads selected references and candidates independently', async () => {
