@@ -15,7 +15,10 @@ const generatedDraftId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const providerAId = '99999999-9999-4999-8999-999999999999'
 const providerBId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const providerCId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+const providerDId = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
 const correlationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const secondCorrelationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaf'
+const thirdCorrelationId = '11111111-1111-4111-8111-111111111119'
 const prefix = `/admin/tenants/${tenantId}`
 
 type IntegrationStatus = 'draft' | 'active' | 'archived'
@@ -237,6 +240,14 @@ const ingestion: Ingestion = {
   created_at: '2026-09-16T09:02:00Z',
 }
 
+const newerIngestion: Ingestion = {
+  ...ingestion,
+  correlation_id: secondCorrelationId,
+  started_at: '2026-09-18T09:00:00Z',
+  completed_at: '2026-09-18T09:01:00Z',
+  created_at: '2026-09-18T09:02:00Z',
+}
+
 function provider(id: string, providerSlug: string, name: string): ProviderRecord {
   return {
     id,
@@ -263,6 +274,7 @@ const providerRecords = [
   provider(providerAId, 'notion', 'Notion RH'),
   provider(providerBId, 'google_sheets', 'Sheets candidats'),
   provider(providerCId, 'hubspot', 'HubSpot CRM'),
+  provider(providerDId, 'notion', 'Notion Finance'),
 ]
 
 function auditReport(
@@ -306,6 +318,7 @@ interface BackendOptions {
   ddls?: Record<string, Ddl[]>
   catalogue?: Ddl[]
   ingestions?: Record<string, Ingestion[]>
+  ingestionCandidates?: Record<string, Ingestion[]>
   reports?: AuditReport[]
   providers?: ProviderRecord[]
   providerScopes?: Record<string, string[]>
@@ -316,6 +329,7 @@ interface MockBackend {
   ddls: Record<string, Ddl[]>
   catalogue: Ddl[]
   providerScopes: Record<string, string[]>
+  ingestionCandidates: Record<string, Ingestion[]>
   requests: RecordedRequest[]
 }
 
@@ -352,11 +366,16 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     [activeId]: [ingestion],
     [draftId]: [],
   })
+  const ingestionCandidates = copyCollections(options.ingestionCandidates ?? {
+    [draftId]: [ingestion, { ...ingestion, tenant_provider_record_id: providerBId, provider: 'google_sheets', correlation_id: thirdCorrelationId }],
+  })
+  backend.ingestionCandidates = ingestionCandidates
   const reports = (options.reports ?? auditReports).map((report) => ({ ...report }))
   const providers = (options.providers ?? providerRecords).map((item) => ({ ...item }))
   for (const item of integrations) {
     backend.ddls[item.id] ??= []
     ingestions[item.id] ??= []
+    ingestionCandidates[item.id] ??= []
     backend.providerScopes[item.id] ??= []
   }
   for (const ddl of Object.values(backend.ddls).flat()) {
@@ -527,8 +546,44 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
         }
       }
 
-      if (parts[1] === 'ingestions' && parts.length === 2 && method === 'GET') {
-        return route.fulfill({ json: ingestions[integrationId] ?? [] })
+      if (parts[1] === 'ingestion-candidates' && parts.length === 2 && method === 'GET') {
+        return route.fulfill({ json: ingestionCandidates[integrationId] ?? [] })
+      }
+      if (parts[1] === 'ingestions') {
+        if (parts.length === 2 && method === 'GET') {
+          return route.fulfill({ json: ingestions[integrationId] ?? [] })
+        }
+        const providerRecordId = parts[2]
+        const selected = (ingestions[integrationId] ?? []).find(
+          (item) => item.tenant_provider_record_id === providerRecordId,
+        )
+        if (method === 'PUT') {
+          const payload = body as { correlation_id: string }
+          const candidate = (ingestionCandidates[integrationId] ?? []).find(
+            (item) => item.tenant_provider_record_id === providerRecordId
+              && item.correlation_id === payload.correlation_id,
+          )
+          if (!candidate) return route.fulfill({ status: 409, json: { detail: { code: 'conflict', message: 'Not selectable.' } } })
+          ingestions[integrationId] = [
+            ...(ingestions[integrationId] ?? []).filter((item) => item.tenant_provider_record_id !== providerRecordId),
+            candidate,
+          ]
+          ingestionCandidates[integrationId] = [
+            ...(ingestionCandidates[integrationId] ?? []).filter((item) => item !== candidate),
+            ...(selected && !selected.archived ? [selected] : []),
+          ]
+          return route.fulfill({ json: candidate })
+        }
+        if (method === 'DELETE') {
+          if (!selected) return route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } })
+          ingestions[integrationId] = (ingestions[integrationId] ?? []).filter(
+            (item) => item.tenant_provider_record_id !== providerRecordId,
+          )
+          if (!selected.archived) ingestionCandidates[integrationId] = [
+            ...(ingestionCandidates[integrationId] ?? []), selected,
+          ]
+          return route.fulfill({ status: 204, body: '' })
+        }
       }
       if (parts.length === 1 && method === 'GET') return route.fulfill({ json: current })
     }
@@ -547,6 +602,7 @@ async function openCreate(page: Page) {
   await page.getByRole('button', { name: 'Créer', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Étape 1 — Choisir les providers à intégrer', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Étape 2 — Choisir un DDL', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Étape 3 — Constituer le jeu de données de référence', exact: true })).toBeVisible()
 }
 
 function ddlList(page: Page) {
@@ -567,6 +623,7 @@ test('creates a draft lazily on the first provider change and persists A then A+
   await expect(page.getByRole('heading', { name: 'Intégration', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Charger un DDL', exact: true })).toBeDisabled()
   await expect(page.getByText('Sélectionnez au moins un provider à l’étape 1.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Sélectionnez au moins une connexion à l’étape 1 pour constituer le jeu de données de référence.', { exact: true })).toBeVisible()
   for (const obsolete of [
     'Modèle versionné',
     'Construisez une version reproductible',
@@ -597,6 +654,60 @@ test('creates a draft lazily on the first provider change and persists A then A+
   ])
   expect(backend.integrations.find((item) => item.id === generatedDraftId)?.status).toBe('draft')
   expect(backend.integrations.some((item) => item.id === generatedDraftId && item.status === 'active')).toBe(false)
+  expect(backend.requests.filter((request) => /\/audits|\/ingestions$/.test(request.path) && request.method === 'POST')).toHaveLength(0)
+})
+
+test('groups reference ingestions by exact provider record and only changes them explicitly', async ({ page }) => {
+  const dualNotionDdl: Ddl = {
+    ...importedDdl,
+    id: '12121212-1212-4212-8212-121212121212',
+    title: 'modele-deux-notion.sql',
+    provider_scope: [providerAId, providerDId],
+  }
+  const selectedDraft = {
+    ...draft,
+    selected_ddl_id: dualNotionDdl.id,
+  }
+  const financeIngestion: Ingestion = {
+    ...ingestion,
+    tenant_provider_record_id: providerDId,
+    correlation_id: '13131313-1313-4313-8313-131313131313',
+    started_at: '2026-09-17T11:00:00Z',
+    completed_at: '2026-09-17T11:01:00Z',
+  }
+  const backend = await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ddls: { [activeId]: [sourceDdl], [draftId]: [dualNotionDdl] },
+    providerScopes: { [activeId]: [providerAId], [draftId]: [providerAId, providerDId] },
+    ingestionCandidates: { [draftId]: [ingestion, newerIngestion, financeIngestion] },
+  })
+  await openCreate(page)
+
+  const references = page.locator('[aria-label="Ingestions de référence"]')
+  await expect(references).toBeVisible()
+  await expect(references.getByText('0 / 2 connexions couvertes', { exact: true })).toBeVisible()
+  await expect(references.locator('.versioned-integration__ingestion-group')).toHaveCount(2)
+  await expect(references.getByText('Notion RH', { exact: true })).toBeVisible()
+  await expect(references.getByText('Notion Finance', { exact: true })).toBeVisible()
+  await expect(references.getByText('n8n', { exact: true })).toHaveCount(0)
+  await expect(references.locator('input[type="radio"]:checked')).toHaveCount(0)
+  expect(backend.requests.filter((request) => request.path.includes('/ingestions/') && request.method === 'PUT')).toHaveLength(0)
+
+  const notionRhGroup = references.locator('.versioned-integration__ingestion-group').filter({ hasText: 'Notion RH' })
+  const firstSelection = notionRhGroup.locator('input[type="radio"]').nth(1)
+  await firstSelection.click()
+  await expect(references.getByText('1 / 2 connexions couvertes', { exact: true })).toBeVisible()
+  const replacementSelection = notionRhGroup.locator('input[type="radio"]').first()
+  await replacementSelection.click()
+  const referenceWrites = backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestions/${providerAId}` && request.method === 'PUT')
+  expect(referenceWrites.map((request) => request.body)).toEqual([
+    { correlation_id: correlationId },
+    { correlation_id: secondCorrelationId },
+  ])
+  await page.getByRole('button', { name: 'Retirer l’ingestion de référence de Notion RH', exact: true }).click()
+  await expect(references.getByText('0 / 2 connexions couvertes', { exact: true })).toBeVisible()
+  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}/ingestions/${providerAId}` && request.method === 'DELETE')).toHaveLength(1)
+  expect(backend.requests.filter((request) => /\/audits|\/providers\/[^/]+\/ingestions/.test(request.path) && request.method === 'POST')).toHaveLength(0)
 })
 
 test('shows the audit DDL as selectable default provenance without mutation actions', async ({ page }) => {
@@ -760,6 +871,7 @@ test('keeps exactly one explicitly selected DDL across successive choices', asyn
 })
 
 test('keeps Active and Versions read-only behavior intact', async ({ page }) => {
+  const historicalIngestion = { ...ingestion, archived: true }
   await openIntegration(page, {
     integrations: [active, draft, archived],
     ddls: {
@@ -767,10 +879,11 @@ test('keeps Active and Versions read-only behavior intact', async ({ page }) => 
       [draftId]: [importedDdl],
       [archivedId]: [{ ...sourceDdl }],
     },
-    ingestions: { [activeId]: [ingestion], [draftId]: [], [archivedId]: [] },
+    ingestions: { [activeId]: [historicalIngestion], [draftId]: [], [archivedId]: [historicalIngestion] },
   })
 
   await expect(page.getByRole('heading', { name: active.display_name, exact: true })).toBeVisible()
+  await expect(page.getByText(/Notion.*Archivée/)).toBeVisible()
   const activeLibrary = page.locator('[aria-label="Bibliothèque DDL"]')
   await expect(activeLibrary.locator('input[type="radio"]')).toHaveCount(0)
   await expect(activeLibrary.getByText('Sélectionné', { exact: true })).toBeVisible()
@@ -780,6 +893,7 @@ test('keeps Active and Versions read-only behavior intact', async ({ page }) => 
   await page.getByRole('button', { name: 'Versions', exact: true }).click()
   await page.getByRole('button', { name: /Novalia historique/ }).click()
   await expect(page.getByRole('heading', { name: archived.display_name, exact: true })).toBeVisible()
+  await expect(page.getByText(/Notion.*Archivée/)).toBeVisible()
   await expect(page.locator('[aria-label="Bibliothèque DDL"]').locator('input[type="radio"]')).toHaveCount(0)
 })
 
@@ -789,9 +903,12 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       ...importedDdl,
       title: 'modele-importe-avec-un-titre-tres-long-qui-doit-rester-lisible-sans-deborder-du-viewport.sql',
     }
+    const selectedDraft = { ...draft, selected_ddl_id: longDdl.id }
     await page.setViewportSize(viewport)
     await openIntegration(page, {
+      integrations: [active, selectedDraft],
       ddls: { [activeId]: [sourceDdl], [draftId]: [longDdl] },
+      ingestions: { [activeId]: [ingestion], [draftId]: [ingestion] },
     })
     await openCreate(page)
 
@@ -826,6 +943,13 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       return true
     })
     expect(isFullyInsideClippingAncestors).toBe(true)
+    const removeReference = page.getByRole('button', { name: 'Retirer l’ingestion de référence de Notion RH', exact: true })
+    await removeReference.scrollIntoViewIfNeeded()
+    await expect(removeReference).toBeVisible()
+    const removeBox = await removeReference.boundingBox()
+    expect(removeBox).not.toBeNull()
+    expect(removeBox!.x).toBeGreaterThanOrEqual(0)
+    expect(removeBox!.x + removeBox!.width).toBeLessThanOrEqual(viewport.width)
     const dimensions = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,

@@ -8,6 +8,7 @@ import {
   fetchAdminIntegrationDdlCandidates,
   fetchAdminIntegrationDdl,
   fetchAdminIntegrationDdls,
+  fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
   fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
@@ -17,6 +18,8 @@ import {
   renameAdminIntegrationDdlCandidate,
   replaceAdminIntegrationProviders,
   selectAdminIntegrationDdlCandidate,
+  selectAdminIntegrationIngestion,
+  deleteAdminIntegrationIngestion,
   type AdminIntegration,
   type AdminIntegrationDdl,
   type AdminIntegrationDdlMetadata,
@@ -185,7 +188,7 @@ function ReadOnlyDdlLibrary({
 }
 
 function ingestionSummary(ingestion: AdminIntegrationIngestion): string {
-  return `${formatDate(ingestion.started_at)} · ${ingestion.items_received} reçus · ${ingestion.items_inserted} nouveaux · ${ingestion.items_duplicate} doublons`
+  return `${formatDateTime(ingestion.started_at)} · ${ingestion.items_received} reçus · ${ingestion.items_inserted} nouveaux · ${ingestion.items_duplicate} doublons`
 }
 
 function ReadOnlyVersion({
@@ -257,6 +260,10 @@ export function AdminTenantVersionedIntegration({
   const [ingestionIntegrationId, setIngestionIntegrationId] = useState<string | null>(null)
   const [ingestionState, setIngestionState] = useState<LoadState>('loading')
   const [ingestionReloadKey, setIngestionReloadKey] = useState(0)
+  const [ingestionCandidates, setIngestionCandidates] = useState<AdminIntegrationIngestion[]>([])
+  const [ingestionCandidateIntegrationId, setIngestionCandidateIntegrationId] = useState<string | null>(null)
+  const [ingestionCandidateState, setIngestionCandidateState] = useState<LoadState>('loading')
+  const [ingestionCandidateReloadKey, setIngestionCandidateReloadKey] = useState(0)
   const [availableProviders, setAvailableProviders] = useState<AdminProviderRecord[]>([])
   const [availableProviderState, setAvailableProviderState] = useState<LoadState>('loading')
   const [availableProviderReloadKey, setAvailableProviderReloadKey] = useState(0)
@@ -288,6 +295,9 @@ export function AdminTenantVersionedIntegration({
   const currentDdlState: LoadState = selectedId !== null && ddlIntegrationId === selectedId ? ddlState : selectedId === null ? 'loaded' : 'loading'
   const currentIngestions = selectedId !== null && ingestionIntegrationId === selectedId ? ingestions : []
   const currentIngestionState: LoadState = selectedId !== null && ingestionIntegrationId === selectedId ? ingestionState : selectedId === null ? 'loaded' : 'loading'
+  const currentIngestionCandidates = selectedId !== null && ingestionCandidateIntegrationId === selectedId ? ingestionCandidates : []
+  const currentIngestionCandidateState: LoadState = selectedId !== null && ingestionCandidateIntegrationId === selectedId ? ingestionCandidateState : selectedId === null ? 'loaded' : 'loading'
+  const selectedDdlId = currentDdls.find((ddl) => ddl.is_selected)?.id ?? null
   const isArchivedTenant = tenantStatus !== 'active'
 
   function showFailure(result: AdminIntegrationFailure, fallback: string) {
@@ -427,7 +437,9 @@ export function AdminTenantVersionedIntegration({
   useEffect(() => {
     setIngestions([])
     setIngestionIntegrationId(selectedId)
-    if (selectedId === null || view === 'create') {
+    const canLoadCreateIngestions = view !== 'create'
+      || (!isArchivedTenant && selectedSummary?.status === 'draft' && selectedDdlId !== null)
+    if (selectedId === null || !canLoadCreateIngestions) {
       setIngestionState('loaded')
       return undefined
     }
@@ -448,7 +460,45 @@ export function AdminTenantVersionedIntegration({
       setIngestionState('loaded')
     })
     return () => controller.abort()
-  }, [apiBaseUrl, ingestionReloadKey, onSessionExpired, selectedId, tenantId, view])
+  }, [
+    apiBaseUrl, ingestionReloadKey, isArchivedTenant, onSessionExpired,
+    selectedDdlId, selectedId, selectedSummary?.status, tenantId, view,
+  ])
+
+  useEffect(() => {
+    setIngestionCandidates([])
+    setIngestionCandidateIntegrationId(selectedId)
+    const canLoadCandidates = view === 'create'
+      && !isArchivedTenant
+      && selectedSummary?.status === 'draft'
+      && selectedDdlId !== null
+    if (selectedId === null || !canLoadCandidates) {
+      setIngestionCandidateState('loaded')
+      return undefined
+    }
+    const controller = new AbortController()
+    setIngestionCandidateState('loading')
+    void fetchAdminIntegrationIngestionCandidates(
+      apiBaseUrl, tenantId, selectedId, controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        setIngestionCandidateState('error')
+        return
+      }
+      setIngestionCandidates(result.ingestions)
+      setIngestionCandidateIntegrationId(selectedId)
+      setIngestionCandidateState('loaded')
+    })
+    return () => controller.abort()
+  }, [
+    apiBaseUrl, ingestionCandidateReloadKey, isArchivedTenant, onSessionExpired,
+    selectedDdlId, selectedId, selectedSummary?.status, tenantId, view,
+  ])
 
   useEffect(() => {
     setAvailableProviders([])
@@ -589,6 +639,7 @@ export function AdminTenantVersionedIntegration({
         ? { ...integration, selected_ddl_id: null }
         : integration))
       setIngestions([])
+      setIngestionCandidates([])
       setDdlPreview(null)
       setRenameId(null)
       setDeleteId(null)
@@ -620,6 +671,67 @@ export function AdminTenantVersionedIntegration({
       if (await selectExistingDdl(selectedId, ddlId)) {
         setNotification({ tone: 'success', message: 'DDL sélectionné.' })
       }
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
+  async function selectCandidateIngestion(
+    providerRecordId: string, correlationId: string,
+  ) {
+    if (mutationPending || selectedId === null) return
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      const result = await selectAdminIntegrationIngestion(
+        apiBaseUrl, tenantId, selectedId, providerRecordId, correlationId,
+      )
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'loaded') {
+        showFailure(result, 'Cette ingestion ne peut pas être sélectionnée pour le moment.')
+        return
+      }
+      setIngestionIntegrationId(selectedId)
+      setIngestions((current) => [
+        ...current.filter((ingestion) => ingestion.tenant_provider_record_id !== providerRecordId),
+        result.ingestion,
+      ])
+      setIngestionState('loaded')
+      setIngestionReloadKey((current) => current + 1)
+      setIngestionCandidateReloadKey((current) => current + 1)
+      setNotification({ tone: 'success', message: 'Ingestion de référence sélectionnée.' })
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
+  async function removeSelectedIngestion(providerRecordId: string) {
+    if (mutationPending || selectedId === null) return
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      const result = await deleteAdminIntegrationIngestion(
+        apiBaseUrl, tenantId, selectedId, providerRecordId,
+      )
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'deleted') {
+        showFailure(result, 'Cette ingestion de référence ne peut pas être retirée.')
+        return
+      }
+      setIngestionIntegrationId(selectedId)
+      setIngestions((current) => current.filter(
+        (ingestion) => ingestion.tenant_provider_record_id !== providerRecordId,
+      ))
+      setIngestionState('loaded')
+      setIngestionReloadKey((current) => current + 1)
+      setIngestionCandidateReloadKey((current) => current + 1)
+      setNotification({ tone: 'success', message: 'Ingestion de référence retirée.' })
     } finally {
       setMutationPending(false)
     }
@@ -787,6 +899,15 @@ export function AdminTenantVersionedIntegration({
       || (selectedId !== null && scopeProviderState === 'loading')
     const ddlLoading = selectedId !== null && currentDdlState === 'loading'
     const hasSelectedProvider = selectedProviderIds.length > 0
+    const referencesLoading = currentIngestionState === 'loading'
+      || currentIngestionCandidateState === 'loading'
+    const selectedReferenceCount = scopeProviders.filter((provider) => currentIngestions.some(
+      (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id,
+    )).length
+    const canConfigureReferences = !isArchivedTenant
+      && hasSelectedProvider
+      && selectedDdlId !== null
+      && selectedSummary?.status === 'draft'
 
     return (
       <div className="versioned-integration__create-workflow">
@@ -880,6 +1001,69 @@ export function AdminTenantVersionedIntegration({
             </div>
           ) : null}
           {ddlPreview ? <DdlPreview ddl={ddlPreview} onClose={() => setDdlPreview(null)} /> : null}
+        </section>
+
+        <section aria-labelledby="integration-ingestion-step-title" className="versioned-integration__ddl-step">
+          <div className="versioned-integration__ddl-step-heading">
+            <h4 id="integration-ingestion-step-title">Étape 3 — Constituer le jeu de données de référence</h4>
+          </div>
+          {isArchivedTenant ? <p className="versioned-integration__empty">Ce client archivé est en lecture seule.</p> : null}
+          {!isArchivedTenant && !providersLoading && !hasSelectedProvider ? <p className="versioned-integration__empty">Sélectionnez au moins une connexion à l’étape 1 pour constituer le jeu de données de référence.</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && selectedDdlId === null && !ddlLoading ? <p className="versioned-integration__empty">Sélectionnez un DDL à l’étape 2 avant de constituer le jeu de données de référence.</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && selectedDdlId !== null && scopeProviderState === 'error' ? <StructuralError message="Impossible de charger le périmètre des connexions." onRetry={() => setScopeProviderReloadKey((current) => current + 1)} /> : null}
+          {canConfigureReferences && referencesLoading ? <p className="versioned-integration__empty" role="status">Chargement des ingestions de référence…</p> : null}
+          {canConfigureReferences && !referencesLoading && (currentIngestionState === 'error' || currentIngestionCandidateState === 'error') ? <StructuralError message="Impossible de charger les ingestions de référence." onRetry={() => { setIngestionReloadKey((current) => current + 1); setIngestionCandidateReloadKey((current) => current + 1) }} /> : null}
+          {canConfigureReferences && !referencesLoading && currentIngestionState !== 'error' && currentIngestionCandidateState !== 'error' ? (
+            <div aria-label="Ingestions de référence" className="versioned-integration__ingestion-workflow">
+              <p className="versioned-integration__ingestion-coverage">{selectedReferenceCount} / {scopeProviders.length} connexions couvertes</p>
+              <div className="versioned-integration__ingestion-groups">
+                {scopeProviders.map((provider) => {
+                  const selectedIngestion = currentIngestions.find(
+                    (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id,
+                  ) ?? null
+                  const candidates = currentIngestionCandidates.filter(
+                    (ingestion) => ingestion.tenant_provider_record_id === provider.tenant_provider_record_id,
+                  )
+                  const ingestionsByCorrelation = new Map<string, AdminIntegrationIngestion>()
+                  for (const ingestion of candidates) ingestionsByCorrelation.set(ingestion.correlation_id, ingestion)
+                  if (selectedIngestion !== null) ingestionsByCorrelation.set(selectedIngestion.correlation_id, selectedIngestion)
+                  const options = [...ingestionsByCorrelation.values()].sort((first, second) => (
+                    second.started_at.localeCompare(first.started_at)
+                    || second.correlation_id.localeCompare(first.correlation_id)
+                  ))
+                  return (
+                    <article className="versioned-integration__ingestion-group" key={provider.tenant_provider_record_id}>
+                      <header className="versioned-integration__ingestion-group-heading">
+                        <div><strong>{provider.name}</strong><span>{providerLabel(provider.provider)}</span></div>
+                        {selectedIngestion !== null ? <Badge tone="success">Référence sélectionnée</Badge> : <Badge tone="neutral">À sélectionner</Badge>}
+                      </header>
+                      {options.length === 0 ? <p className="versioned-integration__ddl-empty">Aucune ingestion terminée disponible pour cette connexion.</p> : (
+                        <div className="versioned-integration__ingestion-options">
+                          {options.map((ingestion) => {
+                            const isSelected = selectedIngestion?.correlation_id === ingestion.correlation_id
+                            return (
+                              <div className={`versioned-integration__ingestion-option${isSelected ? ' versioned-integration__ingestion-option--selected' : ''}`} key={ingestion.correlation_id}>
+                                <input
+                                  aria-label={`Sélectionner l’ingestion du ${formatDateTime(ingestion.started_at)} pour ${provider.name}`}
+                                  checked={isSelected}
+                                  disabled={mutationPending}
+                                  name={`selected-ingestion-${provider.tenant_provider_record_id}`}
+                                  onChange={() => void selectCandidateIngestion(provider.tenant_provider_record_id, ingestion.correlation_id)}
+                                  type="radio"
+                                />
+                                <span><strong>{formatDateTime(ingestion.started_at)}</strong><small>{ingestionSummary(ingestion)}</small></span>
+                                {isSelected ? <Button aria-label={`Retirer l’ingestion de référence de ${provider.name}`} disabled={mutationPending} onClick={() => void removeSelectedIngestion(provider.tenant_provider_record_id)} size="compact" variant="secondary">Retirer</Button> : null}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
     )
