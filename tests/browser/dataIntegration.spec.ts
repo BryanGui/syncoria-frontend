@@ -72,7 +72,6 @@ interface Ingestion {
 
 interface ModelBuild {
   id: string
-  tenant_id: string
   integration_version_id: string
   ddl_artifact_id: string
   ddl_content_sha256: string
@@ -363,7 +362,6 @@ function copyCollections<T extends object>(collections: Record<string, T[]>): Re
 function modelBuild(integrationId: string, overrides: Partial<ModelBuild> = {}): ModelBuild {
   return {
     id: '12121212-1212-4212-8212-121212121212',
-    tenant_id: tenantId,
     integration_version_id: integrationId,
     ddl_artifact_id: importedDdlId,
     ddl_content_sha256: '9'.repeat(64),
