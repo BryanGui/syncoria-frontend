@@ -67,6 +67,26 @@ export interface AdminIntegrationProvider {
   created_at: string
 }
 
+export type AdminIntegrationModelBuildStatus = 'prepared' | 'building' | 'completed' | 'failed'
+
+/** Sanitized build metadata only. The DDL itself is never returned by this contract. */
+export interface AdminIntegrationModelBuild {
+  id: string
+  integration_version_id: string
+  ddl_artifact_id: string
+  ddl_content_sha256: string
+  physical_schema_name: string
+  status: AdminIntegrationModelBuildStatus
+  created_at: string
+  updated_at: string
+  is_current: boolean
+  started_at: string | null
+  completed_at: string | null
+  failure_code: string | null
+  table_count: number | null
+  index_count: number | null
+}
+
 export type AdminIntegrationFailureStatus =
   | 'unauthenticated'
   | 'not_found'
@@ -117,6 +137,10 @@ export type AdminIntegrationProviderListResult =
 
 export type AdminIntegrationDeleteIngestionResult =
   | { status: 'deleted' }
+  | AdminIntegrationFailure
+
+export type AdminIntegrationModelBuildResult =
+  | { status: 'loaded'; model: AdminIntegrationModelBuild }
   | AdminIntegrationFailure
 
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i
@@ -283,6 +307,43 @@ function parseIntegrationProvider(value: unknown): AdminIntegrationProvider | nu
   }
 }
 
+function parseModelBuild(value: unknown, integrationId: string): AdminIntegrationModelBuild | null {
+  if (!isObject(value)
+    || !uuidPattern.test(String(value.id))
+    || value.integration_version_id !== integrationId
+    || !uuidPattern.test(String(value.ddl_artifact_id))
+    || typeof value.ddl_content_sha256 !== 'string'
+    || !/^[a-f0-9]{64}$/i.test(value.ddl_content_sha256)
+    || !isBoundedString(value.physical_schema_name, 63)
+    || !/^[a-z][a-z0-9_]{0,62}$/.test(value.physical_schema_name)
+    || (value.status !== 'prepared' && value.status !== 'building'
+      && value.status !== 'completed' && value.status !== 'failed')
+    || !isDateTime(value.created_at)
+    || !isDateTime(value.updated_at)
+    || typeof value.is_current !== 'boolean'
+    || (value.started_at !== null && !isDateTime(value.started_at))
+    || (value.completed_at !== null && !isDateTime(value.completed_at))
+    || !isNullableBoundedString(value.failure_code, 64)
+    || (value.table_count !== null && !isNonNegativeInteger(value.table_count))
+    || (value.index_count !== null && !isNonNegativeInteger(value.index_count))) return null
+  return {
+    id: value.id as string,
+    integration_version_id: value.integration_version_id as string,
+    ddl_artifact_id: value.ddl_artifact_id as string,
+    ddl_content_sha256: value.ddl_content_sha256 as string,
+    physical_schema_name: value.physical_schema_name as string,
+    status: value.status,
+    created_at: value.created_at as string,
+    updated_at: value.updated_at as string,
+    is_current: value.is_current,
+    started_at: value.started_at as string | null,
+    completed_at: value.completed_at as string | null,
+    failure_code: value.failure_code as string | null,
+    table_count: value.table_count as number | null,
+    index_count: value.index_count as number | null,
+  }
+}
+
 function integrationEndpoint(tenantId: string, integrationId?: string): string {
   const endpoint = `/admin/tenants/${encodeURIComponent(tenantId)}/integrations`
   return integrationId === undefined ? endpoint : `${endpoint}/${encodeURIComponent(integrationId)}`
@@ -308,6 +369,7 @@ function mapStatus(status: number): AdminIntegrationFailureStatus | null {
   if (status === 404) return 'not_found'
   if (status === 409) return 'conflict'
   if (status === 413 || status === 422) return 'invalid'
+  if (status === 500) return 'error'
   return null
 }
 
@@ -792,6 +854,54 @@ export async function selectAdminIntegrationDdl(
 function ingestionEndpoint(tenantId: string, integrationId: string, providerRecordId?: string): string {
   const endpoint = `${integrationEndpoint(tenantId, integrationId)}/ingestions`
   return providerRecordId === undefined ? endpoint : `${endpoint}/${encodeURIComponent(providerRecordId)}`
+}
+
+function modelEndpoint(tenantId: string, integrationId: string, action?: 'prepare' | 'build'): string {
+  const endpoint = `${integrationEndpoint(tenantId, integrationId)}/model`
+  return action === undefined ? endpoint : `${endpoint}/${action}`
+}
+
+export async function fetchAdminIntegrationModel(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationModelBuildResult> {
+  if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, modelEndpoint(tenantId, integrationId),
+    { method: 'GET' }, 'load_integration_model', (value) => parseModelBuild(value, integrationId),
+    signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', model: result.value } : result
+}
+
+export async function prepareAdminIntegrationModel(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationModelBuildResult> {
+  if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, modelEndpoint(tenantId, integrationId, 'prepare'),
+    { method: 'POST' }, 'prepare_integration_model', (value) => parseModelBuild(value, integrationId),
+    signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', model: result.value } : result
+}
+
+export async function buildAdminIntegrationModel(
+  apiBaseUrl: string | null, tenantId: string, integrationId: string,
+  signal?: AbortSignal, request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationModelBuildResult> {
+  if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, modelEndpoint(tenantId, integrationId, 'build'),
+    // The backend rejects a body here. In particular, do not add Content-Type.
+    { method: 'POST' }, 'build_integration_model', (value) => parseModelBuild(value, integrationId),
+    signal, request, logger,
+  )
+  return result.status === 'loaded' ? { status: 'loaded', model: result.value } : result
 }
 
 export async function fetchAdminIntegrationIngestions(

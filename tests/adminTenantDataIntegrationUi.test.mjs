@@ -116,7 +116,23 @@ test('makes the reference dataset an explicit third step scoped by provider reco
   assert.match(component, /Sélectionnez un DDL à l’étape 2 avant de constituer le jeu de données de référence/)
   assert.match(component, /Aucune ingestion terminée disponible pour cette connexion/)
   assert.match(component, /Retirer l’ingestion de référence/)
-  assert.doesNotMatch(component, /Étape 4/)
+  assert.match(component, /Étape 4 — Construire le modèle PostgreSQL/)
+})
+
+test('adds a single guarded model-build action without SQL or destructive controls', () => {
+  assert.match(api, /AdminIntegrationModelBuild/)
+  assert.match(api, /fetchAdminIntegrationModel/)
+  assert.match(api, /prepareAdminIntegrationModel/)
+  assert.match(api, /buildAdminIntegrationModel/)
+  assert.match(component, /model_not_prepared/)
+  assert.match(component, /Construire le modèle PostgreSQL/)
+  assert.match(component, /Préparation du modèle…/)
+  assert.match(component, /Construction en cours…/)
+  assert.match(component, /modelAction !== null/)
+  assert.match(component, /Un modèle physique existe déjà pour cette version/)
+  assert.match(component, /invalidateModel/)
+  assert.doesNotMatch(api, /model\/build[\s\S]{0,200}Content-Type/)
+  assert.doesNotMatch(component, /Reconstruire le modèle|\bDROP\b|\breset\b/)
 })
 
 test('keeps canonical tenant-scoped API paths and redacted failures explicit', () => {
