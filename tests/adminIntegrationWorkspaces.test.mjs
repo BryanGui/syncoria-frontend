@@ -14,6 +14,7 @@ import {
   fetchAdminIntegrationDdls,
   fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
+  fetchAdminIntegrationModel,
   fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
@@ -21,12 +22,14 @@ import {
   importAdminIntegrationDdlCandidate,
   MAX_DDL_BYTES,
   patchAdminIntegration,
+  prepareAdminIntegrationModel,
   renameAdminIntegrationDdl,
   renameAdminIntegrationDdlCandidate,
   replaceAdminIntegrationProviders,
   selectAdminIntegrationDdl,
   selectAdminIntegrationDdlCandidate,
   selectAdminIntegrationIngestion,
+  buildAdminIntegrationModel,
 } from '../src/api/adminIntegrations.ts'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
@@ -98,6 +101,69 @@ function ingestion(overrides = {}) {
     ...overrides,
   }
 }
+
+function modelBuild(overrides = {}) {
+  return {
+    id: '77777777-7777-4777-8777-777777777777',
+    tenant_id: tenantId,
+    integration_version_id: integrationId,
+    ddl_artifact_id: ddlId,
+    ddl_content_sha256: 'b'.repeat(64),
+    physical_schema_name: 'syncoria_m_valid_model',
+    status: 'prepared',
+    created_at: '2026-09-18T10:00:00Z',
+    updated_at: '2026-09-18T10:00:00Z',
+    is_current: true,
+    started_at: null,
+    completed_at: null,
+    failure_code: null,
+    table_count: null,
+    index_count: null,
+    ...overrides,
+  }
+}
+
+test('parses sanitized model metadata and uses the model endpoints without a build body', async () => {
+  const calls = []
+  const request = async (url, options) => {
+    calls.push({ url, options })
+    if (url.endsWith('/build')) return Response.json(modelBuild({
+      status: 'completed', started_at: '2026-09-18T10:01:00Z',
+      completed_at: '2026-09-18T10:02:00Z', table_count: 2, index_count: 3,
+    }))
+    return Response.json(modelBuild())
+  }
+  const fetched = await fetchAdminIntegrationModel('https://api.example.com', tenantId, integrationId, undefined, request)
+  const prepared = await prepareAdminIntegrationModel('https://api.example.com', tenantId, integrationId, undefined, request)
+  const built = await buildAdminIntegrationModel('https://api.example.com', tenantId, integrationId, undefined, request)
+  assert.equal(fetched.status, 'loaded')
+  assert.equal(prepared.status, 'loaded')
+  assert.equal(built.status, 'loaded')
+  assert.equal(built.model.table_count, 2)
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/model`)
+  assert.equal(calls[1].options.method, 'POST')
+  assert.equal(calls[2].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/model/build`)
+  assert.equal(calls[2].options.body, undefined)
+  assert.equal(calls[2].options.headers['Content-Type'], undefined)
+})
+
+test('rejects invalid model status and preserves sanitized model failure codes', async () => {
+  const invalidStatus = await fetchAdminIntegrationModel(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(modelBuild({ status: 'unknown' })),
+  )
+  const invalidFailure = await fetchAdminIntegrationModel(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(modelBuild({ status: 'failed', failure_code: 42 })),
+  )
+  const failed = await buildAdminIntegrationModel(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json({ detail: { code: 'build_conflict', message: 'Private backend detail.' } }, { status: 409 }),
+  )
+  assert.deepEqual(invalidStatus, { status: 'error' })
+  assert.deepEqual(invalidFailure, { status: 'error' })
+  assert.deepEqual(failed, { status: 'conflict', code: 'build_conflict' })
+})
 
 test('uses the tenant-scoped version contract with credentials', async () => {
   const calls = []

@@ -10,6 +10,7 @@ import {
   fetchAdminIntegrationDdls,
   fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
+  fetchAdminIntegrationModel,
   fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
@@ -17,14 +18,17 @@ import {
   MAX_DDL_BYTES,
   renameAdminIntegrationDdlCandidate,
   replaceAdminIntegrationProviders,
+  prepareAdminIntegrationModel,
   selectAdminIntegrationDdlCandidate,
   selectAdminIntegrationIngestion,
+  buildAdminIntegrationModel,
   deleteAdminIntegrationIngestion,
   type AdminIntegration,
   type AdminIntegrationDdl,
   type AdminIntegrationDdlMetadata,
   type AdminIntegrationFailure,
   type AdminIntegrationIngestion,
+  type AdminIntegrationModelBuild,
   type AdminIntegrationProvider,
   type AdminIntegrationSummary,
   type IntegrationStatus,
@@ -195,16 +199,59 @@ function isValidReferenceIngestion(ingestion: AdminIntegrationIngestion): boolea
   return ingestion.status === 'completed' && !ingestion.archived
 }
 
+function modelFailureMessage(code: string | null): string {
+  if (code === 'invalid_ddl') return 'Le DDL sélectionné n’est pas un SQL PostgreSQL valide pour cette étape.'
+  if (code === 'unsupported_ddl') return 'Le DDL sélectionné contient une construction non prise en charge pour la création du modèle.'
+  if (code === 'build_failed') return 'La construction du modèle PostgreSQL a échoué.'
+  if (code === 'schema_exists' || code === 'rebuild_required') return 'Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour reconstruire le modèle.'
+  if (code === 'model_stale') return 'Les choix de cette intégration ont changé. Préparez un nouveau modèle avec les choix actuels.'
+  if (code === 'model_not_prepared') return 'Prêt à construire.'
+  if (code === 'build_conflict') return 'La construction ne peut pas démarrer dans l’état actuel du modèle.'
+  return 'La construction du modèle PostgreSQL a échoué.'
+}
+
+function ModelBuildSummary({
+  model,
+  state,
+}: {
+  model: AdminIntegrationModelBuild | null
+  state: LoadState
+}) {
+  if (state === 'loading') return <p className="versioned-integration__empty" role="status">Chargement du modèle PostgreSQL…</p>
+  if (state === 'error') return <p className="versioned-integration__empty" role="alert">Impossible de charger l’état du modèle PostgreSQL.</p>
+  if (model === null) return <p className="versioned-integration__empty">Aucun modèle PostgreSQL construit.</p>
+  const status = model.status === 'completed'
+    ? 'Modèle PostgreSQL construit'
+    : model.status === 'building'
+      ? 'Construction en cours…'
+      : model.status === 'prepared'
+        ? 'Prêt à construire'
+        : modelFailureMessage(model.failure_code)
+  return (
+    <div className="versioned-integration__model-summary" aria-label="Modèle PostgreSQL">
+      <strong>{status}</strong>
+      {model.status === 'completed' && model.table_count !== null ? <span>{model.table_count} tables</span> : null}
+      {model.status === 'completed' && model.index_count !== null ? <span>{model.index_count} index</span> : null}
+      {model.status === 'completed' && model.completed_at !== null ? <span>Terminé le {formatDateTime(model.completed_at)}</span> : null}
+      {!model.is_current ? <span>Ce résultat ne correspond plus aux choix actuels.</span> : null}
+    </div>
+  )
+}
+
 function ReadOnlyVersion({
   basedOn,
   ddls,
   ingestions,
   integration,
+  model,
+  modelState,
 }: {
   basedOn: AdminIntegrationSummary | null
   ddls: AdminIntegrationDdlMetadata[]
   ingestions: AdminIntegrationIngestion[]
   integration: AdminIntegration
+  model: AdminIntegrationModelBuild | null
+  modelState: LoadState
 }) {
   const selected = ddls.find((ddl) => ddl.is_selected) ?? null
   return (
@@ -227,6 +274,10 @@ function ReadOnlyVersion({
         {ddls.filter((ddl) => ddl.kind === 'source').length === 0
           ? <p className="versioned-integration__empty">Aucune source d’audit associée.</p>
           : ddls.filter((ddl) => ddl.kind === 'source').map((ddl) => <p key={ddl.id}>{ddl.source_provider ? providerLabel(ddl.source_provider) : 'Source'} — {ddl.source_audit_title ?? ddl.title}</p>)}
+      </div>
+      <div className="versioned-integration__readonly-list">
+        <h5>Modèle PostgreSQL</h5>
+        <ModelBuildSummary model={model} state={modelState} />
       </div>
       <div className="versioned-integration__readonly-list">
         <h5>Ingestions de référence</h5>
@@ -268,6 +319,11 @@ export function AdminTenantVersionedIntegration({
   const [ingestionCandidateIntegrationId, setIngestionCandidateIntegrationId] = useState<string | null>(null)
   const [ingestionCandidateState, setIngestionCandidateState] = useState<LoadState>('loading')
   const [ingestionCandidateReloadKey, setIngestionCandidateReloadKey] = useState(0)
+  const [model, setModel] = useState<AdminIntegrationModelBuild | null>(null)
+  const [modelIntegrationId, setModelIntegrationId] = useState<string | null>(null)
+  const [modelState, setModelState] = useState<LoadState>('loading')
+  const [modelReloadKey, setModelReloadKey] = useState(0)
+  const [modelAction, setModelAction] = useState<'preparing' | 'building' | null>(null)
   const [availableProviders, setAvailableProviders] = useState<AdminProviderRecord[]>([])
   const [availableProviderState, setAvailableProviderState] = useState<LoadState>('loading')
   const [availableProviderReloadKey, setAvailableProviderReloadKey] = useState(0)
@@ -302,6 +358,8 @@ export function AdminTenantVersionedIntegration({
   const currentIngestionCandidates = selectedId !== null && ingestionCandidateIntegrationId === selectedId ? ingestionCandidates : []
   const currentIngestionCandidateState: LoadState = selectedId !== null && ingestionCandidateIntegrationId === selectedId ? ingestionCandidateState : selectedId === null ? 'loaded' : 'loading'
   const selectedDdlId = currentDdls.find((ddl) => ddl.is_selected)?.id ?? null
+  const currentModel = selectedId !== null && modelIntegrationId === selectedId ? model : null
+  const currentModelState: LoadState = selectedId !== null && modelIntegrationId === selectedId ? modelState : selectedId === null ? 'loaded' : 'loading'
   const isArchivedTenant = tenantStatus !== 'active'
 
   function showFailure(result: AdminIntegrationFailure, fallback: string) {
@@ -323,6 +381,13 @@ export function AdminTenantVersionedIntegration({
     setDdls((current) => current.map((ddl) => ({ ...ddl, is_selected: ddl.id === ddlId })))
     setDetail((current) => current?.id === integrationId ? { ...current, selected_ddl_id: ddlId } : current)
     setIntegrations((current) => current.map((item) => item.id === integrationId ? { ...item, selected_ddl_id: ddlId } : item))
+  }
+
+  function invalidateModel(integrationId: string) {
+    setModel(null)
+    setModelIntegrationId(integrationId)
+    setModelState('loaded')
+    setModelReloadKey((current) => current + 1)
   }
 
   useEffect(() => {
@@ -468,6 +533,39 @@ export function AdminTenantVersionedIntegration({
     apiBaseUrl, ingestionReloadKey, isArchivedTenant, onSessionExpired,
     selectedDdlId, selectedId, selectedSummary?.status, tenantId, view,
   ])
+
+  useEffect(() => {
+    setModel(null)
+    setModelIntegrationId(selectedId)
+    if (selectedId === null) {
+      setModelState('loaded')
+      return undefined
+    }
+    const controller = new AbortController()
+    setModelState('loading')
+    void fetchAdminIntegrationModel(apiBaseUrl, tenantId, selectedId, controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      // A missing build is the normal initial state of step 4.
+      if (result.status === 'not_found') {
+        setModel(null)
+        setModelIntegrationId(selectedId)
+        setModelState('loaded')
+        return
+      }
+      if (result.status !== 'loaded') {
+        setModelState('error')
+        return
+      }
+      setModel(result.model)
+      setModelIntegrationId(selectedId)
+      setModelState('loaded')
+    })
+    return () => controller.abort()
+  }, [apiBaseUrl, modelReloadKey, onSessionExpired, selectedId, tenantId])
 
   useEffect(() => {
     setIngestionCandidates([])
@@ -644,6 +742,7 @@ export function AdminTenantVersionedIntegration({
         : integration))
       setIngestions([])
       setIngestionCandidates([])
+      invalidateModel(draft.id)
       setDdlPreview(null)
       setRenameId(null)
       setDeleteId(null)
@@ -664,6 +763,7 @@ export function AdminTenantVersionedIntegration({
       return false
     }
     applySelectedDdl(integrationId, ddlId)
+    invalidateModel(integrationId)
     return true
   }
 
@@ -706,6 +806,7 @@ export function AdminTenantVersionedIntegration({
       setIngestionState('loaded')
       setIngestionReloadKey((current) => current + 1)
       setIngestionCandidateReloadKey((current) => current + 1)
+      invalidateModel(selectedId)
       setNotification({ tone: 'success', message: 'Ingestion de référence sélectionnée.' })
     } finally {
       setMutationPending(false)
@@ -735,6 +836,7 @@ export function AdminTenantVersionedIntegration({
       setIngestionState('loaded')
       setIngestionReloadKey((current) => current + 1)
       setIngestionCandidateReloadKey((current) => current + 1)
+      invalidateModel(selectedId)
       setNotification({ tone: 'success', message: 'Ingestion de référence retirée.' })
     } finally {
       setMutationPending(false)
@@ -863,6 +965,7 @@ export function AdminTenantVersionedIntegration({
       } else {
         setDdls((current) => current.filter((ddl) => ddl.id !== ddlId))
       }
+      invalidateModel(integrationId)
       setDeleteId(null)
       setRenameId(null)
       setNotification({ tone: 'success', message: 'DDL supprimé.' })
@@ -895,6 +998,65 @@ export function AdminTenantVersionedIntegration({
     setDdlPreview(result.ddl)
   }
 
+  async function buildModel() {
+    if (selectedId === null || modelAction !== null) return
+    const integrationId = selectedId
+    setNotification(null)
+    setModelAction('preparing')
+    let shouldRefresh = false
+    try {
+      const prepared = await prepareAdminIntegrationModel(apiBaseUrl, tenantId, integrationId)
+      if (prepared.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (prepared.status !== 'loaded') {
+        showFailure(prepared, 'Le modèle PostgreSQL ne peut pas être préparé pour le moment.')
+        return
+      }
+      shouldRefresh = true
+      setModel(prepared.model)
+      setModelIntegrationId(integrationId)
+      setModelState('loaded')
+      if (!prepared.model.is_current) {
+        setNotification({ tone: 'error', message: 'Les choix de cette intégration ont changé. Préparez un nouveau modèle avec les choix actuels.' })
+        return
+      }
+      setModelAction('building')
+      const built = await buildAdminIntegrationModel(apiBaseUrl, tenantId, integrationId)
+      if (built.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (built.status !== 'loaded') {
+        setNotification({
+          tone: 'error',
+          message: built.code ? modelFailureMessage(built.code) : failureMessage(built, 'La construction du modèle PostgreSQL a échoué.'),
+        })
+        return
+      }
+      shouldRefresh = true
+      setModel(built.model)
+      setModelIntegrationId(integrationId)
+      setModelState('loaded')
+    } finally {
+      if (shouldRefresh && selectedIdRef.current === integrationId) {
+        const refreshed = await fetchAdminIntegrationModel(apiBaseUrl, tenantId, integrationId)
+        if (refreshed.status === 'unauthenticated') onSessionExpired()
+        else if (refreshed.status === 'not_found') {
+          setModel(null)
+          setModelIntegrationId(integrationId)
+          setModelState('loaded')
+        } else if (refreshed.status === 'loaded') {
+          setModel(refreshed.model)
+          setModelIntegrationId(integrationId)
+          setModelState('loaded')
+        } else setModelState('error')
+      }
+      setModelAction(null)
+    }
+  }
+
   function renderCreateView() {
     const selectedProviderIds = scopeIntegrationId === selectedId
       ? scopeProviders.map((provider) => provider.tenant_provider_record_id)
@@ -913,6 +1075,24 @@ export function AdminTenantVersionedIntegration({
       && hasSelectedProvider
       && selectedDdlId !== null
       && selectedSummary?.status === 'draft'
+    const referencesComplete = selectedReferenceCount === scopeProviders.length
+      && scopeProviders.length > 0
+      && !referencesLoading
+      && currentIngestionState === 'loaded'
+      && currentIngestionCandidateState === 'loaded'
+    const currentBuildIsCompleted = currentModel?.is_current && currentModel.status === 'completed'
+    const staleCompletedBuild = currentModel !== null
+      && !currentModel.is_current
+      && currentModel.status === 'completed'
+    const buildInProgress = currentModel?.is_current && currentModel.status === 'building'
+    const currentBuildHasFailed = currentModel?.is_current && currentModel.status === 'failed'
+    const canBuildModel = canConfigureReferences
+      && referencesComplete
+      && currentModelState === 'loaded'
+      && !currentBuildIsCompleted
+      && !staleCompletedBuild
+      && !buildInProgress
+      && !currentBuildHasFailed
 
     return (
       <div className="versioned-integration__create-workflow">
@@ -1086,6 +1266,31 @@ export function AdminTenantVersionedIntegration({
             </div>
           ) : null}
         </section>
+
+        <section aria-labelledby="integration-model-step-title" className="versioned-integration__ddl-step">
+          <div className="versioned-integration__ddl-step-heading">
+            <h4 id="integration-model-step-title">Étape 4 — Construire le modèle PostgreSQL</h4>
+          </div>
+          {isArchivedTenant ? <p className="versioned-integration__empty">Ce client archivé est en lecture seule.</p> : null}
+          {!isArchivedTenant && !providersLoading && !hasSelectedProvider ? <p className="versioned-integration__empty">Complétez l’étape 1 en sélectionnant au moins un provider.</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && selectedDdlId === null && !ddlLoading ? <p className="versioned-integration__empty">Complétez l’étape 2 en sélectionnant un DDL.</p> : null}
+          {!isArchivedTenant && hasSelectedProvider && selectedDdlId !== null && !referencesLoading && !referencesComplete ? <p className="versioned-integration__empty">Complétez l’étape 3 : {selectedReferenceCount} / {scopeProviders.length} {scopeProviders.length === 1 ? 'connexion couverte' : 'connexions couvertes'}.</p> : null}
+          {!isArchivedTenant && canConfigureReferences && currentModelState === 'error' ? <StructuralError message="Impossible de charger l’état du modèle PostgreSQL." onRetry={() => setModelReloadKey((current) => current + 1)} /> : null}
+          {!isArchivedTenant && canConfigureReferences && currentModelState === 'loading' ? <p className="versioned-integration__empty" role="status">Chargement du modèle PostgreSQL…</p> : null}
+          {!isArchivedTenant && canConfigureReferences && currentModelState === 'loaded' ? (
+            <div className="versioned-integration__model-action" aria-label="Construction du modèle PostgreSQL">
+              {currentModel === null ? <Badge tone="success">Prêt à construire</Badge> : null}
+              {currentModel?.is_current && currentModel.status === 'prepared' ? <Badge tone="success">Prêt à construire</Badge> : null}
+              {buildInProgress || modelAction === 'building' ? <p role="status">Construction en cours…</p> : null}
+              {modelAction === 'preparing' ? <p role="status">Préparation du modèle…</p> : null}
+              {currentBuildIsCompleted ? <ModelBuildSummary model={currentModel} state="loaded" /> : null}
+              {currentModel?.is_current && currentModel.status === 'failed' ? <p role="alert">{modelFailureMessage(currentModel.failure_code)}</p> : null}
+              {staleCompletedBuild ? <p role="alert">Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour matérialiser un autre modèle.</p> : null}
+              {!currentModel?.is_current && currentModel?.status !== 'completed' ? <p className="versioned-integration__empty">Les choix ont changé ; une nouvelle préparation sera faite avec les choix actuels.</p> : null}
+              {canBuildModel ? <Button disabled={modelAction !== null} loading={modelAction !== null} onClick={() => void buildModel()} variant="primary">Construire le modèle PostgreSQL</Button> : null}
+            </div>
+          ) : null}
+        </section>
       </div>
     )
   }
@@ -1102,7 +1307,14 @@ export function AdminTenantVersionedIntegration({
       : null
     return (
       <>
-        <ReadOnlyVersion basedOn={basedOn} ddls={currentDdls} ingestions={currentIngestions} integration={currentDetail} />
+        <ReadOnlyVersion
+          basedOn={basedOn}
+          ddls={currentDdls}
+          ingestions={currentIngestions}
+          integration={currentDetail}
+          model={currentModel}
+          modelState={currentModelState}
+        />
         <ReadOnlyDdlLibrary ddls={currentDdls} ddlPreview={ddlPreview} onClosePreview={() => setDdlPreview(null)} onPreview={(ddlId) => void openDdlPreview(ddlId)} />
       </>
     )

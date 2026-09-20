@@ -70,6 +70,24 @@ interface Ingestion {
   created_at: string
 }
 
+interface ModelBuild {
+  id: string
+  tenant_id: string
+  integration_version_id: string
+  ddl_artifact_id: string
+  ddl_content_sha256: string
+  physical_schema_name: string
+  status: 'prepared' | 'building' | 'completed' | 'failed'
+  created_at: string
+  updated_at: string
+  is_current: boolean
+  started_at: string | null
+  completed_at: string | null
+  failure_code: string | null
+  table_count: number | null
+  index_count: number | null
+}
+
 interface AuditReport {
   id: string
   title: string
@@ -322,6 +340,8 @@ interface BackendOptions {
   reports?: AuditReport[]
   providers?: ProviderRecord[]
   providerScopes?: Record<string, string[]>
+  models?: Record<string, ModelBuild>
+  modelBuildFailureCodes?: Record<string, string>
 }
 
 interface MockBackend {
@@ -330,11 +350,33 @@ interface MockBackend {
   catalogue: Ddl[]
   providerScopes: Record<string, string[]>
   ingestionCandidates: Record<string, Ingestion[]>
+  models: Record<string, ModelBuild>
   requests: RecordedRequest[]
 }
 
 function copyCollections<T extends object>(collections: Record<string, T[]>): Record<string, T[]> {
   return Object.fromEntries(Object.entries(collections).map(([key, values]) => [key, values.map((value) => ({ ...value }))]))
+}
+
+function modelBuild(integrationId: string, overrides: Partial<ModelBuild> = {}): ModelBuild {
+  return {
+    id: '12121212-1212-4212-8212-121212121212',
+    tenant_id: tenantId,
+    integration_version_id: integrationId,
+    ddl_artifact_id: importedDdlId,
+    ddl_content_sha256: '9'.repeat(64),
+    physical_schema_name: 'syncoria_m_test_model',
+    status: 'prepared',
+    created_at: '2026-09-18T10:00:00Z',
+    updated_at: '2026-09-18T10:00:00Z',
+    is_current: true,
+    started_at: null,
+    completed_at: null,
+    failure_code: null,
+    table_count: null,
+    index_count: null,
+    ...overrides,
+  }
 }
 
 async function openIntegration(page: Page, options: BackendOptions = {}): Promise<MockBackend> {
@@ -360,6 +402,7 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
       [activeId]: [providerAId],
       [draftId]: [providerAId, providerBId],
     }).map(([key, values]) => [key, [...values]])),
+    models: Object.fromEntries(Object.entries(options.models ?? {}).map(([key, value]) => [key, { ...value }])),
     requests: [],
   }
   const ingestions = copyCollections(options.ingestions ?? {
@@ -459,6 +502,34 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
             }
           }),
         })
+      }
+
+      if (parts[1] === 'model') {
+        if (parts.length === 2 && method === 'GET') {
+          const model = backend.models[integrationId]
+          return model
+            ? route.fulfill({ json: model })
+            : route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'No model.' } } })
+        }
+        if (parts[2] === 'prepare' && method === 'POST') {
+          const existing = backend.models[integrationId]
+          const prepared = existing?.is_current ? existing : modelBuild(integrationId)
+          backend.models[integrationId] = prepared
+          return route.fulfill({ json: prepared })
+        }
+        if (parts[2] === 'build' && method === 'POST') {
+          const failureCode = options.modelBuildFailureCodes?.[integrationId]
+          if (failureCode) return route.fulfill({ status: 409, json: { detail: { code: failureCode, message: 'Private database detail.' } } })
+          const prepared = backend.models[integrationId]
+          if (!prepared) return route.fulfill({ status: 409, json: { detail: { code: 'model_not_prepared', message: 'Not prepared.' } } })
+          const completed = modelBuild(integrationId, {
+            ...prepared,
+            status: 'completed', started_at: '2026-09-18T10:01:00Z',
+            completed_at: '2026-09-18T10:02:00Z', table_count: 2, index_count: 3,
+          })
+          backend.models[integrationId] = completed
+          return route.fulfill({ json: completed })
+        }
       }
 
       if (parts[1] === 'ddl-candidates') {
@@ -603,6 +674,7 @@ async function openCreate(page: Page) {
   await expect(page.getByRole('heading', { name: 'Étape 1 — Choisir les providers à intégrer', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Étape 2 — Choisir un DDL', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Étape 3 — Constituer le jeu de données de référence', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Étape 4 — Construire le modèle PostgreSQL', exact: true })).toBeVisible()
 }
 
 function ddlList(page: Page) {
@@ -912,6 +984,88 @@ test('keeps exactly one explicitly selected DDL across successive choices', asyn
   await expect(auditRadio).not.toBeChecked()
   await expect(ddlList(page).locator('input[type="radio"]:checked')).toHaveCount(1)
   expect(backend.requests.filter((request) => request.path.endsWith('/selection') && request.method === 'PUT')).toHaveLength(2)
+})
+
+test('keeps the model step visible and blocked until the first three steps are complete', async ({ page }) => {
+  await openIntegration(page)
+  await openCreate(page)
+
+  await expect(page.getByText('Complétez l’étape 2 en sélectionnant un DDL.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+})
+
+test('prepares then builds the completed model without a request body', async ({ page }) => {
+  const selectedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const secondReference = {
+    ...ingestion,
+    tenant_provider_record_id: providerBId,
+    provider: 'google_sheets',
+    correlation_id: thirdCorrelationId,
+  }
+  const backend = await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference] },
+  })
+  await openCreate(page)
+
+  const button = page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })
+  await expect(button).toBeVisible()
+  await button.dblclick()
+  await expect(page.getByText('Modèle PostgreSQL construit', { exact: true })).toBeVisible()
+  await expect(page.getByText('2 tables', { exact: true })).toBeVisible()
+  await expect(page.getByText('3 index', { exact: true })).toBeVisible()
+  const modelRequests = backend.requests.filter((request) => request.path.includes('/model'))
+  const prepareIndex = modelRequests.findIndex((request) => request.path.endsWith('/model/prepare'))
+  const buildIndex = modelRequests.findIndex((request) => request.path.endsWith('/model/build'))
+  expect(prepareIndex).toBeGreaterThanOrEqual(0)
+  expect(buildIndex).toBeGreaterThan(prepareIndex)
+  expect(modelRequests.filter((request) => request.path.endsWith('/model/build'))).toHaveLength(1)
+  expect(modelRequests.find((request) => request.path.endsWith('/model/build'))?.body).toBeUndefined()
+  expect(backend.requests.filter((request) => /DROP|reset|rebuild/i.test(request.path))).toHaveLength(0)
+})
+
+test('shows sanitized failed and stale-completed model states without a rebuild action', async ({ page }) => {
+  const selectedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const secondReference = { ...ingestion, tenant_provider_record_id: providerBId, provider: 'google_sheets', correlation_id: thirdCorrelationId }
+  await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference] },
+    models: {
+      [draftId]: modelBuild(draftId, {
+        status: 'completed', is_current: false, completed_at: '2026-09-18T10:02:00Z', table_count: 2, index_count: 3,
+      }),
+    },
+  })
+  await openCreate(page)
+  await expect(page.getByText('Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour matérialiser un autre modèle.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+
+})
+
+test('shows a sanitized model failure and read-only active model result', async ({ page }) => {
+  const failedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const secondReference = { ...ingestion, tenant_provider_record_id: providerBId, provider: 'google_sheets', correlation_id: thirdCorrelationId }
+  await openIntegration(page, {
+    integrations: [active, failedDraft, archived],
+    ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference], [archivedId]: [ingestion] },
+    models: {
+      [draftId]: modelBuild(draftId, { status: 'failed', failure_code: 'invalid_ddl' }),
+      [activeId]: modelBuild(activeId, { status: 'completed', completed_at: '2026-09-18T10:02:00Z', table_count: 4, index_count: 5 }),
+      [archivedId]: modelBuild(archivedId, { status: 'completed', completed_at: '2026-09-18T10:02:00Z', table_count: 1, index_count: 1 }),
+    },
+  })
+  await openCreate(page)
+  await expect(page.getByText('Le DDL sélectionné n’est pas un SQL PostgreSQL valide pour cette étape.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Active', exact: true }).click()
+  await expect(page.getByText('Modèle PostgreSQL construit', { exact: true })).toBeVisible()
+  await expect(page.getByText('4 tables', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Versions', exact: true }).click()
+  await page.getByRole('button', { name: /Novalia historique/ }).click()
+  await expect(page.getByText('1 tables', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
 })
 
 test('keeps Active and Versions read-only behavior intact', async ({ page }) => {
