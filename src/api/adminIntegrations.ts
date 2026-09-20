@@ -72,7 +72,6 @@ export type AdminIntegrationModelBuildStatus = 'prepared' | 'building' | 'comple
 /** Sanitized build metadata only. The DDL itself is never returned by this contract. */
 export interface AdminIntegrationModelBuild {
   id: string
-  tenant_id: string
   integration_version_id: string
   ddl_artifact_id: string
   ddl_content_sha256: string
@@ -311,7 +310,6 @@ function parseIntegrationProvider(value: unknown): AdminIntegrationProvider | nu
 function parseModelBuild(value: unknown, tenantId: string, integrationId: string): AdminIntegrationModelBuild | null {
   if (!isObject(value)
     || !uuidPattern.test(String(value.id))
-    || value.tenant_id !== tenantId
     || value.integration_version_id !== integrationId
     || !uuidPattern.test(String(value.ddl_artifact_id))
     || typeof value.ddl_content_sha256 !== 'string'
@@ -330,7 +328,6 @@ function parseModelBuild(value: unknown, tenantId: string, integrationId: string
     || (value.index_count !== null && !isNonNegativeInteger(value.index_count))) return null
   return {
     id: value.id as string,
-    tenant_id: value.tenant_id as string,
     integration_version_id: value.integration_version_id as string,
     ddl_artifact_id: value.ddl_artifact_id as string,
     ddl_content_sha256: value.ddl_content_sha256 as string,
