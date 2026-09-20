@@ -372,6 +372,7 @@ function mapStatus(status: number): AdminIntegrationFailureStatus | null {
   if (status === 404) return 'not_found'
   if (status === 409) return 'conflict'
   if (status === 413 || status === 422) return 'invalid'
+  if (status === 500) return 'error'
   return null
 }
 

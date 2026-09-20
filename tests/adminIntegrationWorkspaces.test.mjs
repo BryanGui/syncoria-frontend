@@ -165,6 +165,18 @@ test('rejects invalid model status and preserves sanitized model failure codes',
   assert.deepEqual(failed, { status: 'conflict', code: 'build_conflict' })
 })
 
+test('preserves the sanitized build failure code from an HTTP 500 response', async () => {
+  const failed = await buildAdminIntegrationModel(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(
+      { detail: { code: 'build_failed', message: 'Private backend detail.' } },
+      { status: 500 },
+    ),
+  )
+
+  assert.deepEqual(failed, { status: 'error', code: 'build_failed' })
+})
+
 test('uses the tenant-scoped version contract with credentials', async () => {
   const calls = []
   const request = async (url, options) => {

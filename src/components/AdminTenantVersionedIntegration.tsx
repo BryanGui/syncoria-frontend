@@ -213,9 +213,11 @@ function modelFailureMessage(code: string | null): string {
 function ModelBuildSummary({
   model,
   state,
+  showStaleStatus = false,
 }: {
   model: AdminIntegrationModelBuild | null
   state: LoadState
+  showStaleStatus?: boolean
 }) {
   if (state === 'loading') return <p className="versioned-integration__empty" role="status">Chargement du modèle PostgreSQL…</p>
   if (state === 'error') return <p className="versioned-integration__empty" role="alert">Impossible de charger l’état du modèle PostgreSQL.</p>
@@ -233,7 +235,7 @@ function ModelBuildSummary({
       {model.status === 'completed' && model.table_count !== null ? <span>{model.table_count} tables</span> : null}
       {model.status === 'completed' && model.index_count !== null ? <span>{model.index_count} index</span> : null}
       {model.status === 'completed' && model.completed_at !== null ? <span>Terminé le {formatDateTime(model.completed_at)}</span> : null}
-      {!model.is_current ? <span>Ce résultat ne correspond plus aux choix actuels.</span> : null}
+      {showStaleStatus && !model.is_current ? <span>Ce résultat ne correspond plus aux choix actuels.</span> : null}
     </div>
   )
 }
@@ -386,7 +388,7 @@ export function AdminTenantVersionedIntegration({
   function invalidateModel(integrationId: string) {
     setModel(null)
     setModelIntegrationId(integrationId)
-    setModelState('loaded')
+    setModelState('loading')
     setModelReloadKey((current) => current + 1)
   }
 
@@ -1283,7 +1285,7 @@ export function AdminTenantVersionedIntegration({
               {currentModel?.is_current && currentModel.status === 'prepared' ? <Badge tone="success">Prêt à construire</Badge> : null}
               {buildInProgress || modelAction === 'building' ? <p role="status">Construction en cours…</p> : null}
               {modelAction === 'preparing' ? <p role="status">Préparation du modèle…</p> : null}
-              {currentBuildIsCompleted ? <ModelBuildSummary model={currentModel} state="loaded" /> : null}
+              {currentBuildIsCompleted ? <ModelBuildSummary model={currentModel} showStaleStatus state="loaded" /> : null}
               {currentModel?.is_current && currentModel.status === 'failed' ? <p role="alert">{modelFailureMessage(currentModel.failure_code)}</p> : null}
               {staleCompletedBuild ? <p role="alert">Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour matérialiser un autre modèle.</p> : null}
               {!currentModel?.is_current && currentModel?.status !== 'completed' ? <p className="versioned-integration__empty">Les choix ont changé ; une nouvelle préparation sera faite avec les choix actuels.</p> : null}

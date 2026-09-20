@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, type Route } from '@playwright/test'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
 const activeId = '22222222-2222-4222-8222-222222222222'
@@ -352,6 +352,8 @@ interface MockBackend {
   ingestionCandidates: Record<string, Ingestion[]>
   models: Record<string, ModelBuild>
   requests: RecordedRequest[]
+  deferModelFetches: boolean
+  deferredModelFetches: Route[]
 }
 
 function copyCollections<T extends object>(collections: Record<string, T[]>): Record<string, T[]> {
@@ -404,6 +406,8 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
     }).map(([key, values]) => [key, [...values]])),
     models: Object.fromEntries(Object.entries(options.models ?? {}).map(([key, value]) => [key, { ...value }])),
     requests: [],
+    deferModelFetches: false,
+    deferredModelFetches: [],
   }
   const ingestions = copyCollections(options.ingestions ?? {
     [activeId]: [ingestion],
@@ -506,6 +510,10 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
 
       if (parts[1] === 'model') {
         if (parts.length === 2 && method === 'GET') {
+          if (backend.deferModelFetches) {
+            backend.deferredModelFetches.push(route)
+            return
+          }
           const model = backend.models[integrationId]
           return model
             ? route.fulfill({ json: model })
@@ -1050,8 +1058,8 @@ test('shows a sanitized model failure and read-only active model result', async 
     ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference], [archivedId]: [ingestion] },
     models: {
       [draftId]: modelBuild(draftId, { status: 'failed', failure_code: 'invalid_ddl' }),
-      [activeId]: modelBuild(activeId, { status: 'completed', completed_at: '2026-09-18T10:02:00Z', table_count: 4, index_count: 5 }),
-      [archivedId]: modelBuild(archivedId, { status: 'completed', completed_at: '2026-09-18T10:02:00Z', table_count: 1, index_count: 1 }),
+      [activeId]: modelBuild(activeId, { status: 'completed', is_current: false, completed_at: '2026-09-18T10:02:00Z', table_count: 4, index_count: 5 }),
+      [archivedId]: modelBuild(archivedId, { status: 'completed', is_current: false, completed_at: '2026-09-18T10:02:00Z', table_count: 1, index_count: 1 }),
     },
   })
   await openCreate(page)
@@ -1061,11 +1069,38 @@ test('shows a sanitized model failure and read-only active model result', async 
   await page.getByRole('button', { name: 'Active', exact: true }).click()
   await expect(page.getByText('Modèle PostgreSQL construit', { exact: true })).toBeVisible()
   await expect(page.getByText('4 tables', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ce résultat ne correspond plus aux choix actuels.', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Versions', exact: true }).click()
   await page.getByRole('button', { name: /Novalia historique/ }).click()
   await expect(page.getByText('1 tables', { exact: true })).toBeVisible()
+  await expect(page.getByText('Ce résultat ne correspond plus aux choix actuels.', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+})
+
+test('keeps the model action hidden while an invalidated model is revalidated', async ({ page }) => {
+  const selectedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const secondReference = {
+    ...ingestion,
+    tenant_provider_record_id: providerBId,
+    provider: 'google_sheets',
+    correlation_id: thirdCorrelationId,
+  }
+  const backend = await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference] },
+    models: { [draftId]: modelBuild(draftId) },
+  })
+  await openCreate(page)
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toBeVisible()
+
+  backend.deferModelFetches = true
+  await page.getByRole('radio', { name: 'Sélectionner DDL audit — Audit Notion', exact: true }).click()
+
+  await expect(page.getByText('Chargement du modèle PostgreSQL…', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+
+  await Promise.all(backend.deferredModelFetches.map((route) => route.fulfill({ status: 404, json: { detail: { code: 'not_found' } } })))
 })
 
 test('keeps Active and Versions read-only behavior intact', async ({ page }) => {
