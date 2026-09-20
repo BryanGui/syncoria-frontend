@@ -307,7 +307,7 @@ function parseIntegrationProvider(value: unknown): AdminIntegrationProvider | nu
   }
 }
 
-function parseModelBuild(value: unknown, tenantId: string, integrationId: string): AdminIntegrationModelBuild | null {
+function parseModelBuild(value: unknown, integrationId: string): AdminIntegrationModelBuild | null {
   if (!isObject(value)
     || !uuidPattern.test(String(value.id))
     || value.integration_version_id !== integrationId
@@ -869,7 +869,7 @@ export async function fetchAdminIntegrationModel(
   if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
   const result = await requestPayload(
     apiBaseUrl, tenantId, modelEndpoint(tenantId, integrationId),
-    { method: 'GET' }, 'load_integration_model', (value) => parseModelBuild(value, tenantId, integrationId),
+    { method: 'GET' }, 'load_integration_model', (value) => parseModelBuild(value, integrationId),
     signal, request, logger,
   )
   return result.status === 'loaded' ? { status: 'loaded', model: result.value } : result
@@ -883,7 +883,7 @@ export async function prepareAdminIntegrationModel(
   if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
   const result = await requestPayload(
     apiBaseUrl, tenantId, modelEndpoint(tenantId, integrationId, 'prepare'),
-    { method: 'POST' }, 'prepare_integration_model', (value) => parseModelBuild(value, tenantId, integrationId),
+    { method: 'POST' }, 'prepare_integration_model', (value) => parseModelBuild(value, integrationId),
     signal, request, logger,
   )
   return result.status === 'loaded' ? { status: 'loaded', model: result.value } : result
@@ -898,7 +898,7 @@ export async function buildAdminIntegrationModel(
   const result = await requestPayload(
     apiBaseUrl, tenantId, modelEndpoint(tenantId, integrationId, 'build'),
     // The backend rejects a body here. In particular, do not add Content-Type.
-    { method: 'POST' }, 'build_integration_model', (value) => parseModelBuild(value, tenantId, integrationId),
+    { method: 'POST' }, 'build_integration_model', (value) => parseModelBuild(value, integrationId),
     signal, request, logger,
   )
   return result.status === 'loaded' ? { status: 'loaded', model: result.value } : result
