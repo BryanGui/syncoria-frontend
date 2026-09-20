@@ -105,7 +105,6 @@ function ingestion(overrides = {}) {
 function modelBuild(overrides = {}) {
   return {
     id: '77777777-7777-4777-8777-777777777777',
-    tenant_id: tenantId,
     integration_version_id: integrationId,
     ddl_artifact_id: ddlId,
     ddl_content_sha256: 'b'.repeat(64),
