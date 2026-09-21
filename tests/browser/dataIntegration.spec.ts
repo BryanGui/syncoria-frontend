@@ -87,6 +87,16 @@ interface ModelBuild {
   index_count: number | null
 }
 
+interface ModelStructure {
+  integration_version_id: string
+  status: IntegrationStatus
+  physical_schema_name: string
+  tables: Array<{
+    name: string
+    columns: Array<{ name: string; data_type: string; nullable: boolean }>
+  }>
+}
+
 interface AuditReport {
   id: string
   title: string
@@ -340,6 +350,8 @@ interface BackendOptions {
   providers?: ProviderRecord[]
   providerScopes?: Record<string, string[]>
   models?: Record<string, ModelBuild>
+  structures?: Record<string, ModelStructure>
+  structureFailureCodes?: Record<string, string>
   modelBuildFailureCodes?: Record<string, string>
 }
 
@@ -350,6 +362,7 @@ interface MockBackend {
   providerScopes: Record<string, string[]>
   ingestionCandidates: Record<string, Ingestion[]>
   models: Record<string, ModelBuild>
+  structures: Record<string, ModelStructure>
   requests: RecordedRequest[]
   deferModelFetches: boolean
   deferredModelFetches: Route[]
@@ -403,6 +416,15 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
       [draftId]: [providerAId, providerBId],
     }).map(([key, values]) => [key, [...values]])),
     models: Object.fromEntries(Object.entries(options.models ?? {}).map(([key, value]) => [key, { ...value }])),
+    structures: Object.fromEntries(Object.entries(options.structures ?? {}).map(
+      ([key, value]) => [key, {
+        ...value,
+        tables: value.tables.map((table) => ({
+          ...table,
+          columns: table.columns.map((column) => ({ ...column })),
+        })),
+      }],
+    )),
     requests: [],
     deferModelFetches: false,
     deferredModelFetches: [],
@@ -515,6 +537,19 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
             }
           }),
         })
+      }
+
+      if (parts[1] === 'structure' && method === 'GET') {
+        const structure = backend.structures[integrationId]
+        return structure
+          ? route.fulfill({ json: structure })
+          : route.fulfill({
+            status: 409,
+            json: { detail: {
+              code: options.structureFailureCodes?.[integrationId] ?? 'model_not_built',
+              message: 'Model unavailable.',
+            } },
+          })
       }
 
       if (parts[1] === 'model') {
@@ -701,6 +736,44 @@ function ddlList(page: Page) {
 function importedRow(page: Page, title: string) {
   return page.locator('.versioned-integration__ddl-row--imported').filter({ hasText: title })
 }
+
+test('explores materialized tables and reports versions without a completed model', async ({ page }) => {
+  await openIntegration(page, {
+    integrations: [active, draft, archived],
+    structures: {
+      [activeId]: {
+        integration_version_id: activeId,
+        status: 'active',
+        physical_schema_name: 'syncoria_m_active_model',
+        tables: [{
+          name: 'placements',
+          columns: [
+            { name: '__syncoria_provider_record_id', data_type: 'text', nullable: true },
+            { name: 'amount', data_type: 'numeric(12,2)', nullable: false },
+          ],
+        }],
+      },
+    },
+    structureFailureCodes: { [archivedId]: 'conflict' },
+  })
+
+  await page.getByRole('button', { name: 'Données', exact: true }).click()
+  const dataExplorer = page.locator('.tenant-model-data')
+  await expect(dataExplorer.getByRole('heading', { name: 'Données', exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Novalia Talents v1 · v1', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Actif', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByRole('button', { name: /placements/ })).toBeVisible()
+  await expect(dataExplorer.getByText('__syncoria_provider_record_id', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('numeric(12,2)', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Non', { exact: true })).toBeVisible()
+
+  await dataExplorer.locator('select').selectOption(draftId)
+  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toBeVisible()
+
+  await dataExplorer.locator('select').selectOption(archivedId)
+  await expect(dataExplorer.getByText('La structure du modèle PostgreSQL ne peut pas être chargée.', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toHaveCount(0)
+})
 
 test('creates a draft lazily on the first provider change and persists A then A+B', async ({ page }) => {
   const backend = await openIntegration(page, {
