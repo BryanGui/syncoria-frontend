@@ -123,6 +123,10 @@ export type AdminIntegrationDeleteDdlResult =
   | { status: 'deleted' }
   | AdminIntegrationFailure
 
+export type AdminIntegrationDeleteResult =
+  | { status: 'deleted' }
+  | AdminIntegrationFailure
+
 export type AdminIntegrationIngestionListResult =
   | { status: 'loaded'; ingestions: AdminIntegrationIngestion[] }
   | AdminIntegrationFailure
@@ -498,6 +502,36 @@ export async function createAdminIntegration(
     }, 'create_integration', (value) => parseIntegration(value, tenantId), signal, request, logger,
   )
   return result.status === 'loaded' ? { status: 'loaded', integration: result.value } : result
+}
+
+export async function deleteAdminIntegration(
+  apiBaseUrl: string | null,
+  tenantId: string,
+  integrationId: string,
+  signal?: AbortSignal,
+  request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationDeleteResult> {
+  if (!validIdentifiers(tenantId, integrationId) || apiBaseUrl === null) return { status: 'error' }
+  try {
+    const response = await request(`${apiBaseUrl}${integrationEndpoint(tenantId, integrationId)}`, {
+      method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' }, signal,
+    })
+    const mapped = mapStatus(response.status)
+    if (mapped !== null) {
+      if (mapped === 'unauthenticated') return { status: mapped }
+      const code = await errorCode(response)
+      return code === undefined ? { status: mapped } : { status: mapped, code }
+    }
+    if (!response.ok) {
+      logFailure(logger, 'delete_integration', response.status)
+      return { status: 'error' }
+    }
+    return { status: 'deleted' }
+  } catch (error: unknown) {
+    if (!signal?.aborted) logFailure(logger, 'delete_integration', undefined, error)
+    return { status: 'error' }
+  }
 }
 
 export async function fetchAdminIntegrationProviders(

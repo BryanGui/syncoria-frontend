@@ -6,6 +6,7 @@ import {
   addAdminIntegrationDdlFromAudit,
   cloneAdminIntegration,
   createAdminIntegration,
+  deleteAdminIntegration,
   deleteAdminIntegrationDdl,
   deleteAdminIntegrationIngestion,
   fetchAdminIntegration,
@@ -205,6 +206,30 @@ test('creates, patches, clones and activates versions without local copying', as
   assert.deepEqual(JSON.parse(calls[1].options.body), { display_name: 'v2', design_note: 'Note' })
   assert.equal(calls[2].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/clone`)
   assert.equal(calls[3].options.method, 'PUT')
+})
+
+test('deletes a version through the tenant-scoped contract and preserves conflicts', async () => {
+  const calls = []
+  const deleted = await deleteAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async (url, options) => {
+      calls.push({ url, options })
+      return new Response(null, { status: 204 })
+    },
+  )
+  const conflict = await deleteAdminIntegration(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(
+      { detail: { code: 'conflict', message: 'Active versions cannot be deleted.' } },
+      { status: 409 },
+    ),
+  )
+
+  assert.deepEqual(deleted, { status: 'deleted' })
+  assert.deepEqual(conflict, { status: 'conflict', code: 'conflict' })
+  assert.equal(calls[0].url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}`)
+  assert.equal(calls[0].options.method, 'DELETE')
+  assert.equal(calls[0].options.credentials, 'include')
 })
 
 test('reads and atomically replaces the exact provider-record set', async () => {

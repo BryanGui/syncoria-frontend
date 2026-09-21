@@ -17,6 +17,7 @@ test('exposes the versioned integration workflow in the dedicated admin section'
   assert.match(workspace, /adminVersionedIntegration/)
   assert.match(page, /<AdminTenantVersionedIntegration/)
   assert.match(page, /adminVersionedIntegration=\{/)
+  assert.match(component, /\['create', 'versions', 'active'\]/)
   assert.match(component, /const labels = \{ create: 'Créer', active: 'Active', versions: 'Versions' \}/)
   assert.match(component, /setView\(active \? 'active' : 'create'\)/)
 })
@@ -133,6 +134,24 @@ test('adds a single guarded model-build action without SQL or destructive contro
   assert.match(component, /invalidateModel/)
   assert.doesNotMatch(api, /model\/build[\s\S]{0,200}Content-Type/)
   assert.doesNotMatch(component, /Reconstruire le modèle|\bDROP\b|\breset\b/)
+})
+
+test('labels drafts as tests and confirms test-version deletion only', () => {
+  assert.match(component, /return 'Test'/)
+  assert.match(component, /Supprimer la version/)
+  assert.match(component, /Supprimer cette version test/)
+  assert.match(component, /Les audits, DDL sources et données d’ingestion d’origine seront conservés/)
+  assert.match(component, /currentDetail\?\.status === 'draft'/)
+  assert.match(component, /Cette version est actuellement active et ne peut pas être supprimée/)
+  assert.match(api, /deleteAdminIntegration/)
+})
+
+test('clarifies successful model creation and links to Versions', () => {
+  assert.match(component, /Version test créée/)
+  assert.match(component, /Le modèle PostgreSQL a été construit avec succès/)
+  assert.match(component, /Cette version est maintenant disponible dans l’onglet Versions/)
+  assert.match(component, /Voir la version/)
+  assert.match(component, /selectView\('versions'\)/)
 })
 
 test('keeps canonical tenant-scoped API paths and redacted failures explicit', () => {

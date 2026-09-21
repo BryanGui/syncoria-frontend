@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   createAdminIntegration,
+  deleteAdminIntegration,
   deleteAdminIntegrationDdlCandidate,
   fetchAdminIntegration,
   fetchAdminIntegrationDdlCandidate,
@@ -67,7 +68,7 @@ function formatDateTime(value: string): string {
 function statusLabel(status: IntegrationStatus): string {
   if (status === 'active') return 'Actif'
   if (status === 'archived') return 'Archivé'
-  return 'Brouillon'
+  return 'Test'
 }
 
 function statusTone(status: IntegrationStatus): 'success' | 'neutral' | 'warning' {
@@ -339,6 +340,7 @@ export function AdminTenantVersionedIntegration({
   const [renameTitle, setRenameTitle] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteVersionId, setDeleteVersionId] = useState<string | null>(null)
   const [fileInputKey, setFileInputKey] = useState(0)
   const initializedTenant = useRef<string | null>(null)
   const selectedIdRef = useRef<string | null>(selectedId)
@@ -669,6 +671,7 @@ export function AdminTenantVersionedIntegration({
     setNotification(null)
     setRenameId(null)
     setDeleteId(null)
+    setDeleteVersionId(null)
     if (nextView === 'active') {
       setSelectedId(activeIntegration?.id ?? null)
     } else if (nextView === 'create') {
@@ -1059,6 +1062,33 @@ export function AdminTenantVersionedIntegration({
     }
   }
 
+  async function confirmVersionDeletion(integrationId: string) {
+    if (mutationPending || currentDetail?.id !== integrationId
+      || currentDetail.status !== 'draft') return
+    setMutationPending(true)
+    setNotification(null)
+    try {
+      const result = await deleteAdminIntegration(apiBaseUrl, tenantId, integrationId)
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+        return
+      }
+      if (result.status !== 'deleted') {
+        showFailure(result, 'Cette version test ne peut pas être supprimée.')
+        return
+      }
+      const remaining = integrations.filter((integration) => integration.id !== integrationId)
+      setIntegrations(remaining)
+      setDeleteVersionId(null)
+      setSelectedId(remaining[0]?.id ?? null)
+      setDetail(null)
+      setDetailIntegrationId(null)
+      setNotification({ tone: 'success', message: 'Version test supprimée.' })
+    } finally {
+      setMutationPending(false)
+    }
+  }
+
   function renderCreateView() {
     const selectedProviderIds = scopeIntegrationId === selectedId
       ? scopeProviders.map((provider) => provider.tenant_provider_record_id)
@@ -1285,7 +1315,17 @@ export function AdminTenantVersionedIntegration({
               {currentModel?.is_current && currentModel.status === 'prepared' ? <Badge tone="success">Prêt à construire</Badge> : null}
               {buildInProgress || modelAction === 'building' ? <p role="status">Construction en cours…</p> : null}
               {modelAction === 'preparing' ? <p role="status">Préparation du modèle…</p> : null}
-              {currentBuildIsCompleted ? <ModelBuildSummary model={currentModel} showStaleStatus state="loaded" /> : null}
+              {currentBuildIsCompleted ? (
+                <>
+                  <div role="status">
+                    <strong>Version test créée</strong>
+                    <p>Le modèle PostgreSQL a été construit avec succès.</p>
+                    <p>Cette version est maintenant disponible dans l’onglet Versions.</p>
+                  </div>
+                  <ModelBuildSummary model={currentModel} showStaleStatus state="loaded" />
+                  <Button onClick={() => selectView('versions')} variant="primary">Voir la version</Button>
+                </>
+              ) : null}
               {currentModel?.is_current && currentModel.status === 'failed' ? <p role="alert">{modelFailureMessage(currentModel.failure_code)}</p> : null}
               {staleCompletedBuild ? <p role="alert">Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour matérialiser un autre modèle.</p> : null}
               {!currentModel?.is_current && currentModel?.status !== 'completed' ? <p className="versioned-integration__empty">Les choix ont changé ; une nouvelle préparation sera faite avec les choix actuels.</p> : null}
@@ -1337,7 +1377,7 @@ export function AdminTenantVersionedIntegration({
       </div>
       {notification ? <Notification onDismiss={() => setNotification(null)} tone={notification.tone}>{notification.message}</Notification> : null}
       <nav aria-label="Vues de l’intégration" className="versioned-integration__tabs">
-        {(['create', 'active', 'versions'] as const).map((item) => {
+        {(['create', 'versions', 'active'] as const).map((item) => {
           const labels = { create: 'Créer', active: 'Active', versions: 'Versions' }
           return <button aria-current={view === item ? 'page' : undefined} className={view === item ? 'versioned-integration__tab versioned-integration__tab--active' : 'versioned-integration__tab'} key={item} onClick={() => selectView(item)} type="button">{labels[item]}</button>
         })}
@@ -1346,7 +1386,7 @@ export function AdminTenantVersionedIntegration({
         <div className="versioned-integration__content">{renderCreateView()}</div>
       ) : view === 'active' ? (
         <div className="versioned-integration__content">
-          {activeIntegration ? renderVersionDetails() : <div className="versioned-integration__empty"><h4>Aucune intégration active.</h4><p>Une intégration apparaîtra ici après son activation.</p></div>}
+          {activeIntegration ? <>{renderVersionDetails()}<p>Cette version est actuellement active et ne peut pas être supprimée.</p></> : <div className="versioned-integration__empty"><h4>Aucune intégration active.</h4><p>Une intégration apparaîtra ici après son activation.</p></div>}
         </div>
       ) : (
         <div className="versioned-integration__versions-layout">
@@ -1359,6 +1399,18 @@ export function AdminTenantVersionedIntegration({
           <div className="versioned-integration__content">
             {selectedSummary ? renderVersionDetails() : <p className="versioned-integration__empty">Sélectionnez une version.</p>}
             {!isArchivedTenant && currentDetail?.status === 'draft' && selectedSummary?.id === currentDetail.id ? <Button onClick={() => selectView('create')} variant="secondary">Reprendre dans Créer</Button> : null}
+            {!isArchivedTenant && currentDetail?.status === 'draft' && selectedSummary?.id === currentDetail.id ? (
+              deleteVersionId === currentDetail.id ? (
+                <div aria-label={`Confirmer la suppression de ${currentDetail.display_name}`} className="versioned-integration__delete-confirmation" role="alertdialog">
+                  <div>
+                    <strong>Supprimer cette version test ?</strong>
+                    <p>Cette action supprimera cette version ainsi que le modèle PostgreSQL créé pour celle-ci.</p>
+                    <p>Les audits, DDL sources et données d’ingestion d’origine seront conservés.</p>
+                  </div>
+                  <div><Button disabled={mutationPending} onClick={() => setDeleteVersionId(null)} size="compact" variant="ghost">Annuler</Button><Button loading={mutationPending} onClick={() => void confirmVersionDeletion(currentDetail.id)} size="compact" variant="danger">Supprimer</Button></div>
+                </div>
+              ) : <Button disabled={mutationPending} onClick={() => setDeleteVersionId(currentDetail.id)} variant="danger">Supprimer la version</Button>
+            ) : null}
           </div>
         </div>
       )}
