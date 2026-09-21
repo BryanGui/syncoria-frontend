@@ -351,6 +351,7 @@ interface BackendOptions {
   providerScopes?: Record<string, string[]>
   models?: Record<string, ModelBuild>
   structures?: Record<string, ModelStructure>
+  structureFailureCodes?: Record<string, string>
   modelBuildFailureCodes?: Record<string, string>
 }
 
@@ -542,7 +543,13 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
         const structure = backend.structures[integrationId]
         return structure
           ? route.fulfill({ json: structure })
-          : route.fulfill({ status: 409, json: { detail: { code: 'conflict', message: 'No completed model.' } } })
+          : route.fulfill({
+            status: 409,
+            json: { detail: {
+              code: options.structureFailureCodes?.[integrationId] ?? 'model_not_built',
+              message: 'Model unavailable.',
+            } },
+          })
       }
 
       if (parts[1] === 'model') {
@@ -732,6 +739,7 @@ function importedRow(page: Page, title: string) {
 
 test('explores materialized tables and reports versions without a completed model', async ({ page }) => {
   await openIntegration(page, {
+    integrations: [active, draft, archived],
     structures: {
       [activeId]: {
         integration_version_id: activeId,
@@ -746,6 +754,7 @@ test('explores materialized tables and reports versions without a completed mode
         }],
       },
     },
+    structureFailureCodes: { [archivedId]: 'conflict' },
   })
 
   await page.getByRole('button', { name: 'Données', exact: true }).click()
@@ -760,6 +769,10 @@ test('explores materialized tables and reports versions without a completed mode
 
   await dataExplorer.locator('select').selectOption(draftId)
   await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toBeVisible()
+
+  await dataExplorer.locator('select').selectOption(archivedId)
+  await expect(dataExplorer.getByText('La structure du modèle PostgreSQL ne peut pas être chargée.', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toHaveCount(0)
 })
 
 test('creates a draft lazily on the first provider change and persists A then A+B', async ({ page }) => {

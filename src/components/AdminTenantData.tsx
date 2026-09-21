@@ -99,7 +99,7 @@ export function AdminTenantData({
         onSessionExpired()
         return
       }
-      if (result.status === 'conflict') {
+      if (result.status === 'conflict' && result.code === 'model_not_built') {
         setStructureState('unavailable')
         return
       }

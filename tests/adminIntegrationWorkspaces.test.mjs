@@ -162,7 +162,7 @@ test('loads only materialized model structure through the version-scoped endpoin
   assert.equal(captured.url.includes('schema='), false)
 })
 
-test('rejects malformed or cross-version model structures and preserves no-model conflicts', async () => {
+test('rejects malformed structures and distinguishes absent models from integrity conflicts', async () => {
   const duplicateColumns = await fetchAdminIntegrationModelStructure(
     'https://api.example.com', tenantId, integrationId, undefined,
     async () => Response.json(modelStructure({ tables: [{
@@ -179,16 +179,24 @@ test('rejects malformed or cross-version model structures and preserves no-model
       integration_version_id: '99999999-9999-4999-8999-999999999999',
     })),
   )
+  const notBuilt = await fetchAdminIntegrationModelStructure(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(
+      { detail: { code: 'model_not_built', message: 'Private model detail.' } },
+      { status: 409 },
+    ),
+  )
   const unavailable = await fetchAdminIntegrationModelStructure(
     'https://api.example.com', tenantId, integrationId, undefined,
     async () => Response.json(
-      { detail: { code: 'conflict', message: 'Private model detail.' } },
+      { detail: { code: 'conflict', message: 'Private integrity detail.' } },
       { status: 409 },
     ),
   )
 
   assert.deepEqual(duplicateColumns, { status: 'error' })
   assert.deepEqual(crossVersion, { status: 'error' })
+  assert.deepEqual(notBuilt, { status: 'conflict', code: 'model_not_built' })
   assert.deepEqual(unavailable, { status: 'conflict', code: 'conflict' })
 })
 

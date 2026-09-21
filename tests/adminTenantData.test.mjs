@@ -22,6 +22,7 @@ test('covers version status, loading, no model, empty schema and table metadata 
   assert.match(component, /Chargement des versions/)
   assert.match(component, /Aucune version d’intégration n’est disponible/)
   assert.match(component, /Aucun modèle PostgreSQL construit pour cette version/)
+  assert.match(component, /result\.code === 'model_not_built'/)
   assert.match(component, /Le modèle PostgreSQL ne contient aucune table/)
   assert.match(component, /Colonne/)
   assert.match(component, /Type/)
