@@ -16,6 +16,7 @@ import {
   fetchAdminIntegrationIngestionCandidates,
   fetchAdminIntegrationIngestions,
   fetchAdminIntegrationModel,
+  fetchAdminIntegrationModelStructure,
   fetchAdminIntegrationProviders,
   fetchAdminIntegrations,
   getDdlValidationError,
@@ -122,6 +123,74 @@ function modelBuild(overrides = {}) {
     ...overrides,
   }
 }
+
+function modelStructure(overrides = {}) {
+  return {
+    integration_version_id: integrationId,
+    status: 'active',
+    physical_schema_name: 'syncoria_m_valid_model',
+    tables: [
+      {
+        name: 'placements',
+        columns: [
+          { name: '__syncoria_provider_record_id', data_type: 'text', nullable: true },
+          { name: 'mission', data_type: 'jsonb', nullable: true },
+          { name: 'amount', data_type: 'numeric(12,2)', nullable: false },
+        ],
+      },
+    ],
+    ...overrides,
+  }
+}
+
+test('loads only materialized model structure through the version-scoped endpoint', async () => {
+  let captured
+  const result = await fetchAdminIntegrationModelStructure(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async (url, options) => {
+      captured = { url, options }
+      return Response.json(modelStructure())
+    },
+  )
+
+  assert.equal(result.status, 'loaded')
+  assert.equal(result.structure.tables[0].columns[1].data_type, 'jsonb')
+  assert.equal(result.structure.tables[0].columns[2].nullable, false)
+  assert.equal(captured.url, `https://api.example.com/admin/tenants/${tenantId}/integrations/${integrationId}/structure`)
+  assert.equal(captured.options.method, 'GET')
+  assert.equal(captured.options.credentials, 'include')
+  assert.equal(captured.url.includes('schema='), false)
+})
+
+test('rejects malformed or cross-version model structures and preserves no-model conflicts', async () => {
+  const duplicateColumns = await fetchAdminIntegrationModelStructure(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(modelStructure({ tables: [{
+      name: 'placements',
+      columns: [
+        { name: 'id', data_type: 'uuid', nullable: false },
+        { name: 'id', data_type: 'text', nullable: true },
+      ],
+    }] })),
+  )
+  const crossVersion = await fetchAdminIntegrationModelStructure(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(modelStructure({
+      integration_version_id: '99999999-9999-4999-8999-999999999999',
+    })),
+  )
+  const unavailable = await fetchAdminIntegrationModelStructure(
+    'https://api.example.com', tenantId, integrationId, undefined,
+    async () => Response.json(
+      { detail: { code: 'conflict', message: 'Private model detail.' } },
+      { status: 409 },
+    ),
+  )
+
+  assert.deepEqual(duplicateColumns, { status: 'error' })
+  assert.deepEqual(crossVersion, { status: 'error' })
+  assert.deepEqual(unavailable, { status: 'conflict', code: 'conflict' })
+})
 
 test('parses sanitized model metadata and uses the model endpoints without a build body', async () => {
   const calls = []

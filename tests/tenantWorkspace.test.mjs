@@ -25,6 +25,7 @@ test('keeps the standard tenant sections unchanged', () => {
 test('defines the exact admin workflow navigation', () => {
   assert.deepEqual(ADMIN_TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
+    'Données',
     'Connexions',
     'Audit',
     'Ingestion',
@@ -39,6 +40,7 @@ test('defines the exact admin workflow navigation', () => {
 })
 
 test('routes each admin section to its dedicated content without legacy subtabs', () => {
+  assert.match(tenantWorkspaceSource, /activeSection === 'Données'[\s\S]*?adminData/)
   assert.match(tenantWorkspaceSource, /activeSection === 'Connexions'[\s\S]*?adminIntegration/)
   assert.match(tenantWorkspaceSource, /activeSection === 'Audit'[\s\S]*?adminReports/)
   assert.match(tenantWorkspaceSource, /activeSection === 'Ingestion'[\s\S]*?adminIngestion/)

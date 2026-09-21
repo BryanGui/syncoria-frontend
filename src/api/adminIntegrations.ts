@@ -87,6 +87,24 @@ export interface AdminIntegrationModelBuild {
   index_count: number | null
 }
 
+export interface AdminIntegrationModelColumn {
+  name: string
+  data_type: string
+  nullable: boolean
+}
+
+export interface AdminIntegrationModelTable {
+  name: string
+  columns: AdminIntegrationModelColumn[]
+}
+
+export interface AdminIntegrationModelStructure {
+  integration_version_id: string
+  status: IntegrationStatus
+  physical_schema_name: string
+  tables: AdminIntegrationModelTable[]
+}
+
 export type AdminIntegrationFailureStatus =
   | 'unauthenticated'
   | 'not_found'
@@ -145,6 +163,10 @@ export type AdminIntegrationDeleteIngestionResult =
 
 export type AdminIntegrationModelBuildResult =
   | { status: 'loaded'; model: AdminIntegrationModelBuild }
+  | AdminIntegrationFailure
+
+export type AdminIntegrationModelStructureResult =
+  | { status: 'loaded'; structure: AdminIntegrationModelStructure }
   | AdminIntegrationFailure
 
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i
@@ -348,6 +370,50 @@ function parseModelBuild(value: unknown, integrationId: string): AdminIntegratio
   }
 }
 
+function parseModelStructure(
+  value: unknown,
+  integrationId: string,
+): AdminIntegrationModelStructure | null {
+  if (!isObject(value)
+    || value.integration_version_id !== integrationId
+    || (value.status !== 'draft' && value.status !== 'active' && value.status !== 'archived')
+    || !isBoundedString(value.physical_schema_name, 63)
+    || !/^[a-z][a-z0-9_]{0,62}$/.test(value.physical_schema_name)
+    || !Array.isArray(value.tables)) return null
+
+  const tableNames = new Set<string>()
+  const tables: AdminIntegrationModelTable[] = []
+  for (const tableValue of value.tables) {
+    if (!isObject(tableValue)
+      || !isBoundedString(tableValue.name, 63)
+      || tableNames.has(tableValue.name)
+      || !Array.isArray(tableValue.columns)) return null
+    tableNames.add(tableValue.name)
+    const columnNames = new Set<string>()
+    const columns: AdminIntegrationModelColumn[] = []
+    for (const columnValue of tableValue.columns) {
+      if (!isObject(columnValue)
+        || !isBoundedString(columnValue.name, 63)
+        || columnNames.has(columnValue.name)
+        || !isBoundedString(columnValue.data_type, 256)
+        || typeof columnValue.nullable !== 'boolean') return null
+      columnNames.add(columnValue.name)
+      columns.push({
+        name: columnValue.name,
+        data_type: columnValue.data_type,
+        nullable: columnValue.nullable,
+      })
+    }
+    tables.push({ name: tableValue.name, columns })
+  }
+  return {
+    integration_version_id: value.integration_version_id as string,
+    status: value.status,
+    physical_schema_name: value.physical_schema_name,
+    tables,
+  }
+}
+
 function integrationEndpoint(tenantId: string, integrationId?: string): string {
   const endpoint = `/admin/tenants/${encodeURIComponent(tenantId)}/integrations`
   return integrationId === undefined ? endpoint : `${endpoint}/${encodeURIComponent(integrationId)}`
@@ -482,6 +548,25 @@ export async function fetchAdminIntegration(
     signal, request, logger,
   )
   return result.status === 'loaded' ? { status: 'loaded', integration: result.value } : result
+}
+
+export async function fetchAdminIntegrationModelStructure(
+  apiBaseUrl: string | null,
+  tenantId: string,
+  integrationId: string,
+  signal?: AbortSignal,
+  request: typeof fetch = fetch,
+  logger: TechnicalLogger = technicalLogger,
+): Promise<AdminIntegrationModelStructureResult> {
+  if (!validIdentifiers(tenantId, integrationId)) return { status: 'error' }
+  const result = await requestPayload(
+    apiBaseUrl, tenantId, `${integrationEndpoint(tenantId, integrationId)}/structure`,
+    { method: 'GET' }, 'load_integration_model_structure',
+    (value) => parseModelStructure(value, integrationId), signal, request, logger,
+  )
+  return result.status === 'loaded'
+    ? { status: 'loaded', structure: result.value }
+    : result
 }
 
 export async function createAdminIntegration(

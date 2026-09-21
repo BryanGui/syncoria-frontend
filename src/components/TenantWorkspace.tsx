@@ -14,6 +14,7 @@ interface TenantWorkspaceProps {
   tenantLabel?: string
   onBack?: () => void
   adminReports?: ReactNode
+  adminData?: ReactNode
   adminIntegration?: ReactNode
   adminIngestion?: ReactNode
   adminVersionedIntegration?: ReactNode
@@ -21,6 +22,7 @@ interface TenantWorkspaceProps {
 }
 
 export function TenantWorkspace({
+  adminData,
   adminReports,
   adminIntegration,
   adminIngestion,
@@ -93,6 +95,8 @@ export function TenantWorkspace({
         </div>
       ) : activeSection === 'Connexions' && adminIntegration !== undefined ? (
         adminIntegration
+      ) : activeSection === 'Données' && adminData !== undefined ? (
+        adminData
       ) : activeSection === 'Audit' ? (
         adminReports
       ) : activeSection === 'Ingestion' ? (
