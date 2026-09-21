@@ -480,6 +480,17 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
       const current = backend.integrations.find((item) => item.id === integrationId)
       if (!current) return route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } })
 
+      if (parts.length === 1 && method === 'DELETE') {
+        if (current.status !== 'draft') return route.fulfill({ status: 409, json: { detail: { code: 'conflict', message: 'Only tests can be deleted.' } } })
+        backend.integrations = backend.integrations.filter((item) => item.id !== integrationId)
+        delete backend.ddls[integrationId]
+        delete backend.providerScopes[integrationId]
+        delete backend.models[integrationId]
+        delete ingestions[integrationId]
+        delete ingestionCandidates[integrationId]
+        return route.fulfill({ status: 204, body: '' })
+      }
+
       if (parts[1] === 'providers') {
         if (method === 'PUT') {
           const payload = body as { tenant_provider_record_ids: string[] }
@@ -1017,6 +1028,12 @@ test('prepares then builds the completed model without a request body', async ({
   const button = page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })
   await expect(button).toBeVisible()
   await button.dblclick()
+  await expect(page.getByText('Version test créée', { exact: true })).toBeVisible()
+  await expect(page.getByText('Le modèle PostgreSQL a été construit avec succès.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Cette version est maintenant disponible dans l’onglet Versions.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Voir la version', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Versions', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('heading', { name: selectedDraft.display_name, exact: true })).toBeVisible()
   await expect(page.getByText('Modèle PostgreSQL construit', { exact: true })).toBeVisible()
   await expect(page.getByText('2 tables', { exact: true })).toBeVisible()
   await expect(page.getByText('3 index', { exact: true })).toBeVisible()
@@ -1126,6 +1143,31 @@ test('keeps Active and Versions read-only behavior intact', async ({ page }) => 
   await expect(page.getByRole('heading', { name: archived.display_name, exact: true })).toBeVisible()
   await expect(page.getByText(/Notion.*Archivée/)).toBeVisible()
   await expect(page.locator('[aria-label="Bibliothèque DDL"]').locator('input[type="radio"]')).toHaveCount(0)
+})
+
+test('confirms and deletes only a test version from Versions', async ({ page }) => {
+  const backend = await openIntegration(page, {
+    integrations: [active, draft],
+    ddls: { [activeId]: [sourceDdl], [draftId]: [importedDdl] },
+  })
+
+  await expect(page.getByText('Cette version est actuellement active et ne peut pas être supprimée.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Supprimer la version', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Versions', exact: true }).click()
+  await page.getByRole('button', { name: /Novalia Talents v2/ }).click()
+  await expect(page.getByText('v2 · Test', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Supprimer la version', exact: true }).click()
+  const confirmation = page.getByRole('alertdialog', { name: `Confirmer la suppression de ${draft.display_name}` })
+  await expect(confirmation.getByText('Supprimer cette version test ?', { exact: true })).toBeVisible()
+  await expect(confirmation.getByText('Les audits, DDL sources et données d’ingestion d’origine seront conservés.', { exact: true })).toBeVisible()
+  await confirmation.getByRole('button', { name: 'Annuler', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Novalia Talents v2/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Supprimer la version', exact: true }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Novalia Talents v2/ })).toHaveCount(0)
+  expect(backend.requests.filter((request) => request.path === `${prefix}/integrations/${draftId}` && request.method === 'DELETE')).toHaveLength(1)
 })
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
