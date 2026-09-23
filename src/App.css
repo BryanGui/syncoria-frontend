@@ -3669,6 +3669,8 @@ button.navigation__link {
 .tenant-model-data__column-heading { background: var(--color-surface-hover); color: var(--color-text-secondary); font-size: .72rem; font-weight: 700; }
 .tenant-model-data__column { border-top: 1px solid var(--color-border); color: var(--color-text-body); font-size: .8rem; }
 .tenant-model-data__column code { overflow-wrap: anywhere; white-space: normal; }
+.tenant-model-data__column-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.tenant-model-data__column-name code { min-width: 0; }
 
 .ingestion-history__row { grid-template-columns: minmax(0, 1fr) auto; }
 .ingestion-history__row-trigger { min-width: 0; width: 100%; display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); align-items: center; gap: 18px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left; }

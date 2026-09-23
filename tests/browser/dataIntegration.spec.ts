@@ -748,6 +748,9 @@ test('explores materialized tables and reports versions without a completed mode
         tables: [{
           name: 'placements',
           columns: [
+            { name: '__syncoria_provider', data_type: 'text', nullable: false },
+            { name: '__syncoria_provider_connection_id', data_type: 'uuid', nullable: false },
+            { name: '__syncoria_provider_source_id', data_type: 'text', nullable: true },
             { name: '__syncoria_provider_record_id', data_type: 'text', nullable: true },
             { name: 'amount', data_type: 'numeric(12,2)', nullable: false },
           ],
@@ -763,9 +766,15 @@ test('explores materialized tables and reports versions without a completed mode
   await expect(dataExplorer.getByText('Novalia Talents v1 · v1', { exact: true })).toBeVisible()
   await expect(dataExplorer.getByText('Actif', { exact: true })).toBeVisible()
   await expect(dataExplorer.getByRole('button', { name: /placements/ })).toBeVisible()
+  await expect(dataExplorer.getByText('Les colonnes marquées « Technique » correspondent aux métadonnées de provenance ajoutées par Syncoria.', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('__syncoria_provider', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('__syncoria_provider_connection_id', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('__syncoria_provider_source_id', { exact: true })).toBeVisible()
   await expect(dataExplorer.getByText('__syncoria_provider_record_id', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Technique', { exact: true })).toHaveCount(4)
+  await expect(dataExplorer.locator('.tenant-model-data__column').filter({ hasText: 'amount' }).getByText('Technique', { exact: true })).toHaveCount(0)
   await expect(dataExplorer.getByText('numeric(12,2)', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Non', { exact: true })).toBeVisible()
+  await expect(dataExplorer.locator('.tenant-model-data__column').filter({ hasText: 'amount' }).getByText('Non', { exact: true })).toBeVisible()
 
   await dataExplorer.locator('select').selectOption(draftId)
   await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toBeVisible()
@@ -1102,14 +1111,16 @@ test('prepares then builds the completed model without a request body', async ({
   await expect(button).toBeVisible()
   await button.dblclick()
   await expect(page.getByText('Version test créée', { exact: true })).toBeVisible()
-  await expect(page.getByText('Le modèle PostgreSQL a été construit avec succès.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Syncoria a créé la structure PostgreSQL et matérialisé les données disponibles des ingestions sélectionnées.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Structure PostgreSQL créée', { exact: true })).toBeVisible()
+  await expect(page.getByText('Données d’ingestion matérialisées', { exact: true })).toBeVisible()
   await expect(page.getByText('Cette version est maintenant disponible dans l’onglet Versions.', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Voir la version', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Versions', exact: true })).toHaveAttribute('aria-current', 'page')
   await expect(page.getByRole('heading', { name: selectedDraft.display_name, exact: true })).toBeVisible()
   await expect(page.getByText('Modèle PostgreSQL construit', { exact: true })).toBeVisible()
   await expect(page.getByText('2 tables', { exact: true })).toBeVisible()
-  await expect(page.getByText('3 index', { exact: true })).toBeVisible()
+  await expect(page.getByText('3 index physiques', { exact: true })).toBeVisible()
   const modelRequests = backend.requests.filter((request) => request.path.includes('/model'))
   const prepareIndex = modelRequests.findIndex((request) => request.path.endsWith('/model/prepare'))
   const buildIndex = modelRequests.findIndex((request) => request.path.endsWith('/model/build'))
@@ -1136,6 +1147,48 @@ test('shows sanitized failed and stale-completed model states without a rebuild 
   await expect(page.getByText('Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour matérialiser un autre modèle.', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
 
+})
+
+test('shows sanitized materialization failure messages without exposing backend details', async ({ page }) => {
+  const selectedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const secondReference = { ...ingestion, tenant_provider_record_id: providerBId, provider: 'google_sheets', correlation_id: thirdCorrelationId }
+  await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference] },
+    models: { [draftId]: modelBuild(draftId, { status: 'failed', failure_code: 'unsupported_materialization' }) },
+  })
+  await openCreate(page)
+  await expect(page.getByText('Ce type de données ne peut pas encore être matérialisé dans ce modèle.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Private database detail.', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+})
+
+test('shows the sanitized invalid-materialization message', async ({ page }) => {
+  const selectedDraft = { ...draft, selected_ddl_id: importedDdlId }
+  const secondReference = { ...ingestion, tenant_provider_record_id: providerBId, provider: 'google_sheets', correlation_id: thirdCorrelationId }
+  await openIntegration(page, {
+    integrations: [active, selectedDraft],
+    ingestions: { [activeId]: [ingestion], [draftId]: [ingestion, secondReference] },
+    models: { [draftId]: modelBuild(draftId, { status: 'failed', failure_code: 'materialization_invalid' }) },
+  })
+  await openCreate(page)
+  await expect(page.getByText('Les données sélectionnées ne correspondent pas au modèle PostgreSQL attendu.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
+})
+
+test('keeps the completed active model read-only and makes zero indexes explicit', async ({ page }) => {
+  await openIntegration(page, {
+    models: {
+      [activeId]: modelBuild(activeId, {
+        status: 'completed', is_current: false, completed_at: '2026-09-18T10:02:00Z', table_count: 2, index_count: 0,
+      }),
+    },
+  })
+  await page.getByRole('button', { name: 'Active', exact: true }).click()
+  await expect(page.getByText('Aucun index défini dans le modèle', { exact: true })).toBeVisible()
+  await expect(page.getByText('Structure PostgreSQL créée', { exact: true })).toBeVisible()
+  await expect(page.getByText('Données d’ingestion matérialisées', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Construire le modèle PostgreSQL', exact: true })).toHaveCount(0)
 })
 
 test('shows a sanitized model failure and read-only active model result', async ({ page }) => {

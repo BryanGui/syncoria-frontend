@@ -13,6 +13,7 @@ test('mounts the materialized PostgreSQL structure explorer in the admin data se
   assert.match(component, /fetchAdminIntegrations/)
   assert.match(component, /fetchAdminIntegrationModelStructure/)
   assert.match(component, /Structure du modèle PostgreSQL matérialisé/)
+  assert.match(component, /métadonnées de provenance ajoutées par Syncoria/)
 })
 
 test('covers version status, loading, no model, empty schema and table metadata states', () => {
@@ -27,5 +28,9 @@ test('covers version status, loading, no model, empty schema and table metadata 
   assert.match(component, /Colonne/)
   assert.match(component, /Type/)
   assert.match(component, /Nullable/)
+  assert.match(component, /isTechnicalProvenanceColumn/)
+  assert.match(component, /startsWith\('__syncoria_'\)/)
+  assert.match(component, /<Badge tone="info">Technique<\/Badge>/)
   assert.doesNotMatch(component, /fetchRows|ligne de données/i)
+  assert.doesNotMatch(component, /fetchAdminIntegrationModelRows|executeQuery|<textarea/)
 })

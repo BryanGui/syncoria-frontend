@@ -203,12 +203,20 @@ function isValidReferenceIngestion(ingestion: AdminIntegrationIngestion): boolea
 function modelFailureMessage(code: string | null): string {
   if (code === 'invalid_ddl') return 'Le DDL sélectionné n’est pas un SQL PostgreSQL valide pour cette étape.'
   if (code === 'unsupported_ddl') return 'Le DDL sélectionné contient une construction non prise en charge pour la création du modèle.'
+  if (code === 'unsupported_materialization') return 'Ce type de données ne peut pas encore être matérialisé dans ce modèle.'
+  if (code === 'materialization_invalid') return 'Les données sélectionnées ne correspondent pas au modèle PostgreSQL attendu.'
   if (code === 'build_failed') return 'La construction du modèle PostgreSQL a échoué.'
   if (code === 'schema_exists' || code === 'rebuild_required') return 'Un modèle physique existe déjà pour cette version. Créez une nouvelle version d’intégration pour reconstruire le modèle.'
   if (code === 'model_stale') return 'Les choix de cette intégration ont changé. Préparez un nouveau modèle avec les choix actuels.'
   if (code === 'model_not_prepared') return 'Prêt à construire.'
   if (code === 'build_conflict') return 'La construction ne peut pas démarrer dans l’état actuel du modèle.'
   return 'La construction du modèle PostgreSQL a échoué.'
+}
+
+function modelIndexLabel(indexCount: number): string {
+  return indexCount === 0
+    ? 'Aucun index défini dans le modèle'
+    : `${indexCount} index physique${indexCount > 1 ? 's' : ''}`
 }
 
 function ModelBuildSummary({
@@ -234,7 +242,9 @@ function ModelBuildSummary({
     <div className="versioned-integration__model-summary" aria-label="Modèle PostgreSQL">
       <strong>{status}</strong>
       {model.status === 'completed' && model.table_count !== null ? <span>{model.table_count} tables</span> : null}
-      {model.status === 'completed' && model.index_count !== null ? <span>{model.index_count} index</span> : null}
+      {model.status === 'completed' && model.index_count !== null ? <span>{modelIndexLabel(model.index_count)}</span> : null}
+      {model.status === 'completed' ? <span>Structure PostgreSQL créée</span> : null}
+      {model.status === 'completed' ? <span>Données d’ingestion matérialisées</span> : null}
       {model.status === 'completed' && model.completed_at !== null ? <span>Terminé le {formatDateTime(model.completed_at)}</span> : null}
       {showStaleStatus && !model.is_current ? <span>Ce résultat ne correspond plus aux choix actuels.</span> : null}
     </div>
@@ -1319,7 +1329,7 @@ export function AdminTenantVersionedIntegration({
                 <>
                   <div role="status">
                     <strong>Version test créée</strong>
-                    <p>Le modèle PostgreSQL a été construit avec succès.</p>
+                    <p>Syncoria a créé la structure PostgreSQL et matérialisé les données disponibles des ingestions sélectionnées.</p>
                     <p>Cette version est maintenant disponible dans l’onglet Versions.</p>
                   </div>
                   <ModelBuildSummary model={currentModel} showStaleStatus state="loaded" />
