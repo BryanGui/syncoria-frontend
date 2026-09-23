@@ -36,6 +36,10 @@ function sortedVersions(versions: AdminIntegrationSummary[]): AdminIntegrationSu
   ))
 }
 
+function isTechnicalProvenanceColumn(columnName: string): boolean {
+  return columnName.startsWith('__syncoria_')
+}
+
 export function AdminTenantData({
   apiBaseUrl,
   tenantId,
@@ -132,6 +136,7 @@ export function AdminTenantData({
         <div>
           <h3 id="tenant-data-title">Données</h3>
           <p>Structure du modèle PostgreSQL matérialisé pour une version d’intégration.</p>
+          <p>Les colonnes marquées « Technique » correspondent aux métadonnées de provenance ajoutées par Syncoria.</p>
         </div>
         {versionsState === 'loaded' && versions.length > 0 ? (
           <label>
@@ -225,7 +230,10 @@ export function AdminTenantData({
                   </div>
                   {selectedTable.columns.map((column) => (
                     <div className="tenant-model-data__column" key={column.name}>
-                      <code>{column.name}</code>
+                      <span className="tenant-model-data__column-name">
+                        <code>{column.name}</code>
+                        {isTechnicalProvenanceColumn(column.name) ? <Badge tone="info">Technique</Badge> : null}
+                      </span>
                       <code>{column.data_type}</code>
                       <span>{column.nullable ? 'Oui' : 'Non'}</span>
                     </div>

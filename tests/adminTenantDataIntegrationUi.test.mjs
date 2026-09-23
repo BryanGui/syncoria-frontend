@@ -146,12 +146,25 @@ test('labels drafts as tests and confirms test-version deletion only', () => {
   assert.match(api, /deleteAdminIntegration/)
 })
 
-test('clarifies successful model creation and links to Versions', () => {
+test('clarifies successful model materialization and links to Versions', () => {
   assert.match(component, /Version test créée/)
-  assert.match(component, /Le modèle PostgreSQL a été construit avec succès/)
+  assert.match(component, /créé la structure PostgreSQL et matérialisé les données disponibles des ingestions sélectionnées/)
+  assert.match(component, /Structure PostgreSQL créée/)
+  assert.match(component, /Données d’ingestion matérialisées/)
+  assert.match(component, /Aucun index défini dans le modèle/)
+  assert.match(component, /index physique/)
   assert.match(component, /Cette version est maintenant disponible dans l’onglet Versions/)
   assert.match(component, /Voir la version/)
   assert.match(component, /selectView\('versions'\)/)
+})
+
+test('keeps Build provider-agnostic and sanitizes materialization failures', () => {
+  assert.match(component, /const canBuildModel = canConfigureReferences/)
+  assert.match(component, /referencesComplete/)
+  assert.doesNotMatch(component, /provider\s*===\s*['"]notion['"]/)
+  assert.doesNotMatch(component, /unsupported_materialization[\s\S]{0,160}message/)
+  assert.match(component, /unsupported_materialization.*Ce type de données ne peut pas encore être matérialisé dans ce modèle/)
+  assert.match(component, /materialization_invalid.*Les données sélectionnées ne correspondent pas au modèle PostgreSQL attendu/)
 })
 
 test('keeps canonical tenant-scoped API paths and redacted failures explicit', () => {
