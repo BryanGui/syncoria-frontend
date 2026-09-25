@@ -40,6 +40,7 @@ import {
 import { AdminTenantWorkspacePage } from './pages/AdminTenantWorkspacePage'
 import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
+import { GlobalDataPage } from './pages/GlobalDataPage'
 import { LandingPage } from './pages/LandingPage'
 import { ActionMenuTestHarness } from './components/ui/ActionMenuTestHarness'
 
@@ -552,7 +553,8 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
   )
   const isOverview = navigationState.activePage === 'overview'
   const isClients = navigationState.activePage === 'clients'
-  const isTenant = !isOverview && !isClients
+  const isData = navigationState.activePage === 'data'
+  const isTenant = navigationState.activePage === 'tenant_workspace'
 
   async function handleLogout() {
     setIsLoggingOut(true)
@@ -632,10 +634,11 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
         <header className={isTenant ? 'page-header page-header--tenant' : 'page-header'}>
           {!isTenant ? <div>
             <p className="eyebrow">Administration</p>
-            <h1>{isOverview ? 'Vue d’ensemble' : 'Clients'}</h1>
+            <h1>{isOverview ? 'Vue d’ensemble' : isData ? 'Données' : 'Clients'}</h1>
             <p className="page-header__description">
               {isOverview
                 ? 'Consultez l’état général des services et les dernières opérations.'
+                : isData ? 'Sélectionnez un client pour explorer ses données matérialisées.'
                 : 'Consultez les tenants enregistrés dans Syncoria.'}
             </p>
           </div> : null}
@@ -739,6 +742,8 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
             })}
             onSessionExpired={onSessionExpired}
           />
+        ) : isData ? (
+          <GlobalDataPage apiBaseUrl={apiBaseUrl} onSessionExpired={onSessionExpired} />
         ) : navigationState.selectedTenantId !== null ? (
           <AdminTenantWorkspacePage
             apiBaseUrl={apiBaseUrl}

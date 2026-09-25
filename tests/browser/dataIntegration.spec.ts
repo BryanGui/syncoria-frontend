@@ -502,6 +502,33 @@ async function openIntegration(page: Page, options: BackendOptions = {}): Promis
       const current = backend.integrations.find((item) => item.id === integrationId)
       if (!current) return route.fulfill({ status: 404, json: { detail: { code: 'not_found', message: 'Not found.' } } })
 
+      if (parts[1] === 'data') {
+        if (options.structureFailureCodes?.[integrationId] === 'conflict') return route.fulfill({ status: 409, json: { detail: 'Internal detail' } })
+        const structure = backend.structures[integrationId]
+        if (!structure) return route.fulfill({ status: 404, json: { detail: 'Internal detail' } })
+        const source = { provider: 'Notion', source_id: 'placements', source_name: 'Placements RH' }
+        if (parts[2] === 'summary') return route.fulfill({ json: {
+          integration_version_id: integrationId, table_count: structure.tables.length,
+          total_row_count: 1, materialized_at: '2026-09-18T10:00:00Z',
+          profiled_at: '2026-09-18T11:00:00Z', sources: [source],
+          tables: structure.tables.map((table) => ({ name: table.name, row_count: 1,
+            column_count: table.columns.length, sources: [source] })),
+        } })
+        const table = structure.tables.find((item) => item.name === parts[3])
+        if (!table) return route.fulfill({ status: 404, json: {} })
+        if (parts[4] === 'profile') return route.fulfill({ json: {
+          name: table.name, columns: table.columns.map((column, index) => ({
+            name: column.name, ordinal_position: index + 1, data_type: column.data_type,
+            type_family: column.name === 'amount' ? 'numeric' : 'text',
+            is_technical: column.name.startsWith('__syncoria_'),
+          })),
+        } })
+        if (parts[4] === 'rows') return route.fulfill({ json: {
+          columns: ['amount'], rows: [{ amount: 123 }], table_row_count: 1,
+          has_more: false, next_cursor: null,
+        } })
+      }
+
       if (parts.length === 1 && method === 'DELETE') {
         if (current.status !== 'draft') return route.fulfill({ status: 409, json: { detail: { code: 'conflict', message: 'Only tests can be deleted.' } } })
         backend.integrations = backend.integrations.filter((item) => item.id !== integrationId)
@@ -760,28 +787,22 @@ test('explores materialized tables and reports versions without a completed mode
     structureFailureCodes: { [archivedId]: 'conflict' },
   })
 
-  await page.getByRole('button', { name: 'Données', exact: true }).click()
-  const dataExplorer = page.locator('.tenant-model-data')
+  await page.getByRole('navigation', { name: 'Sections du client' }).getByRole('button', { name: 'Données', exact: true }).click()
+  const dataExplorer = page.locator('.data-explorer')
   await expect(dataExplorer.getByRole('heading', { name: 'Données', exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Novalia Talents v1 · v1', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Actif', { exact: true })).toBeVisible()
+  await expect(dataExplorer.locator('select')).toHaveValue(activeId)
+  await expect(dataExplorer.getByText('Lignes matérialisées')).toBeVisible()
+  await expect(dataExplorer.getByText('Placements RH').first()).toBeVisible()
   await expect(dataExplorer.getByRole('button', { name: /placements/ })).toBeVisible()
-  await expect(dataExplorer.getByText('Les colonnes marquées « Technique » correspondent aux métadonnées de provenance ajoutées par Syncoria.', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider_connection_id', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider_source_id', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider_record_id', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Technique', { exact: true })).toHaveCount(4)
-  await expect(dataExplorer.locator('.tenant-model-data__column').filter({ hasText: 'amount' }).getByText('Technique', { exact: true })).toHaveCount(0)
-  await expect(dataExplorer.getByText('numeric(12,2)', { exact: true })).toBeVisible()
-  await expect(dataExplorer.locator('.tenant-model-data__column').filter({ hasText: 'amount' }).getByText('Non', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByRole('gridcell', { name: '123' })).toBeVisible()
+  await expect(dataExplorer.getByText('__syncoria_provider', { exact: true })).toHaveCount(0)
 
   await dataExplorer.locator('select').selectOption(draftId)
-  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Aucun modèle matérialisé disponible pour cette version.', { exact: true })).toBeVisible()
 
   await dataExplorer.locator('select').selectOption(archivedId)
-  await expect(dataExplorer.getByText('La structure du modèle PostgreSQL ne peut pas être chargée.', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toHaveCount(0)
+  await expect(dataExplorer.getByText('Le modèle a changé. Rechargez les données.', { exact: true })).toBeVisible()
+  await expect(dataExplorer.getByText('Aucun modèle matérialisé disponible pour cette version.', { exact: true })).toHaveCount(0)
 })
 
 test('creates a draft lazily on the first provider change and persists A then A+B', async ({ page }) => {

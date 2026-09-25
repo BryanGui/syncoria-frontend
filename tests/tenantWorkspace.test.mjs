@@ -25,11 +25,11 @@ test('keeps the standard tenant sections unchanged', () => {
 test('defines the exact admin workflow navigation', () => {
   assert.deepEqual(ADMIN_TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
-    'Données',
     'Connexions',
     'Audit',
     'Ingestion',
     'Intégration',
+    'Données',
     'Synchronisation',
     'Automatisations',
     'Logs',
