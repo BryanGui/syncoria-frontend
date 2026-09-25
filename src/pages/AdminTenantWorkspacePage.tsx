@@ -146,6 +146,7 @@ export function AdminTenantWorkspacePage({
     <TenantWorkspace
       adminData={(
         <AdminTenantData
+          key={pageState.tenant.id}
           apiBaseUrl={apiBaseUrl}
           onSessionExpired={onSessionExpired}
           tenantId={pageState.tenant.id}

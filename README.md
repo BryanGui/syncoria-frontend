@@ -38,9 +38,32 @@ Chaque client ouvre ensuite un composant partagé `TenantWorkspace`, alimenté
 dans le contexte administrateur par `GET /admin/tenants/{tenant_id}`. Le
 composant reçoit uniquement un modèle de vue par props et ne dépend pas de la
 route admin ; un futur portail client pourra donc l'alimenter avec une identité
-tenant dérivée côté backend de sa propre session. Seule la Vue générale affiche
-actuellement les champs réels `slug`, `status` et `id`. Les sections Données,
-Intégrations, Automatisations et Logs restent explicitement vides.
+tenant dérivée côté backend de sa propre session. La Vue générale affiche les
+champs réels `slug`, `status` et `id`. L’onglet Données de l’espace admin
+affiche l’explorateur décrit ci-dessous.
+
+## Consultation des données administrateur
+
+La navigation globale « Données » charge la liste des clients, puis demande de
+choisir un client. L’onglet « Données » de la fiche client connaît déjà ce
+client. Les deux points d’entrée utilisent `AdminTenantData` ; une version
+d’intégration active est présélectionnée si elle existe.
+
+`src/api/dataExplorer.ts` lit le résumé, le profil de table et les lignes via
+les endpoints administrateur versionnés. Les colonnes métier proviennent du
+profil ; `__syncoria_*` et les colonnes marquées techniques sont exclues des
+requêtes de lignes. Le résumé distingue les totaux matérialisés de la quantité
+de lignes actuellement chargées. Le frontend n’affiche jamais les détails bruts
+d’une erreur FastAPI.
+
+La consultation utilise une table HTML native, sans bibliothèque de grille.
+Elle permet le défilement horizontal, la sélection et la copie normales du
+navigateur, ainsi qu’un tri simple ascendant ou descendant exécuté par le
+serveur. Les lignes sont chargées par blocs de 100 avec `next_cursor` ;
+l’approche de la fin de la table déclenche le bloc suivant, et un bouton fournit
+le même accès au clavier. Les changements de table, de tri ou de recherche
+relancent une première page. Les requêtes annulées ou appartenant à une
+génération précédente ne peuvent pas remplacer les résultats courants.
 
 ## Session client
 

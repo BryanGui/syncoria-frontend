@@ -1,36 +1,70 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { fetchExplorerSummary, fetchExplorerProfile, fetchExplorerRows } from '../src/api/dataExplorer.ts'
+import { businessColumns, isSortable } from '../src/dataExplorer/columns.ts'
+import { ADMIN_DASHBOARD_NAVIGATION } from '../src/navigation/dashboardNavigation.ts'
 
-const component = await readFile(new URL('../src/components/AdminTenantData.tsx', import.meta.url), 'utf8')
-const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
-const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
+const tenant = '11111111-1111-4111-8111-111111111111'
+const version = '22222222-2222-4222-8222-222222222222'
+const summary = { integration_version_id: version, table_count: 1, total_row_count: 5,
+  materialized_at: '2026-09-20T12:00:00Z', profiled_at: '2026-09-21T12:00:00Z',
+  sources: [{ provider: 'notion', source_id: 'crm', source_name: 'CRM Clients' }],
+  tables: [{ name: 'clients', row_count: 5, column_count: 3, sources: [{ provider: 'notion', source_id: 'crm', source_name: 'CRM Clients' }] }] }
 
-test('mounts the materialized PostgreSQL structure explorer in the admin data section', () => {
-  assert.match(page, /adminData=\{/)
-  assert.match(page, /<AdminTenantData/)
-  assert.match(workspace, /activeSection === 'Données'[\s\S]*?adminData/)
-  assert.match(component, /fetchAdminIntegrations/)
-  assert.match(component, /fetchAdminIntegrationModelStructure/)
-  assert.match(component, /Structure du modèle PostgreSQL matérialisé/)
-  assert.match(component, /métadonnées de provenance ajoutées par Syncoria/)
+test('global Données is a page and both entry points mount the same explorer', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  const global = await readFile(new URL('../src/pages/GlobalDataPage.tsx', import.meta.url), 'utf8')
+  const tenantPage = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
+  assert.equal(ADMIN_DASHBOARD_NAVIGATION.find((item) => item.label === 'Données')?.page, 'data')
+  assert.match(app, /<GlobalDataPage/)
+  assert.match(global, /<AdminTenantData/)
+  assert.match(global, /Choisir un client/)
+  assert.match(tenantPage, /<AdminTenantData/)
 })
 
-test('covers version status, loading, no model, empty schema and table metadata states', () => {
-  assert.match(component, /return 'Test'/)
-  assert.match(component, /return 'Actif'/)
-  assert.match(component, /return 'Archivé'/)
-  assert.match(component, /Chargement des versions/)
-  assert.match(component, /Aucune version d’intégration n’est disponible/)
-  assert.match(component, /Aucun modèle PostgreSQL construit pour cette version/)
-  assert.match(component, /result\.code === 'model_not_built'/)
-  assert.match(component, /Le modèle PostgreSQL ne contient aucune table/)
-  assert.match(component, /Colonne/)
-  assert.match(component, /Type/)
-  assert.match(component, /Nullable/)
-  assert.match(component, /isTechnicalProvenanceColumn/)
-  assert.match(component, /startsWith\('__syncoria_'\)/)
-  assert.match(component, /<Badge tone="info">Technique<\/Badge>/)
-  assert.doesNotMatch(component, /fetchRows|ligne de données/i)
-  assert.doesNotMatch(component, /fetchAdminIntegrationModelRows|executeQuery|<textarea/)
+test('summary, profile and bounded cursor rows use credentialed backend contracts', async () => {
+  const seen = []
+  const request = async (url, options) => {
+    seen.push({ url, options })
+    if (url.endsWith('/summary')) return Response.json(summary)
+    if (url.endsWith('/profile')) return Response.json({ name: 'clients', columns: [
+      { name: 'name', ordinal_position: 1, data_type: 'text', type_family: 'text', is_technical: false },
+      { name: '__syncoria_source', ordinal_position: 2, data_type: 'text', type_family: 'text', is_technical: true },
+    ] })
+    return Response.json({ columns: ['name'], rows: [{ name: 'Alice' }], table_row_count: 5, has_more: false, next_cursor: null })
+  }
+  assert.equal((await fetchExplorerSummary('https://api.test', tenant, version, undefined, request)).value.total_row_count, 5)
+  const profile = await fetchExplorerProfile('https://api.test', tenant, version, 'clients', undefined, request)
+  assert.equal(profile.status, 'loaded')
+  assert.deepEqual(businessColumns(profile.value.columns).map((column) => column.name), ['name'])
+  const query = { columns: ['name'], sorts: [{ column: 'name', direction: 'asc' }], search: 'Ali', cursor: 'opaque', limit: 100 }
+  assert.equal((await fetchExplorerRows('https://api.test', tenant, version, 'clients', query, undefined, request)).value.rows[0].name, 'Alice')
+  assert.equal(seen.length, 3)
+  for (const item of seen) assert.equal(item.options.credentials, 'include')
+  assert.deepEqual(JSON.parse(seen[2].options.body), query)
+  assert.match(seen[2].url, /\/data\/tables\/clients\/rows$/)
+})
+
+test('consultation shows ordered business columns and sorts only supported types', () => {
+  const columns = businessColumns([
+    { name: 'city', ordinal_position: 3, type_family: 'text', data_type: 'text', is_technical: false },
+    { name: '__syncoria_id', ordinal_position: 2, type_family: 'text', data_type: 'text', is_technical: false },
+    { name: 'name', ordinal_position: 1, type_family: 'text', data_type: 'text', is_technical: false },
+  ])
+  assert.deepEqual(columns.map((column) => column.name), ['name', 'city'])
+  assert.equal(isSortable(columns[0]), true)
+  assert.equal(isSortable({ name: 'payload', ordinal_position: 1, type_family: 'other', data_type: 'jsonb', is_technical: false }), false)
+})
+
+test('backend errors and malformed row pages remain sanitized', async () => {
+  for (const [code, expected] of [[404, 'not_found'], [409, 'conflict'], [422, 'invalid'], [503, 'unavailable']]) {
+    const result = await fetchExplorerSummary('https://api.test', tenant, version, undefined,
+      async () => Response.json({ detail: 'SQL SELECT secret' }, { status: code }))
+    assert.deepEqual(result, { status: expected })
+  }
+  const invalid = await fetchExplorerRows('https://api.test', tenant, version, 'clients',
+    { columns: ['name'], sorts: [], search: null, cursor: null, limit: 100 }, undefined,
+    async () => Response.json({ columns: ['name'], rows: [], table_row_count: 5, has_more: true, next_cursor: null }))
+  assert.deepEqual(invalid, { status: 'error' })
 })
