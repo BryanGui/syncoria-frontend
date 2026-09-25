@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchAdminIntegrations, type AdminIntegrationSummary } from '../api/adminIntegrations.ts'
-import { fetchExplorerProfile, fetchExplorerRows, fetchExplorerSummary, type ExplorerProfile, type ExplorerResult, type ExplorerRows, type ExplorerSort, type ExplorerSummary } from '../api/dataExplorer.ts'
-import { businessColumns, type GridColumnState } from '../dataExplorer/gridState.ts'
-import { DataExplorerGrid } from './DataExplorerGrid.tsx'
+import { fetchExplorerProfile, fetchExplorerRows, fetchExplorerSummary, type ExplorerColumn, type ExplorerProfile, type ExplorerResult, type ExplorerRows, type ExplorerSort, type ExplorerSummary } from '../api/dataExplorer.ts'
+import { businessColumns } from '../dataExplorer/columns.ts'
+import { DataExplorerTable } from './DataExplorerTable.tsx'
 
 interface Props { apiBaseUrl: string | null; tenantId: string; onSessionExpired: () => void }
 type State<T> = { status: 'loading' } | Exclude<ExplorerResult<T>, { status: 'unauthenticated' }>
@@ -17,8 +17,8 @@ const sourceLabel = (source: { provider: string; source_name: string | null }) =
 function TableView({ apiBaseUrl, tenantId, versionId, tableName, onSessionExpired }: Props & { versionId: string; tableName: string }) {
   const [profile, setProfile] = useState<State<ExplorerProfile>>({ status: 'loading' })
   const [profileReload, setProfileReload] = useState(0)
-  const [columns, setColumns] = useState<GridColumnState[]>([])
-  const [sorts, setSorts] = useState<ExplorerSort[]>([])
+  const [columns, setColumns] = useState<ExplorerColumn[]>([])
+  const [sort, setSort] = useState<ExplorerSort | null>(null)
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [searchRevision, setSearchRevision] = useState(0)
@@ -38,13 +38,16 @@ function TableView({ apiBaseUrl, tenantId, versionId, tableName, onSessionExpire
       if (!active) return
       if (result.status === 'unauthenticated') { onSessionExpired(); return }
       setProfile(result)
-      if (result.status === 'loaded') setColumns(businessColumns(result.value.columns).slice(0, 100))
+      if (result.status === 'loaded') {
+        setColumns(businessColumns(result.value.columns))
+        setSort(null)
+      }
     })
     return () => { active = false; controller.abort() }
   }, [apiBaseUrl, tenantId, versionId, tableName, onSessionExpired, profileReload])
 
-  const columnNames = useMemo(() => columns.filter((column) => column.visible).map((column) => column.name).sort().join('\u0000'), [columns])
-  const sortKey = useMemo(() => sorts.map((sort) => `${sort.column}:${sort.direction}`).join(','), [sorts])
+  const columnNames = columns.map((column) => column.name).join('\u0000')
+  const sortKey = sort === null ? '' : `${sort.column}:${sort.direction}`
   useEffect(() => {
     if (profile.status !== 'loaded' || columns.length === 0) return
     const current = request.current
@@ -60,7 +63,7 @@ function TableView({ apiBaseUrl, tenantId, versionId, tableName, onSessionExpire
     setStatus({ status: 'loading' })
     setLoadingMore(false)
     void fetchExplorerRows(apiBaseUrl, tenantId, versionId, tableName, {
-      columns: columnNames.split('\u0000'), sorts, search: search || null, cursor: null, limit: 100,
+      columns: columnNames.split('\u0000'), sorts: sort === null ? [] : [sort], search: search || null, cursor: null, limit: 100,
     }, current.controller.signal).then((result) => {
       if (generation !== request.current.generation) return
       current.busy = false
@@ -73,7 +76,7 @@ function TableView({ apiBaseUrl, tenantId, versionId, tableName, onSessionExpire
       }
     })
     return () => { current.generation++; current.controller?.abort(); current.busy = false }
-    // Column order and width do not change requested columns.
+    // The profile fixes requested columns for the lifetime of this table view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBaseUrl, tenantId, versionId, tableName, profile.status, columnNames, sortKey, search, searchRevision, reload, onSessionExpired])
 
@@ -87,7 +90,7 @@ function TableView({ apiBaseUrl, tenantId, versionId, tableName, onSessionExpire
     const generation = current.generation
     setLoadingMore(true)
     void fetchExplorerRows(apiBaseUrl, tenantId, versionId, tableName, {
-      columns: columnNames.split('\u0000'), sorts, search: search || null, cursor, limit: 100,
+      columns: columnNames.split('\u0000'), sorts: sort === null ? [] : [sort], search: search || null, cursor, limit: 100,
     }, current.controller.signal).then((result) => {
       if (generation !== request.current.generation) return
       current.busy = false
@@ -131,15 +134,15 @@ function TableView({ apiBaseUrl, tenantId, versionId, tableName, onSessionExpire
     {status.status !== 'loading' && status.status !== 'loaded' ? <div role="alert"><p>{errorText(status.status)}</p>
       <button className="secondary-button" type="button" onClick={() => setReload((key) => key + 1)}>Réessayer</button></div> : null}
     {status.status === 'loaded' && rows.length === 0 ? <p>Cette table ne contient aucune ligne pour la recherche actuelle.</p> : null}
-    {rows.length > 0 ? <DataExplorerGrid columns={columns} onColumnsChange={setColumns} page={page} rows={rows}
-      loadingMore={loadingMore} onLoadMore={loadMore} sorts={sorts} onSortsChange={(next) => {
+    {rows.length > 0 ? <DataExplorerTable columns={columns} page={page} rows={rows}
+      loadingMore={loadingMore} onLoadMore={loadMore} sort={sort} onSortChange={(next) => {
         request.current.generation++
         request.current.controller?.abort()
         request.current.busy = false
         setRows([])
         setPage(null)
         setStatus({ status: 'loading' })
-        setSorts(next)
+        setSort(next)
       }} /> : null}
   </div>
 }

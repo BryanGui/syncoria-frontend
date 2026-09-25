@@ -7,7 +7,6 @@ const source = { provider: 'Notion', source_id: 'crm', source_name: 'CRM Clients
 const tables = ['clients', 'orders'].map((name) => ({ name, row_count: 3, column_count: 3, sources: [source] }))
 
 test('global explorer selects a tenant, loads cursor blocks, resets for sort/search, and ignores an old table request', async ({ page }) => {
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' })
   const requests: Array<{ table: string; body: Record<string, unknown> }> = []
   await page.context().route('**/*', async (route) => {
     const url = new URL(route.request().url())
@@ -62,35 +61,26 @@ test('global explorer selects a tenant, loads cursor blocks, resets for sort/sea
   await expect.poll(() => requests.some((item) => item.table === 'clients')).toBe(true)
   await page.getByRole('button', { name: /orders/ }).click()
   await expect(page.getByText('First order')).toBeVisible()
-  await page.getByRole('gridcell', { name: 'First order' }).click()
-  await expect(page.locator('.data-explorer-grid__selected')).toHaveCount(1)
-  await page.keyboard.press('ControlOrMeta+C')
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('First order')
-  const firstCell = await page.getByRole('gridcell', { name: 'First order' }).boundingBox()
-  const secondCell = await page.getByRole('gridcell', { name: 'Paris' }).boundingBox()
-  expect(firstCell).not.toBeNull()
-  expect(secondCell).not.toBeNull()
-  await page.mouse.move(firstCell!.x + firstCell!.width / 2, firstCell!.y + firstCell!.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(secondCell!.x + secondCell!.width / 2, secondCell!.y + secondCell!.height / 2, { steps: 4 })
-  await page.mouse.up()
-  await page.keyboard.press('ControlOrMeta+C')
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('First order\tParis')
+  await expect(page.getByRole('table', { name: 'Lignes matérialisées' })).toBeVisible()
   await page.waitForTimeout(500)
   await expect(page.getByText('Old client')).toHaveCount(0)
   await page.getByRole('button', { name: 'Charger la suite' }).click()
   await expect(page.getByText('Second order')).toBeVisible()
   expect(requests.find((item) => item.body.cursor === 'next-opaque')).toBeTruthy()
   await expect(page.getByRole('button', { name: 'Charger la suite' })).toHaveCount(0)
-  await page.getByRole('columnheader', { name: 'name' }).click()
+  await page.getByRole('columnheader').filter({ hasText: 'name' }).getByRole('button').click()
   await expect.poll(() => requests.some((item) => item.table === 'orders' && item.body.cursor === null &&
-    Array.isArray(item.body.sorts) && item.body.sorts.length > 0)).toBe(true)
+    Array.isArray(item.body.sorts) && (item.body.sorts[0] as { direction: string })?.direction === 'asc')).toBe(true)
+  await expect(page.getByRole('columnheader').filter({ hasText: 'name' })).toHaveAttribute('aria-sort', 'ascending')
+  await page.getByRole('columnheader').filter({ hasText: 'name' }).getByRole('button').click()
+  await expect.poll(() => requests.some((item) => item.table === 'orders' && item.body.cursor === null &&
+    Array.isArray(item.body.sorts) && (item.body.sorts[0] as { direction: string })?.direction === 'desc')).toBe(true)
   await page.getByPlaceholder('Rechercher…').fill('Search')
   await expect(page.getByText('Search order')).toBeVisible()
   expect(requests.at(-1)?.body.search).toBe('Search')
   expect(requests.at(-1)?.body.cursor).toBe(null)
   expect(JSON.stringify(requests)).not.toContain('__syncoria_')
-  await expect(page.getByRole('grid').getByRole('textbox')).toHaveCount(0)
+  await expect(page.getByRole('table', { name: 'Lignes matérialisées' }).getByRole('textbox')).toHaveCount(0)
 
   const scrolledCursors: unknown[] = []
   await page.route('**/rows', (route) => {
@@ -107,7 +97,7 @@ test('global explorer selects a tenant, loads cursor blocks, resets for sort/sea
   await page.getByRole('button', { name: /clients/ }).click()
   await page.getByRole('button', { name: /orders/ }).click()
   await expect(page.getByText('Line 0')).toBeVisible()
-  await page.getByRole('grid').evaluate((grid) => { grid.scrollTop = grid.scrollHeight })
+  await page.locator('.data-explorer-table__scroll').evaluate((table) => { table.scrollTop = table.scrollHeight })
   await expect.poll(() => scrolledCursors.includes('scroll-cursor')).toBe(true)
 
   await page.route('**/summary', (route) => route.fulfill({ json: {

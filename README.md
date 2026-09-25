@@ -42,12 +42,12 @@ tenant dérivée côté backend de sa propre session. La Vue générale affiche 
 champs réels `slug`, `status` et `id`. L’onglet Données de l’espace admin
 affiche l’explorateur décrit ci-dessous.
 
-## Data Explorer administrateur
+## Consultation des données administrateur
 
 La navigation globale « Données » charge la liste des clients, puis demande de
 choisir un client. L’onglet « Données » de la fiche client connaît déjà ce
-client. Les deux points d’entrée utilisent `AdminTenantData` et le même état de
-grille ; une version d’intégration active est présélectionnée si elle existe.
+client. Les deux points d’entrée utilisent `AdminTenantData` ; une version
+d’intégration active est présélectionnée si elle existe.
 
 `src/api/dataExplorer.ts` lit le résumé, le profil de table et les lignes via
 les endpoints administrateur versionnés. Les colonnes métier proviennent du
@@ -56,16 +56,14 @@ requêtes de lignes. Le résumé distingue les totaux matérialisés de la quant
 de lignes actuellement chargées. Le frontend n’affiche jamais les détails bruts
 d’une erreur FastAPI.
 
-La grille repose sur `react-data-grid` (MIT, compatible avec React 19). Elle
-fournit la virtualisation, le défilement horizontal, le tri contrôlé côté
-serveur, le redimensionnement et le déplacement des colonnes. Une couche locale
-gère la sélection de plages et la copie TSV vers un tableur. Les colonnes et le
-tri sont gardés dans l’état du composant, sans préférence persistée ni édition.
-Les lignes sont chargées par blocs de 100 avec `next_cursor` ; l’approche de la
-fin de la grille déclenche le bloc suivant, et un bouton fournit le même accès
-au clavier. Les changements de table, de tri ou de recherche relancent une
-première page. Les requêtes annulées ou appartenant à une génération précédente
-ne peuvent pas remplacer les résultats courants.
+La consultation utilise une table HTML native, sans bibliothèque de grille.
+Elle permet le défilement horizontal, la sélection et la copie normales du
+navigateur, ainsi qu’un tri simple ascendant ou descendant exécuté par le
+serveur. Les lignes sont chargées par blocs de 100 avec `next_cursor` ;
+l’approche de la fin de la table déclenche le bloc suivant, et un bouton fournit
+le même accès au clavier. Les changements de table, de tri ou de recherche
+relancent une première page. Les requêtes annulées ou appartenant à une
+génération précédente ne peuvent pas remplacer les résultats courants.
 
 ## Session client
 

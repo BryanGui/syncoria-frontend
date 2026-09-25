@@ -794,7 +794,7 @@ test('explores materialized tables and reports versions without a completed mode
   await expect(dataExplorer.getByText('Lignes matérialisées')).toBeVisible()
   await expect(dataExplorer.getByText('Placements RH').first()).toBeVisible()
   await expect(dataExplorer.getByRole('button', { name: /placements/ })).toBeVisible()
-  await expect(dataExplorer.getByRole('gridcell', { name: '123' })).toBeVisible()
+  await expect(dataExplorer.getByRole('cell', { name: '123' })).toBeVisible()
   await expect(dataExplorer.getByText('__syncoria_provider', { exact: true })).toHaveCount(0)
 
   await dataExplorer.locator('select').selectOption(draftId)

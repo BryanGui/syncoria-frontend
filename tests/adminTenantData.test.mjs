@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { fetchExplorerSummary, fetchExplorerProfile, fetchExplorerRows } from '../src/api/dataExplorer.ts'
-import { businessColumns, rangeToTsv, reorderColumn, resizeColumn, trustedSorts } from '../src/dataExplorer/gridState.ts'
+import { businessColumns, isSortable } from '../src/dataExplorer/columns.ts'
 import { ADMIN_DASHBOARD_NAVIGATION } from '../src/navigation/dashboardNavigation.ts'
 
 const tenant = '11111111-1111-4111-8111-111111111111'
@@ -46,19 +46,15 @@ test('summary, profile and bounded cursor rows use credentialed backend contract
   assert.match(seen[2].url, /\/data\/tables\/clients\/rows$/)
 })
 
-test('column state is local, technical fields are excluded, and copy is spreadsheet compatible', () => {
+test('consultation shows ordered business columns and sorts only supported types', () => {
   const columns = businessColumns([
-    { name: 'name', ordinal_position: 1, is_technical: false },
-    { name: '__syncoria_id', ordinal_position: 2, is_technical: false },
-    { name: 'city', ordinal_position: 3, is_technical: false },
+    { name: 'city', ordinal_position: 3, type_family: 'text', data_type: 'text', is_technical: false },
+    { name: '__syncoria_id', ordinal_position: 2, type_family: 'text', data_type: 'text', is_technical: false },
+    { name: 'name', ordinal_position: 1, type_family: 'text', data_type: 'text', is_technical: false },
   ])
   assert.deepEqual(columns.map((column) => column.name), ['name', 'city'])
-  assert.equal(resizeColumn(columns, 'name', 250)[0].width, 250)
-  assert.deepEqual(reorderColumn(columns, 'city', 'name').map((column) => column.name), ['city', 'name'])
-  assert.deepEqual(trustedSorts([{ column: '__syncoria_id', direction: 'asc' }, { column: 'city', direction: 'desc' }], columns), [{ column: 'city', direction: 'desc' }])
-  assert.equal(businessColumns([{ name: 'payload', ordinal_position: 1, type_family: 'other', data_type: 'jsonb', is_technical: false }])[0].sortable, false)
-  assert.equal(rangeToTsv([{ name: 'A\tB', city: 'Paris' }, { name: 'Cara', city: 'Lyon' }], ['name', 'city'],
-    { startRow: 0, endRow: 1, startColumn: 0, endColumn: 1 }), '"A\tB"\tParis\r\nCara\tLyon')
+  assert.equal(isSortable(columns[0]), true)
+  assert.equal(isSortable({ name: 'payload', ordinal_position: 1, type_family: 'other', data_type: 'jsonb', is_technical: false }), false)
 })
 
 test('backend errors and malformed row pages remain sanitized', async () => {
