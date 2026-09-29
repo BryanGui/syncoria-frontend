@@ -73,7 +73,7 @@ test('empty state opens Sources without changing browser route', async ({ page }
   await expect(page.getByText('Aucun outil connecté pour le moment.')).toBeVisible()
   const url = page.url()
   await page.getByRole('button', { name: 'Gérer les sources' }).click()
-  await expect(page.getByText('Configuration / Sources')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sources', exact: true })).toBeVisible()
   expect(page.url()).toBe(url)
 })
 

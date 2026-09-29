@@ -199,3 +199,9 @@ Elle doit permettre de comprendre rapidement :
 * les synchronisations ;
 * les processus ;
 * les actions à effectuer.
+
+## 12. Expérimentation Sources
+
+L’onglet Sources teste localement une palette plus contrastée : fond `#F7F8FA`, surface blanche, texte `#172033`, accent `#5B4BC4`. Les connexions y sont présentées en lignes compactes avec détails dépliables. La destination Sources active utilise un fond violet et un texte blanc dans la sidebar.
+
+Cette expérimentation reste limitée à Sources. Elle ne remplace pas les tokens ni les styles actifs des autres onglets tant que la direction visuelle n’a pas été validée.

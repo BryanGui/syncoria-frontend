@@ -33,20 +33,22 @@ test('renders provider credentials only in the admin tenant workspace', () => {
 
 test('renders only provider records returned by the backend', () => {
   assert.match(integrationSource, /providers\.length === 0/)
-  assert.match(integrationSource, /Aucun provider configuré\./)
+  assert.match(integrationSource, /Aucune connexion configurée\./)
   assert.match(integrationSource, /providers\.map\(\(providerRecord\)/)
   assert.doesNotMatch(integrationSource, /PROVIDERS\.map|selectProviderRecord/)
 })
 
 test('offers Notion and n8n only from the add-provider form', () => {
-  assert.match(integrationSource, /\+ Ajouter un provider/)
+  assert.match(integrationSource, /\+ Connecter un outil/)
   assert.match(integrationSource, /<option value="notion">Notion<\/option>/)
   assert.match(integrationSource, /<option value="n8n">n8n<\/option>/)
   assert.match(integrationSource, /<ProviderCreationForm/)
 })
 
-test('renders the operational actions on a real provider card', () => {
+test('renders the operational actions in the shared menu of a real connection row', () => {
   assert.match(integrationSource, /providerRecord=\{providerRecord\}/)
+  assert.match(integrationSource, /<ProviderLogo provider=\{provider\}/)
+  assert.match(integrationSource, /<ActionMenu[^>]*portal>/)
   assert.match(integrationSource, /Modifier les identifiants/)
   assert.doesNotMatch(integrationSource, /Remplacer le token|Remplacer la clé/)
   assert.match(integrationSource, /Vérifier la connexion/)
@@ -74,7 +76,7 @@ test('centralizes credential type values and labels by provider', () => {
 test('offers provider credential types and resets the selection on provider change', () => {
   assert.match(
     integrationSource,
-    /Provider[\s\S]*?<\/select>\s*<\/label>\s*<label>\s*Type de credential/,
+    /Outil[\s\S]*?<\/select>\s*<\/label>\s*<label>\s*Type d’identifiant/,
   )
   assert.match(integrationSource, /credentialTypes\.map\(\(\{ label, value \}\)/)
   assert.match(
@@ -89,7 +91,7 @@ test('renders the credential type received from the backend with a neutral fallb
   assert.match(integrationSource, /\?\.label \?\? 'À préciser'/)
   assert.match(
     integrationSource,
-    /<dt>Credential<\/dt>[\s\S]*?<dt>Type de credential<\/dt>\s*<dd>\{credentialTypeLabel\}<\/dd>/,
+    /<dt>Identifiants<\/dt>[\s\S]*?<dt>Type d’identifiant<\/dt><dd>\{credentialTypeLabel\}<\/dd>/,
   )
 })
 
@@ -148,7 +150,7 @@ test('renders archived integrations read-only and clears stale providers', () =>
   assert.match(integrationSource, /credentials ont été révoqués/)
   assert.match(
     integrationSource,
-    /tenantStatus === 'active'[\s\S]*?\+ Ajouter un provider/,
+    /tenantStatus === 'active'[\s\S]*?\+ Connecter un outil/,
   )
 })
 

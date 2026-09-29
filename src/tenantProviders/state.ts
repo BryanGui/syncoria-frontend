@@ -21,8 +21,10 @@ export function upsertProviderRecord(
   providers: readonly AdminProviderRecord[],
   provider: AdminProviderRecord,
 ): AdminProviderRecord[] {
-  const withoutCurrent = providers.filter((item) => item.id !== provider.id)
-  return [...withoutCurrent, provider]
+  const exists = providers.some((item) => item.id === provider.id)
+  return exists
+    ? providers.map((item) => item.id === provider.id ? provider : item)
+    : [...providers, provider]
 }
 
 export function applyProviderVerification(
