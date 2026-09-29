@@ -1,11 +1,11 @@
 # Provenance des identifiants visuels
 
-Les SVG présents ici sont copiés sans modification depuis [Simple Icons 16.33.0](https://www.npmjs.com/package/simple-icons/v/16.33.0), bibliothèque [CC0](https://github.com/simple-icons/simple-icons/blob/16.33.0/LICENSE.md). Les marques restent la propriété de leurs titulaires. Les SVG sont des versions monochromes de la bibliothèque et servent uniquement à identifier les outils. Aucun asset n’est chargé depuis un tiers au runtime.
+Les SVG historiques présents ici proviennent de [Simple Icons 16.33.0](https://www.npmjs.com/package/simple-icons/v/16.33.0), bibliothèque [CC0](https://github.com/simple-icons/simple-icons/blob/16.33.0/LICENSE.md). Les nouveaux assets prioritaires viennent des sites officiels. Les marques restent la propriété de leurs titulaires. Aucun asset n’est chargé depuis un tiers au runtime.
 
 | Provider | Fichier local | Source / provenance | Type | Remarque |
 | --- | --- | --- | --- | --- |
-| Notion | `notion.svg` | [Simple Icons 16.33.0](https://github.com/simple-icons/simple-icons/blob/16.33.0/icons/notion.svg); [source de la marque](https://www.notion.so) | Bibliothèque reconnue | SVG monochrome original, ratio préservé. |
-| n8n | `n8n.svg` | [Simple Icons 16.33.0](https://github.com/simple-icons/simple-icons/blob/16.33.0/icons/n8n.svg); [source de la marque](https://n8n.io/press) | Bibliothèque reconnue | SVG monochrome original, ratio préservé. |
+| Notion | `notion-official.png` | [Icône de l’application Notion](https://www.notion.so/images/logo-ios.png); [media kit](https://notion.notion.site/Media-Kit-205535b1d9c4440497a3d7a2ac096286) | Officielle | Cube noir et blanc d’origine : la marque ne propose pas de version multicolore de ce symbole. Ratio préservé. |
+| n8n | `n8n-official-mark.svg` | [Kit de logos n8n](https://n8n.io/brandguidelines/n8n_logos.zip); [charte](https://n8n.io/brandguidelines/) | Officielle | Symbole rose `#EA4B71` extrait du logo rose et noir officiel, sans changement de forme ni de couleur. Ratio préservé. |
 | Google Sheets | `google-sheets.svg` | [Simple Icons 16.33.0](https://github.com/simple-icons/simple-icons/blob/16.33.0/icons/googlesheets.svg); [source de la marque](https://sheets.google.com) | Bibliothèque reconnue | SVG monochrome original, ratio préservé. |
 | Google Drive | `google-drive.svg` | [Simple Icons 16.33.0](https://github.com/simple-icons/simple-icons/blob/16.33.0/icons/googledrive.svg); [source de la marque](https://developers.google.com/drive/web/branding) | Bibliothèque reconnue | SVG monochrome original, ratio préservé. |
 | Gmail | `gmail.svg` | [Simple Icons 16.33.0](https://github.com/simple-icons/simple-icons/blob/16.33.0/icons/gmail.svg); [source de la marque](https://fonts.gstatic.com/s/i/productlogos/gmail_2020q4/v8/192px.svg) | Bibliothèque reconnue | SVG monochrome original, ratio préservé. |

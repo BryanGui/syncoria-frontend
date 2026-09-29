@@ -1,4 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const testEnvironment = {
@@ -6,8 +9,10 @@ const testEnvironment = {
   VITE_API_BASE_URL: 'https://api.bryanlab.ovh',
   VITE_UI_INTERACTION_TEST: 'true',
 }
+const outputDir = mkdtempSync(join(tmpdir(), 'syncoria-browser-'))
+process.on('exit', () => rmSync(outputDir, { recursive: true, force: true }))
 
-const build = spawnSync(npmCommand, ['run', 'build'], {
+const build = spawnSync(npmCommand, ['run', 'build', '--', '--outDir', outputDir, '--emptyOutDir'], {
   env: testEnvironment,
   stdio: 'inherit',
 })
@@ -18,7 +23,7 @@ if (build.status !== 0) {
 
 const preview = spawn(
   npmCommand,
-  ['run', 'preview', '--', '--host', '127.0.0.1', '--port', '4173'],
+  ['run', 'preview', '--', '--host', '127.0.0.1', '--port', '4173', '--outDir', outputDir],
   { env: testEnvironment, stdio: 'inherit' },
 )
 

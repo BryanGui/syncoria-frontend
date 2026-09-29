@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
 const prefix = `/admin/tenants/${tenantId}`
-const tenant = { id: tenantId, name: 'Novalia', slug: 'novalia', status: 'active' }
+const tenant = { id: tenantId, name: 'Client synthétique', slug: 'synthetic', status: 'active' }
 
 function provider(id: string, slug: string, name: string) {
   return {
@@ -45,25 +45,39 @@ async function openOverview(page: Page, providerResponse: { status: number; json
   })
   await page.goto('/')
   await page.getByRole('button', { name: 'Clients', exact: true }).click()
-  await page.getByRole('button', { name: 'Novalia', exact: true }).click()
+  await page.getByRole('button', { name: 'Client synthétique', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Outils connectés' })).toBeVisible()
   return { getProviderRequests: () => providerRequests }
 }
 
 test('admin overview shows only actual records, local logos and secondary tenant details', async ({ page }) => {
   const requests = await openOverview(page, { status: 200, json: [
-    provider('notion-id', 'notion', 'Notion recrutement'),
+    provider('notion-id', 'notion', 'Notion démo'),
     provider('n8n-id', 'n8n', 'n8n'),
   ] })
   const cards = page.locator('.tenant-connected-tools__card')
   await expect(cards).toHaveCount(2)
-  await expect(cards.nth(0)).toContainText('Notion recrutement')
+  await expect(cards.nth(0)).toContainText('Notion')
+  await expect(cards.nth(0)).not.toContainText('Notion démo')
   await expect(cards.nth(0)).toContainText('Connecté')
   await expect(cards.nth(1)).toContainText('n8n')
   await expect(cards.getByRole('img', { name: 'Logo de Notion' })).toBeVisible()
   await expect(cards.getByRole('img', { name: 'Logo de n8n' })).toBeVisible()
+  await expect(cards.locator('img').first()).toHaveAttribute('src', /notion-official/)
+  await expect(cards.locator('img').last()).toHaveAttribute('src', /^data:image\/svg\+xml/)
+  await expect(cards.locator('img').last()).toHaveAttribute('src', /%23EA4B71/)
+  const logoBox = await cards.first().locator('.provider-logo').boundingBox()
+  const labelBox = await cards.first().getByRole('heading', { name: 'Notion' }).boundingBox()
+  expect(logoBox).not.toBeNull()
+  expect(labelBox).not.toBeNull()
+  expect(Math.abs(logoBox!.y - labelBox!.y)).toBeLessThan(16)
+  expect(labelBox!.x).toBeGreaterThan(logoBox!.x)
   await expect(page.getByText('Stripe')).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: 'Informations du tenant' })).toBeVisible()
+  const technical = page.locator('.tenant-overview__details')
+  await expect(technical.locator('summary')).toContainText('Informations techniques')
+  await expect(technical).not.toHaveAttribute('open')
+  await expect(page.getByText(tenantId)).toBeHidden()
+  await technical.locator('summary').click()
   await expect(page.getByText(tenantId)).toBeVisible()
   expect(requests.getProviderRequests()).toBe(1)
 })
@@ -72,7 +86,7 @@ test('empty state opens Sources without changing browser route', async ({ page }
   await openOverview(page, { status: 200, json: [] })
   await expect(page.getByText('Aucun outil connecté pour le moment.')).toBeVisible()
   const url = page.url()
-  await page.getByRole('button', { name: 'Gérer les sources' }).click()
+  await page.getByRole('button', { name: /Gérer les sources/ }).click()
   await expect(page.getByRole('heading', { name: 'Sources', exact: true })).toBeVisible()
   expect(page.url()).toBe(url)
 })
@@ -104,10 +118,34 @@ test('unknown providers and catalog entries without assets use an accessible fal
 test('connection cards remain readable without horizontal overflow on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openOverview(page, { status: 200, json: [
-    provider('notion-id', 'notion', 'Notion recrutement'),
+    provider('notion-id', 'notion', 'Notion démo'),
     provider('n8n-id', 'n8n', 'Automatisation'),
   ] })
   await expect(page.locator('.tenant-connected-tools__card')).toHaveCount(2)
+  await expect(page.locator('.tenant-connected-tools__card').first()).not.toContainText('Notion démo')
   const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   expect(hasHorizontalOverflow).toBe(false)
+})
+
+test('overview screenshots keep provider logo and name on one line at desktop and mobile sizes', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openOverview(page, { status: 200, json: [
+    provider('notion-id', 'notion', 'Notion démo'),
+    provider('n8n-id', 'n8n', 'n8n démo'),
+  ] })
+  await page.screenshot({ path: 'docs/screenshots/ticket-109/overview-desktop.png', fullPage: true })
+  for (const width of [1280, 768, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)
+    expect(horizontalOverflow).toBe(false)
+    const cards = page.locator('.tenant-connected-tools__card')
+    for (const card of await cards.all()) {
+      const logo = await card.locator('.provider-logo').boundingBox()
+      const label = await card.locator('h4').boundingBox()
+      expect(logo && label).toBeTruthy()
+      expect(label!.x).toBeGreaterThan(logo!.x)
+      expect(Math.abs(label!.y - logo!.y)).toBeLessThan(16)
+    }
+  }
+  await page.screenshot({ path: 'docs/screenshots/ticket-109/overview-mobile.png', fullPage: true })
 })

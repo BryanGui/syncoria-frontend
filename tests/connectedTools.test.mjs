@@ -28,10 +28,15 @@ test('the visual catalog has exactly the requested tools and explicit aliases', 
   assert.equal(resolveProvider('notionn'), null)
 })
 
-test('all configured logos are local, valid SVGs without script or external fetches', async () => {
+test('all configured logos are local images without SVG script or external fetches', async () => {
   for (const entry of providerCatalog) {
     if (entry.logo === null) continue
     assert.equal(new URL(entry.logo).protocol, 'file:')
+    if (new URL(entry.logo).pathname.endsWith('.png')) {
+      const png = await readFile(new URL(entry.logo))
+      assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      continue
+    }
     const svg = await readFile(new URL(entry.logo), 'utf8')
     assert.match(svg, /^<svg\b/)
     assert.doesNotMatch(svg, /<script\b|<foreignObject\b|href\s*=|@import|url\(/i)

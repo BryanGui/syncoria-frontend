@@ -7,8 +7,8 @@ export interface ProviderCatalogEntry {
 
 // This is a visual catalog. Backend provider support comes only from API records.
 export const providerCatalog: readonly ProviderCatalogEntry[] = [
-  { slug: 'notion', label: 'Notion', logo: new URL('../assets/providers/notion.svg', import.meta.url).href, aliases: [] },
-  { slug: 'n8n', label: 'n8n', logo: new URL('../assets/providers/n8n.svg', import.meta.url).href, aliases: [] },
+  { slug: 'notion', label: 'Notion', logo: new URL('../assets/providers/notion-official.png', import.meta.url).href, aliases: [] },
+  { slug: 'n8n', label: 'n8n', logo: new URL('../assets/providers/n8n-official-mark.svg', import.meta.url).href, aliases: [] },
   { slug: 'google-sheets', label: 'Google Sheets', logo: new URL('../assets/providers/google-sheets.svg', import.meta.url).href, aliases: ['google_sheets'] },
   { slug: 'google-drive', label: 'Google Drive', logo: new URL('../assets/providers/google-drive.svg', import.meta.url).href, aliases: ['google_drive'] },
   { slug: 'gmail', label: 'Gmail', logo: new URL('../assets/providers/gmail.svg', import.meta.url).href, aliases: [] },
