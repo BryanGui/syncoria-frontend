@@ -12,7 +12,7 @@ const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx',
 const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
 test('exposes the versioned integration workflow in the dedicated admin section', () => {
-  assert.match(workspace, /ADMIN_TENANT_WORKSPACE_SECTIONS/)
+  assert.match(workspace, /ADMIN_TENANT_GROUPS/)
   assert.match(workspace, /activeSection === 'Intégration'/)
   assert.match(workspace, /adminVersionedIntegration/)
   assert.match(page, /<AdminTenantVersionedIntegration/)

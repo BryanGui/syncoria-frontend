@@ -10,11 +10,12 @@ import {
 import { AdminTenantReports } from '../components/AdminTenantReports'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { AdminTenantIngestion } from '../components/AdminTenantIngestion'
-import { AdminTenantData } from '../components/AdminTenantData'
+import { AdminTenantAccess } from '../components/AdminTenantAccess'
 import { AdminTenantVersionedIntegration } from '../components/AdminTenantVersionedIntegration'
 import { TenantWorkspace } from '../components/TenantWorkspace'
 interface AdminTenantWorkspacePageProps {
   apiBaseUrl: string | null
+  sidebarTarget: HTMLDivElement | null
   tenantId: string
   onBack: () => void
   onSessionExpired: () => void
@@ -24,6 +25,7 @@ type AdminTenantPageState = Exclude<AdminTenantResult, { status: 'unauthenticate
 
 export function AdminTenantWorkspacePage({
   apiBaseUrl,
+  sidebarTarget,
   tenantId,
   onBack,
   onSessionExpired,
@@ -144,11 +146,13 @@ export function AdminTenantWorkspacePage({
 
   return (
     <TenantWorkspace
-      adminData={(
-        <AdminTenantData
+      sidebarTarget={sidebarTarget}
+      adminAccess={(
+        <AdminTenantAccess
           apiBaseUrl={apiBaseUrl}
           onSessionExpired={onSessionExpired}
           tenantId={pageState.tenant.id}
+          tenantStatus={pageState.tenant.status}
         />
       )}
       adminVersionedIntegration={(

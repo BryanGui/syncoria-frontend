@@ -127,6 +127,9 @@ async function openIngestion(page: Page): Promise<{ requests: string[] }> {
   await page.goto('/')
   await page.getByRole('button', { name: 'Clients', exact: true }).click()
   await page.getByRole('button', { name: 'Client synthétique', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Client synthétique', exact: true })).toBeVisible()
+  const mobileMenu = page.getByRole('button', { name: 'Menu du client' })
+  if (await mobileMenu.isVisible()) await mobileMenu.click()
   await page.getByRole('button', { name: 'Ingestion', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Historique des ingestions' })).toBeVisible()
   return { requests }

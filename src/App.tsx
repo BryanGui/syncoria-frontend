@@ -546,6 +546,7 @@ interface DashboardProps {
 function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
+  const [tenantSidebarTarget, setTenantSidebarTarget] = useState<HTMLDivElement | null>(null)
   const [navigationState, dispatchNavigation] = useReducer(
     dashboardNavigationReducer,
     INITIAL_DASHBOARD_NAVIGATION_STATE,
@@ -567,13 +568,13 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={isTenant ? 'sidebar sidebar--tenant' : 'sidebar'}>
         <div className="brand">
           <span className="brand__mark" aria-hidden="true">S</span>
           <span>Syncoria</span>
         </div>
 
-        <nav aria-label="Navigation principale" className="navigation">
+        {isTenant ? <div className="tenant-sidebar-host" ref={setTenantSidebarTarget} /> : <nav aria-label="Navigation principale" className="navigation">
           <p className="navigation__label">Administration</p>
           <ul>
             {ADMIN_DASHBOARD_NAVIGATION.map((item) => {
@@ -614,7 +615,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
               )
             })}
           </ul>
-        </nav>
+        </nav>}
 
         <div className="sidebar__footer">
           <span className="sidebar__status" aria-hidden="true" />
@@ -742,6 +743,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
         ) : navigationState.selectedTenantId !== null ? (
           <AdminTenantWorkspacePage
             apiBaseUrl={apiBaseUrl}
+            sidebarTarget={tenantSidebarTarget}
             onBack={() => dispatchNavigation({
               type: 'open_page',
               page: 'clients',

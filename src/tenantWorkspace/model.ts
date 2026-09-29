@@ -12,25 +12,32 @@ export function getTenantStatusLabel(status: string): string {
 
 export const TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
-  'Données',
-  'Intégrations',
-  'Automatisations',
   'Logs',
+  'Superset',
 ] as const
 
 export type TenantWorkspaceSection = typeof TENANT_WORKSPACE_SECTIONS[number]
 
 export const ADMIN_TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
-  'Données',
-  'Connexions',
   'Audit',
   'Ingestion',
   'Intégration',
-  'Synchronisation',
-  'Automatisations',
+  'Sources',
+  'Accès',
+  'Synchronisations',
+  'Workflows',
   'Logs',
+  'Superset',
 ] as const
 
 export type AdminTenantWorkspaceSection =
   typeof ADMIN_TENANT_WORKSPACE_SECTIONS[number]
+
+export const ADMIN_TENANT_GROUPS = [
+  { label: 'Pipeline', sections: ['Ingestion', 'Intégration'] },
+  { label: 'Configuration', sections: ['Sources', 'Accès'] },
+  { label: 'Automatisations', sections: ['Synchronisations', 'Workflows'] },
+] as const
+
+export type AdminTenantGroup = typeof ADMIN_TENANT_GROUPS[number]['label']

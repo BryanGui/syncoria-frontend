@@ -39,8 +39,20 @@ dans le contexte administrateur par `GET /admin/tenants/{tenant_id}`. Le
 composant reçoit uniquement un modèle de vue par props et ne dépend pas de la
 route admin ; un futur portail client pourra donc l'alimenter avec une identité
 tenant dérivée côté backend de sa propre session. Seule la Vue générale affiche
-actuellement les champs réels `slug`, `status` et `id`. Les sections Données,
-Intégrations, Automatisations et Logs restent explicitement vides.
+actuellement les champs réels `slug`, `status` et `id`. L'onglet Superset
+affiche un placeholder de visualisation dans les espaces administrateur et
+client, sans connexion à Superset. La gestion des accès est réservée à
+l'administrateur Syncoria : elle lit les capacités, le provisioning et les
+permissions effectives depuis les API tenant, puis permet de gérer les
+utilisateurs et leurs règles individuelles. Un tenant archivé reste consultable
+en lecture seule. Le portail client ne propose aucune gestion des utilisateurs.
+
+La navigation globale de l'administration présente Vue d’ensemble et Clients.
+Dans un tenant, elle devient contextuelle : Vue générale, Audit, Pipeline
+(Ingestion, Intégration), Configuration (Sources, Accès), Automatisations
+(Synchronisations, Workflows), Logs et Outils (Superset, Chat IA). Les groupes
+sont repliables. Le Chat IA est un panneau flottant non connecté qui laisse la
+section courante visible ; Superset conserve son placeholder.
 
 ## Session client
 

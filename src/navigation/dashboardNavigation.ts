@@ -18,9 +18,6 @@ export const ADMIN_DASHBOARD_NAVIGATION: ReadonlyArray<{
 }> = [
   { icon: 'overview', label: 'Vue d’ensemble', page: 'overview' },
   { icon: 'clients', label: 'Clients', page: 'clients' },
-  { icon: 'data', label: 'Données' },
-  { icon: 'sync', label: 'Synchronisations' },
-  { icon: 'process', label: 'Processus' },
 ]
 
 export interface DashboardNavigationState {
