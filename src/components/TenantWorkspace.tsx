@@ -46,6 +46,7 @@ export function TenantWorkspace({
   const chatTriggerRef = useRef<HTMLButtonElement>(null)
   const closeChat = useCallback(() => setChatOpen(false), [])
   const isAdmin = adminIntegration !== undefined
+  const isSources = isAdmin && activeSection === 'Sources'
   const name = tenantLabel ?? tenant.slug
   const group = isAdmin
     ? ADMIN_TENANT_GROUPS.find((item) => item.sections.some((section) => section === activeSection))?.label
@@ -63,21 +64,28 @@ export function TenantWorkspace({
   return (
     <div className={sidebarTarget ? 'tenant-workspace-layout tenant-workspace-layout--portal' : 'tenant-workspace-layout'}>
       {sidebarTarget ? createPortal(navigation, sidebarTarget) : navigation}
-      <section aria-labelledby="tenant-workspace-title" className="tenant-workspace">
+      <section aria-labelledby="tenant-workspace-title" className={isSources ? 'tenant-workspace tenant-workspace--sources' : 'tenant-workspace'}>
         <div className="tenant-workspace__heading">
           <div>
-            <p className="tenant-workspace__breadcrumb">{isAdmin ? 'Clients / ' : ''}{name} / {group ? `${group} / ` : ''}{activeSection}</p>
+            {!isSources ? <p className="tenant-workspace__breadcrumb">{isAdmin ? 'Clients / ' : ''}{name} / {group ? `${group} / ` : ''}{activeSection}</p> : null}
             <h2 id="tenant-workspace-title">{name}</h2>
           </div>
           <div className="tenant-workspace__heading-actions">
-            <span className={tenant.status === 'active'
+            {!isSources ? <span className={tenant.status === 'active'
               ? 'tenant-status tenant-status--active'
               : 'tenant-status'}>
               {getTenantStatusLabel(tenant.status)}
-            </span>
+            </span> : null}
             {lifecycleControls}
           </div>
         </div>
+
+        {isSources ? (
+          <div className="tenant-workspace__sources-intro">
+            <h3>Sources</h3>
+            <p>Gérez les outils et services connectés à cet espace.</p>
+          </div>
+        ) : null}
 
         {activeSection === 'Vue générale' ? (
           <div className="tenant-overview">

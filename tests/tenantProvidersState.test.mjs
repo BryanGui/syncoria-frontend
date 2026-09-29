@@ -88,3 +88,11 @@ test('adds only the provider record returned by the backend', () => {
   assert.deepEqual(providers, [provider])
   assert.equal(providers.some((item) => item.provider === 'n8n'), false)
 })
+
+test('updating a connection keeps its place in a compact list', () => {
+  const second = { ...provider, id: 'second', provider: 'n8n' }
+  const changed = { ...provider, last_verification_status: 'error' }
+  const providers = upsertProviderRecord([provider, second], changed)
+  assert.deepEqual(providers.map((item) => item.id), [provider.id, second.id])
+  assert.equal(providers[0].last_verification_status, 'error')
+})
