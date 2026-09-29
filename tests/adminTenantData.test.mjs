@@ -6,10 +6,9 @@ const component = await readFile(new URL('../src/components/AdminTenantData.tsx'
 const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
 const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
 
-test('mounts the materialized PostgreSQL structure explorer in the admin data section', () => {
-  assert.match(page, /adminData=\{/)
-  assert.match(page, /<AdminTenantData/)
-  assert.match(workspace, /activeSection === 'Données'[\s\S]*?adminData/)
+test('keeps the legacy data explorer implementation out of the new Superset tab', () => {
+  assert.doesNotMatch(page, /adminData=\{|<AdminTenantData/)
+  assert.doesNotMatch(workspace, /activeSection === 'Données'|adminData/)
   assert.match(component, /fetchAdminIntegrations/)
   assert.match(component, /fetchAdminIntegrationModelStructure/)
   assert.match(component, /Structure du modèle PostgreSQL matérialisé/)

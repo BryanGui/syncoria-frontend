@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { test, expect, type Page, type Route } from '@playwright/test'
 
 const tenantId = '11111111-1111-4111-8111-111111111111'
@@ -737,51 +738,86 @@ function importedRow(page: Page, title: string) {
   return page.locator('.versioned-integration__ddl-row--imported').filter({ hasText: title })
 }
 
-test('explores materialized tables and reports versions without a completed model', async ({ page }) => {
-  await openIntegration(page, {
-    integrations: [active, draft, archived],
-    structures: {
-      [activeId]: {
-        integration_version_id: activeId,
-        status: 'active',
-        physical_schema_name: 'syncoria_m_active_model',
-        tables: [{
-          name: 'placements',
-          columns: [
-            { name: '__syncoria_provider', data_type: 'text', nullable: false },
-            { name: '__syncoria_provider_connection_id', data_type: 'uuid', nullable: false },
-            { name: '__syncoria_provider_source_id', data_type: 'text', nullable: true },
-            { name: '__syncoria_provider_record_id', data_type: 'text', nullable: true },
-            { name: 'amount', data_type: 'numeric(12,2)', nullable: false },
-          ],
-        }],
-      },
-    },
-    structureFailureCodes: { [archivedId]: 'conflict' },
+test('shows the Superset placeholder without loading the legacy data explorer', async ({ page }) => {
+  await openIntegration(page, { integrations: [active] })
+  await page.getByRole('button', { name: 'Superset', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Visualisation des données' })).toBeVisible()
+  await expect(page.getByText('Les tableaux de bord Superset seront disponibles ici.')).toBeVisible()
+  await expect(page.locator('.tenant-model-data')).toHaveCount(0)
+})
+
+test('manages tenant capabilities and user rules from backend effective access', async ({ page }) => {
+  await openIntegration(page, { integrations: [active] })
+  const memberId = '21212121-2121-4212-8212-212121212121'
+  let entitlements = { access: true, analytics: false, agent: true }
+  const users = [{ id: memberId, login: 'alice@example.test', display_name: 'Alice', role: 'viewer', status: 'active' }]
+  const overrides: Record<string, boolean> = {}
+  const requests: { path: string; method: string; body: unknown }[] = []
+  await page.route('https://api.bryanlab.ovh/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    const body = route.request().postData() ? route.request().postDataJSON() as Record<string, unknown> : null
+    requests.push({ path, method, body })
+    const user = users[0]
+    const access = () => ({
+      tenant_id: tenantId, user_id: user.id, role: user.role, user_status: user.status,
+      entitlements, overrides,
+      permissions: user.status === 'active' && entitlements.analytics && overrides['analytics:view'] !== false
+        ? ['analytics:view'] : [],
+    })
+    if (path === `${prefix}/access`) return route.fulfill({ json: { tenant_id: tenantId, tenant_status: 'active', entitlements, provisioning: { status: 'ready', role_name: 'syncoria_tenant_example' } } })
+    if (path === `${prefix}/entitlements` && method === 'PATCH') {
+      entitlements = { ...entitlements, ...(body?.entitlements as object) }
+      return route.fulfill({ json: { entitlements } })
+    }
+    if (path === `${prefix}/users` && method === 'GET') return route.fulfill({ json: users })
+    if (path === `${prefix}/users` && method === 'POST') {
+      Object.assign(user, { login: body?.login, display_name: body?.display_name, role: body?.role })
+      return route.fulfill({ status: 201, json: user })
+    }
+    if (path === `${prefix}/users/${memberId}/access`) return route.fulfill({ json: access() })
+    if (path === `${prefix}/users/${memberId}` && method === 'PATCH') {
+      Object.assign(user, body)
+      return route.fulfill({ json: user })
+    }
+    if (path === `${prefix}/users/${memberId}/override` && method === 'PUT') {
+      if (body?.allowed === null) delete overrides[String(body.permission)]
+      else overrides[String(body?.permission)] = Boolean(body?.allowed)
+      return route.fulfill({ json: access() })
+    }
+    if (path === `${prefix}/users/${memberId}/revoke-sessions`) return route.fulfill({ status: 204, body: '' })
+    return route.fulfill({ status: 404, json: {} })
   })
 
-  await page.getByRole('button', { name: 'Données', exact: true }).click()
-  const dataExplorer = page.locator('.tenant-model-data')
-  await expect(dataExplorer.getByRole('heading', { name: 'Données', exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Novalia Talents v1 · v1', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Actif', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByRole('button', { name: /placements/ })).toBeVisible()
-  await expect(dataExplorer.getByText('Les colonnes marquées « Technique » correspondent aux métadonnées de provenance ajoutées par Syncoria.', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider_connection_id', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider_source_id', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('__syncoria_provider_record_id', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Technique', { exact: true })).toHaveCount(4)
-  await expect(dataExplorer.locator('.tenant-model-data__column').filter({ hasText: 'amount' }).getByText('Technique', { exact: true })).toHaveCount(0)
-  await expect(dataExplorer.getByText('numeric(12,2)', { exact: true })).toBeVisible()
-  await expect(dataExplorer.locator('.tenant-model-data__column').filter({ hasText: 'amount' }).getByText('Non', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Accès', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Capacités de l’entreprise' })).toBeVisible()
+  await expect(page.getByText('syncoria_tenant_example')).toBeVisible()
+  await expect(page.getByText('Indisponible')).toHaveCount(0)
+  await page.locator('.tenant-access__capability').filter({ hasText: 'Superset' }).locator('input').click()
+  await expect(page.locator('.tenant-access__capability').filter({ hasText: 'Superset' }).locator('input')).toBeChecked()
+  await expect(page.getByText('Superset', { exact: true }).last()).toBeVisible()
+  await page.locator('.tenant-access__capability').filter({ hasText: 'Agent IA' }).locator('input').click()
+  await expect(page.locator('.tenant-access__capability').filter({ hasText: 'Agent IA' }).locator('input')).not.toBeChecked()
+  await expect(page.getByText('Capacités de l’entreprise enregistrées.')).toBeVisible()
 
-  await dataExplorer.locator('select').selectOption(draftId)
-  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toBeVisible()
-
-  await dataExplorer.locator('select').selectOption(archivedId)
-  await expect(dataExplorer.getByText('La structure du modèle PostgreSQL ne peut pas être chargée.', { exact: true })).toBeVisible()
-  await expect(dataExplorer.getByText('Aucun modèle PostgreSQL construit pour cette version.', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '+ Ajouter un utilisateur' }).click()
+  await page.getByLabel('Login').fill('new@example.test')
+  await page.getByLabel('Nom affiché (optionnel)').fill('Nouvelle')
+  await page.getByLabel('Mot de passe').fill('synthetic-password-123')
+  await page.getByRole('button', { name: 'Créer l’utilisateur' }).click()
+  await expect(page.getByText('Utilisateur ajouté.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Gérer Nouvelle' })).toBeVisible()
+  await page.getByLabel('Rôle', { exact: true }).last().selectOption('member')
+  await expect(page.getByText('Utilisateur mis à jour.')).toBeVisible()
+  await page.getByLabel('Règle : Accéder à Superset').selectOption('deny')
+  await expect(page.getByText('Règle : Refusé · Effectif : Non')).toBeVisible()
+  await page.getByLabel('Règle : Accéder à Superset').selectOption('inherit')
+  await expect(page.getByText('Règle : Hérité du rôle · Effectif : Oui')).toBeVisible()
+  await page.getByRole('button', { name: 'Désactiver l’utilisateur' }).click()
+  await expect(page.getByText('Statut : Désactivé')).toBeVisible()
+  await page.getByRole('button', { name: 'Révoquer les sessions' }).click()
+  await expect(page.getByText('Sessions révoquées.')).toBeVisible()
+  assert.equal(requests.some((request) => request.path.endsWith('/revoke-sessions')), true)
 })
 
 test('creates a draft lazily on the first provider change and persists A then A+B', async ({ page }) => {

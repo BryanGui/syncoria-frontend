@@ -12,35 +12,42 @@ import { beginTenantWorkspaceLoad } from '../src/tenantWorkspace/state.ts'
 const tenantWorkspaceSource = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
 const workspaceStyles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
-test('keeps the standard tenant sections unchanged', () => {
+test('uses Superset in the client workspace without user administration', () => {
   assert.deepEqual(TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
-    'Données',
+    'Superset',
     'Intégrations',
     'Automatisations',
     'Logs',
   ])
+  assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Accès'), false)
+  assert.equal(TENANT_WORKSPACE_SECTIONS.includes('Analyses'), false)
 })
 
 test('defines the exact admin workflow navigation', () => {
   assert.deepEqual(ADMIN_TENANT_WORKSPACE_SECTIONS, [
     'Vue générale',
-    'Données',
+    'Superset',
     'Connexions',
     'Audit',
     'Ingestion',
     'Intégration',
     'Synchronisation',
     'Automatisations',
+    'Accès',
     'Logs',
   ])
+  assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Analyses'), false)
+  assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes('Données'), false)
   for (const legacySection of ['Provider credentials', 'Audit & intégration', 'Audit & cartographie', 'Intégration des données']) {
     assert.equal(ADMIN_TENANT_WORKSPACE_SECTIONS.includes(legacySection), false)
   }
 })
 
 test('routes each admin section to its dedicated content without legacy subtabs', () => {
-  assert.match(tenantWorkspaceSource, /activeSection === 'Données'[\s\S]*?adminData/)
+  assert.match(tenantWorkspaceSource, /activeSection === 'Superset'[\s\S]*?Visualisation des données/)
+  assert.match(tenantWorkspaceSource, /Les tableaux de bord Superset seront disponibles ici/)
+  assert.match(tenantWorkspaceSource, /activeSection === 'Accès'[\s\S]*?adminAccess/)
   assert.match(tenantWorkspaceSource, /activeSection === 'Connexions'[\s\S]*?adminIntegration/)
   assert.match(tenantWorkspaceSource, /activeSection === 'Audit'[\s\S]*?adminReports/)
   assert.match(tenantWorkspaceSource, /activeSection === 'Ingestion'[\s\S]*?adminIngestion/)

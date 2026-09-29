@@ -14,7 +14,7 @@ interface TenantWorkspaceProps {
   tenantLabel?: string
   onBack?: () => void
   adminReports?: ReactNode
-  adminData?: ReactNode
+  adminAccess?: ReactNode
   adminIntegration?: ReactNode
   adminIngestion?: ReactNode
   adminVersionedIntegration?: ReactNode
@@ -22,7 +22,7 @@ interface TenantWorkspaceProps {
 }
 
 export function TenantWorkspace({
-  adminData,
+  adminAccess,
   adminReports,
   adminIntegration,
   adminIngestion,
@@ -95,8 +95,13 @@ export function TenantWorkspace({
         </div>
       ) : activeSection === 'Connexions' && adminIntegration !== undefined ? (
         adminIntegration
-      ) : activeSection === 'Données' && adminData !== undefined ? (
-        adminData
+      ) : activeSection === 'Superset' ? (
+        <div className="tenant-workspace__empty">
+          <h3>Visualisation des données</h3>
+          <p>Les tableaux de bord Superset seront disponibles ici.</p>
+        </div>
+      ) : activeSection === 'Accès' ? (
+        adminAccess
       ) : activeSection === 'Audit' ? (
         adminReports
       ) : activeSection === 'Ingestion' ? (

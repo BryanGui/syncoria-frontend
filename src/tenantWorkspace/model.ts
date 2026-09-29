@@ -12,7 +12,7 @@ export function getTenantStatusLabel(status: string): string {
 
 export const TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
-  'Données',
+  'Superset',
   'Intégrations',
   'Automatisations',
   'Logs',
@@ -22,13 +22,14 @@ export type TenantWorkspaceSection = typeof TENANT_WORKSPACE_SECTIONS[number]
 
 export const ADMIN_TENANT_WORKSPACE_SECTIONS = [
   'Vue générale',
-  'Données',
+  'Superset',
   'Connexions',
   'Audit',
   'Ingestion',
   'Intégration',
   'Synchronisation',
   'Automatisations',
+  'Accès',
   'Logs',
 ] as const
 
