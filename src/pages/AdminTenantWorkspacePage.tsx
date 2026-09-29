@@ -15,6 +15,7 @@ import { AdminTenantVersionedIntegration } from '../components/AdminTenantVersio
 import { TenantWorkspace } from '../components/TenantWorkspace'
 interface AdminTenantWorkspacePageProps {
   apiBaseUrl: string | null
+  sidebarTarget: HTMLDivElement | null
   tenantId: string
   onBack: () => void
   onSessionExpired: () => void
@@ -24,6 +25,7 @@ type AdminTenantPageState = Exclude<AdminTenantResult, { status: 'unauthenticate
 
 export function AdminTenantWorkspacePage({
   apiBaseUrl,
+  sidebarTarget,
   tenantId,
   onBack,
   onSessionExpired,
@@ -144,6 +146,7 @@ export function AdminTenantWorkspacePage({
 
   return (
     <TenantWorkspace
+      sidebarTarget={sidebarTarget}
       adminAccess={(
         <AdminTenantAccess
           apiBaseUrl={apiBaseUrl}

@@ -47,6 +47,13 @@ permissions effectives depuis les API tenant, puis permet de gérer les
 utilisateurs et leurs règles individuelles. Un tenant archivé reste consultable
 en lecture seule. Le portail client ne propose aucune gestion des utilisateurs.
 
+La navigation globale de l'administration présente Vue d’ensemble et Clients.
+Dans un tenant, elle devient contextuelle : Vue générale, Audit, Pipeline
+(Ingestion, Intégration), Configuration (Sources, Accès), Automatisations
+(Synchronisations, Workflows), Logs et Outils (Superset, Chat IA). Les groupes
+sont repliables. Le Chat IA est un panneau flottant non connecté qui laisse la
+section courante visible ; Superset conserve son placeholder.
+
 ## Session client
 
 L'écran de connexion distingue explicitement l'espace client de

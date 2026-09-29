@@ -30,6 +30,12 @@ test('does not expose a global Integrations destination', () => {
   )
 })
 
+test('keeps only overview and clients in the global sidebar', () => {
+  assert.deepEqual(ADMIN_DASHBOARD_NAVIGATION.map((item) => item.label), [
+    'Vue d’ensemble', 'Clients',
+  ])
+})
+
 test('keeps Clients active in a tenant workspace', () => {
   assert.equal(isDashboardNavigationItemActive('clients', 'tenant_workspace'), true)
 })

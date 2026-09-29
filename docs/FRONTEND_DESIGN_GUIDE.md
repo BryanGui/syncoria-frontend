@@ -71,10 +71,12 @@ Elle doit contenir :
 
 * le nom Syncoria ;
 * Vue d’ensemble ;
-* Clients ;
-* Données ;
-* Synchronisations ;
-* Processus.
+* Clients.
+
+Dans un tenant, la barre latérale devient contextuelle : retour à la liste,
+nom du client, destinations directes, groupes repliables Pipeline,
+Configuration et Automatisations, puis une zone Outils commune à Superset et
+Chat IA. Sur petit écran, son menu peut être replié.
 
 La zone principale doit contenir :
 
