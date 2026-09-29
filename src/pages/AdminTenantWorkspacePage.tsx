@@ -7,12 +7,15 @@ import {
   type AdminTenantResult,
   type AdminTenantLifecycleResult,
 } from '../api/adminTenant'
+import { fetchAdminTenantProviders } from '../api/adminTenantProviders'
 import { AdminTenantReports } from '../components/AdminTenantReports'
 import { AdminTenantIntegration } from '../components/AdminTenantIntegration'
 import { AdminTenantIngestion } from '../components/AdminTenantIngestion'
 import { AdminTenantAccess } from '../components/AdminTenantAccess'
 import { AdminTenantVersionedIntegration } from '../components/AdminTenantVersionedIntegration'
 import { TenantWorkspace } from '../components/TenantWorkspace'
+import type { ConnectedToolsState } from '../components/TenantConnectedTools'
+import { toConnectedTools } from '../tenantWorkspace/connectedTools'
 interface AdminTenantWorkspacePageProps {
   apiBaseUrl: string | null
   sidebarTarget: HTMLDivElement | null
@@ -36,6 +39,9 @@ export function AdminTenantWorkspacePage({
   const [isLifecycleSubmitting, setIsLifecycleSubmitting] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
   const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null)
+  const [connectedToolsState, setConnectedToolsState] = useState<ConnectedToolsState>({ status: 'loading' })
+  const loadedTenantId = pageState.status === 'loaded' ? pageState.tenant.id : null
+  const loadedTenantStatus = pageState.status === 'loaded' ? pageState.tenant.status : null
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -58,6 +64,29 @@ export function AdminTenantWorkspacePage({
       abortController.abort()
     }
   }, [apiBaseUrl, onSessionExpired, reloadKey, tenantId])
+
+  useEffect(() => {
+    if (loadedTenantId === null) return
+    const abortController = new AbortController()
+    let isActive = true
+    setConnectedToolsState({ status: 'loading' })
+
+    void fetchAdminTenantProviders(apiBaseUrl, loadedTenantId, abortController.signal).then((result) => {
+      if (!isActive) return
+      if (result.status === 'unauthenticated') {
+        onSessionExpired()
+      } else if (result.status === 'loaded') {
+        setConnectedToolsState({ status: 'loaded', tools: toConnectedTools(result.providers) })
+      } else {
+        setConnectedToolsState({ status: 'error' })
+      }
+    })
+
+    return () => {
+      isActive = false
+      abortController.abort()
+    }
+  }, [apiBaseUrl, loadedTenantId, loadedTenantStatus, onSessionExpired, reloadKey])
 
   function handleLifecycleFailure(result: AdminTenantLifecycleResult) {
     if (result.status === 'unauthenticated') {
@@ -147,6 +176,7 @@ export function AdminTenantWorkspacePage({
   return (
     <TenantWorkspace
       sidebarTarget={sidebarTarget}
+      connectedToolsState={connectedToolsState}
       adminAccess={(
         <AdminTenantAccess
           apiBaseUrl={apiBaseUrl}
