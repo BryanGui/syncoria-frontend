@@ -10,6 +10,7 @@ import {
 } from '../tenantWorkspace/model'
 import { TenantChatDrawer } from './TenantChatDrawer'
 import { TenantNavigation } from './TenantNavigation'
+import { TenantConnectedTools, type ConnectedToolsState } from './TenantConnectedTools'
 
 type TenantSection = TenantWorkspaceSection | AdminTenantWorkspaceSection
 
@@ -24,6 +25,7 @@ interface TenantWorkspaceProps {
   adminIngestion?: ReactNode
   adminVersionedIntegration?: ReactNode
   lifecycleControls?: ReactNode
+  connectedToolsState?: ConnectedToolsState
 }
 
 export function TenantWorkspace({
@@ -32,6 +34,7 @@ export function TenantWorkspace({
   adminIntegration,
   adminIngestion,
   adminVersionedIntegration,
+  connectedToolsState,
   lifecycleControls,
   tenant,
   tenantLabel,
@@ -78,9 +81,20 @@ export function TenantWorkspace({
 
         {activeSection === 'Vue générale' ? (
           <div className="tenant-overview">
-            <div><span>Slug</span><strong>{tenant.slug}</strong></div>
-            <div><span>Statut</span><strong>{getTenantStatusLabel(tenant.status)}</strong></div>
-            <div><span>Identifiant technique</span><code>{tenant.id}</code></div>
+            {connectedToolsState ? (
+              <TenantConnectedTools
+                onManageSources={isAdmin ? () => setActiveSection('Sources') : undefined}
+                state={connectedToolsState}
+              />
+            ) : null}
+            <section aria-labelledby="tenant-overview-details-title" className="tenant-overview__details">
+              <h3 id="tenant-overview-details-title">Informations du tenant</h3>
+              <dl>
+                <div><dt>Statut</dt><dd>{getTenantStatusLabel(tenant.status)}</dd></div>
+                <div><dt>Slug</dt><dd>{tenant.slug}</dd></div>
+                <div><dt>Identifiant technique</dt><dd><code>{tenant.id}</code></dd></div>
+              </dl>
+            </section>
           </div>
         ) : activeSection === 'Sources' && adminIntegration !== undefined ? (
           adminIntegration
