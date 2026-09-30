@@ -11,14 +11,14 @@ test('internal content uses the full width without changing the public shell', (
 })
 
 test('audit history keeps each row compact, opens the PDF and exposes only secondary menu actions', () => {
-  assert.match(appStyles, /\.tenant-audit__history-item \{[\s\S]*?width: 100%;/)
+  assert.match(appStyles, /\.tenant-audit__history-table \{[^}]*width: 100%;/)
   assert.match(reportSource, /Historique des audits/)
-  assert.match(reportSource, /Provider à auditer/)
+  assert.match(reportSource, /Providers à auditer/)
   assert.match(reportSource, /audit_supported/)
   assert.match(reportSource, /showArchives/)
   assert.match(reportSource, /window\.open\(/)
   assert.match(reportSource, /buildAdminTenantReportPdfUrl\(apiBaseUrl, tenantId, report\.id\)/)
-  assert.match(reportSource, /ActionMenu ariaLabel="Actions de l’audit" label="⋯"/)
+  assert.match(reportSource, /ActionMenu ariaLabel="Actions de l’audit" label="⋯" portal/)
   assert.match(reportSource, /Télécharger le DDL/)
   assert.match(reportSource, /Télécharger l’ER/)
   assert.doesNotMatch(reportSource, /expandedReportId|renderArtifactPanel|tenant-audit__artifact-panel/)
