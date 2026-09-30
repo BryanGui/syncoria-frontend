@@ -25,7 +25,7 @@ const notion = provider('notion-id', 'notion', 'Notion démo')
 const n8n = provider('n8n-id', 'n8n', 'n8n démo', false)
 const unknown = provider('custom-id', 'custom_tool', 'Outil sur mesure')
 
-async function openSources(page: Page, records: Provider[] = [notion, n8n, unknown]) {
+async function openTenant(page: Page, records: Provider[] = [notion, n8n, unknown]) {
   const requests: string[] = []
   await page.context().route('**/*', async (route) => {
     const url = new URL(route.request().url())
@@ -57,12 +57,22 @@ async function openSources(page: Page, records: Provider[] = [notion, n8n, unkno
   await page.getByRole('button', { name: 'Clients', exact: true }).click()
   await page.getByRole('button', { name: 'Client synthétique', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Client synthétique', exact: true })).toBeVisible()
+  return { requests }
+}
+
+async function selectSection(page: Page, section: string) {
   const mobileMenu = page.getByRole('button', { name: 'Menu du client' })
-  if (await mobileMenu.isVisible()) await mobileMenu.click()
-  await page.getByRole('navigation', { name: 'Navigation du client' }).getByRole('button', { name: 'Sources' }).click()
+  const nav = page.getByRole('navigation', { name: 'Navigation du client' })
+  if (await mobileMenu.isVisible() && !(await nav.isVisible())) await mobileMenu.click()
+  await nav.getByRole('button', { name: section, exact: true }).click()
+}
+
+async function openSources(page: Page, records: Provider[] = [notion, n8n, unknown]) {
+  const result = await openTenant(page, records)
+  await selectSection(page, 'Sources')
   await expect(page.getByRole('heading', { name: 'Sources', exact: true })).toBeVisible()
   await expect(page.locator('.source-connection')).toHaveCount(records.length)
-  return { requests }
+  return result
 }
 
 async function expectMenuFullyVisible(page: Page, trigger: Locator) {
@@ -110,12 +120,12 @@ test('Sources uses compact accessible rows, real details and a scoped header/sid
   const workspace = page.locator('.tenant-workspace--sources')
   const rows = page.locator('.source-connection')
   await expect(workspace.locator('.tenant-workspace__breadcrumb')).toHaveCount(0)
-  await expect(workspace.locator('.tenant-workspace__heading .tenant-status')).toHaveCount(0)
-  await expect(workspace.getByRole('button', { name: 'Archiver le client' })).toBeVisible()
+  await expect(workspace.locator('.tenant-status')).toHaveCount(0)
+  await expect(workspace.getByRole('button', { name: 'Archiver le client' })).toHaveCount(0)
   await expect(workspace.getByText('Gérez les outils et services connectés à cet espace.')).toBeVisible()
   const nav = page.getByRole('navigation', { name: 'Navigation du client' })
-  await expect(nav.getByRole('button', { name: 'Sources' })).toHaveClass(/tenant-navigation__item--sources-active/)
-  await expect(nav.getByRole('button', { name: 'Audit' })).not.toHaveClass(/sources-active/)
+  await expect(nav.getByRole('button', { name: 'Sources' })).toHaveClass(/tenant-navigation__item--active/)
+  await expect(nav.getByRole('button', { name: 'Audit' })).not.toHaveClass(/tenant-navigation__item--active/)
   await expect(rows.nth(0).getByRole('img', { name: 'Logo de Notion' })).toBeVisible()
   await expect(rows.nth(1).getByRole('img', { name: 'Logo de n8n' })).toBeVisible()
   await expect(rows.nth(2).getByRole('img', { name: 'Logo indisponible pour custom tool' })).toBeVisible()
@@ -141,10 +151,63 @@ test('Sources uses compact accessible rows, real details and a scoped header/sid
   await expect(page.getByRole('button', { name: '+ Connecter un outil' })).toBeVisible()
   await expect(page.getByText('+ Ajouter un provider')).toHaveCount(0)
   await nav.getByRole('button', { name: 'Audit' }).click()
-  await expect(page.locator('.tenant-workspace__breadcrumb')).toContainText('Audit')
-  await expect(page.locator('.tenant-workspace__heading .tenant-status')).toBeVisible()
-  await expect(nav.getByRole('button', { name: 'Audit' })).not.toHaveClass(/sources-active/)
+  await expect(page.locator('.tenant-workspace__breadcrumb')).toHaveCount(0)
+  await expect(page.locator('.tenant-workspace .tenant-status')).toHaveCount(0)
+  await expect(nav.getByRole('button', { name: 'Audit' })).toHaveClass(/tenant-navigation__item--active/)
 })
+
+for (const width of [1280, 390]) {
+  test(`tenant workspace header and active navigation stay consistent at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 850 })
+    await openTenant(page)
+    const header = page.locator('.page-header--tenant')
+    const title = header.getByRole('heading', { name: 'Client synthétique' })
+    const logout = header.getByRole('button', { name: 'Se déconnecter' })
+    const workspace = page.locator('.tenant-workspace')
+    await expect(title).toBeVisible()
+    await expect(logout).toBeVisible()
+    await expect(header.locator('.page-header__actions > button')).toHaveCount(1)
+    await expect(workspace.locator('#tenant-workspace-title')).toHaveCount(0)
+    await expect(workspace.getByRole('button', { name: 'Archiver le client' })).toBeVisible()
+    const titleBox = await title.boundingBox()
+    const cardBox = await workspace.boundingBox()
+    const logoutBox = await logout.boundingBox()
+    expect(titleBox && cardBox && logoutBox).toBeTruthy()
+    expect(titleBox!.y + titleBox!.height).toBeLessThan(cardBox!.y)
+    if (width > 720) {
+      expect(Math.abs(titleBox!.y - logoutBox!.y)).toBeLessThan(12)
+      expect(titleBox!.x).toBeLessThan(logoutBox!.x)
+    }
+    await page.screenshot({ path: `docs/screenshots/tenant-workspace/overview-${width}px.png`, fullPage: true })
+
+    for (const section of ['Vue générale', 'Sources', 'Ingestion', 'Intégration', 'Audit', 'Accès', 'Superset', 'Logs', 'Synchronisations', 'Workflows']) {
+      if (section !== 'Vue générale') await selectSection(page, section)
+      else if (width <= 720) await page.getByRole('button', { name: 'Menu du client' }).click()
+      const active = page.locator('.tenant-navigation__links button.tenant-navigation__item').filter({ hasText: section })
+      await expect(active).toHaveAttribute('aria-current', 'page')
+      await expect(active).toHaveClass(/tenant-navigation__item--active/)
+      await expect(active).toHaveCSS('background-color', 'rgb(2, 132, 199)')
+      await expect(active).toHaveCSS('color', 'rgb(255, 255, 255)')
+      const parent = section === 'Ingestion' || section === 'Intégration' ? 'Pipeline'
+        : section === 'Sources' || section === 'Accès' ? 'Configuration'
+          : section === 'Synchronisations' || section === 'Workflows' ? 'Automatisations' : null
+      if (parent) await expect(page.locator('.tenant-navigation__group-toggle').filter({ hasText: parent })).toHaveClass(/tenant-navigation__group-toggle--active/)
+      await expect(page.locator('.tenant-workspace__breadcrumb')).toHaveCount(0)
+      await expect(page.locator('.tenant-workspace .tenant-status')).toHaveCount(0)
+      if (section !== 'Vue générale') await expect(workspace.getByRole('button', { name: 'Archiver le client' })).toHaveCount(0)
+      if (section === 'Ingestion' || section === 'Intégration' || section === 'Audit' || section === 'Sources') {
+        await expect(title).toBeVisible()
+      }
+      if (width > 720 && (section === 'Sources' || section === 'Ingestion')) {
+        await page.screenshot({ path: `docs/screenshots/tenant-workspace/${section.toLowerCase()}-desktop.png`, fullPage: true })
+      }
+    }
+
+    await selectSection(page, 'Vue générale')
+    await expect(workspace.getByRole('button', { name: 'Archiver le client' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false)
+  })
+}
 
 test('menu actions preserve verification, editing and explicit disable confirmation', async ({ page }) => {
   const { requests } = await openSources(page)

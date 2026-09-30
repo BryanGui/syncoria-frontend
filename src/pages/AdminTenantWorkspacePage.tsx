@@ -18,6 +18,7 @@ import type { ConnectedToolsState } from '../components/TenantConnectedTools'
 import { toConnectedTools } from '../tenantWorkspace/connectedTools'
 interface AdminTenantWorkspacePageProps {
   apiBaseUrl: string | null
+  headingTarget: HTMLElement | null
   sidebarTarget: HTMLDivElement | null
   tenantId: string
   onBack: () => void
@@ -28,6 +29,7 @@ type AdminTenantPageState = Exclude<AdminTenantResult, { status: 'unauthenticate
 
 export function AdminTenantWorkspacePage({
   apiBaseUrl,
+  headingTarget,
   sidebarTarget,
   tenantId,
   onBack,
@@ -176,6 +178,7 @@ export function AdminTenantWorkspacePage({
   return (
     <TenantWorkspace
       sidebarTarget={sidebarTarget}
+      headingTarget={headingTarget}
       connectedToolsState={connectedToolsState}
       adminAccess={(
         <AdminTenantAccess

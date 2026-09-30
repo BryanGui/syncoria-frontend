@@ -8,11 +8,12 @@ const component = await readFile(new URL('../src/components/AdminTenantVersioned
 const api = await readFile(new URL('../src/api/adminIntegrations.ts', import.meta.url), 'utf8')
 const auditCompatibility = await readFile(new URL('../src/integrationVersions/auditCompatibility.ts', import.meta.url), 'utf8')
 const workspace = await readFile(new URL('../src/components/TenantWorkspace.tsx', import.meta.url), 'utf8')
+const navigation = await readFile(new URL('../src/components/TenantNavigation.tsx', import.meta.url), 'utf8')
 const page = await readFile(new URL('../src/pages/AdminTenantWorkspacePage.tsx', import.meta.url), 'utf8')
 const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
 test('exposes the versioned integration workflow in the dedicated admin section', () => {
-  assert.match(workspace, /ADMIN_TENANT_GROUPS/)
+  assert.match(navigation, /ADMIN_TENANT_GROUPS/)
   assert.match(workspace, /activeSection === 'Intégration'/)
   assert.match(workspace, /adminVersionedIntegration/)
   assert.match(page, /<AdminTenantVersionedIntegration/)

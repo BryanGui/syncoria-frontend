@@ -2,7 +2,6 @@ import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 import {
-  ADMIN_TENANT_GROUPS,
   type AdminTenantWorkspaceSection,
   type TenantWorkspaceSection,
   type TenantWorkspaceTenant,
@@ -19,6 +18,7 @@ interface TenantWorkspaceProps {
   tenantLabel?: string
   onBack?: () => void
   sidebarTarget?: HTMLDivElement | null
+  headingTarget?: HTMLElement | null
   adminReports?: ReactNode
   adminAccess?: ReactNode
   adminIntegration?: ReactNode
@@ -40,6 +40,7 @@ export function TenantWorkspace({
   tenantLabel,
   onBack,
   sidebarTarget,
+  headingTarget,
 }: TenantWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<TenantSection>('Vue générale')
   const [chatOpen, setChatOpen] = useState(false)
@@ -49,9 +50,7 @@ export function TenantWorkspace({
   const isSources = isAdmin && activeSection === 'Sources'
   const isOverview = isAdmin && activeSection === 'Vue générale'
   const name = tenantLabel ?? tenant.slug
-  const group = isAdmin
-    ? ADMIN_TENANT_GROUPS.find((item) => item.sections.some((section) => section === activeSection))?.label
-    : undefined
+  const title = <h2 className="tenant-workspace__title" id="tenant-workspace-title">{name}</h2>
   const navigation = <TenantNavigation
     activeSection={activeSection}
     chatTriggerRef={chatTriggerRef}
@@ -65,21 +64,8 @@ export function TenantWorkspace({
   return (
     <div className={sidebarTarget ? 'tenant-workspace-layout tenant-workspace-layout--portal' : 'tenant-workspace-layout'}>
       {sidebarTarget ? createPortal(navigation, sidebarTarget) : navigation}
-      <section aria-labelledby="tenant-workspace-title" className={`tenant-workspace${isSources ? ' tenant-workspace--sources' : ''}${isOverview ? ' tenant-workspace--overview' : ''}`}>
-        <div className="tenant-workspace__heading">
-          <div>
-            {!isSources && !isOverview ? <p className="tenant-workspace__breadcrumb">{isAdmin ? 'Clients / ' : ''}{name} / {group ? `${group} / ` : ''}{activeSection}</p> : null}
-            <h2 id="tenant-workspace-title">{name}</h2>
-          </div>
-          <div className="tenant-workspace__heading-actions">
-            {!isSources && !isOverview ? <span className={tenant.status === 'active'
-              ? 'tenant-status tenant-status--active'
-              : 'tenant-status'}>
-              {getTenantStatusLabel(tenant.status)}
-            </span> : null}
-            {lifecycleControls}
-          </div>
-        </div>
+      {headingTarget ? createPortal(title, headingTarget) : title}
+      <section aria-label={activeSection} className={`tenant-workspace${isSources ? ' tenant-workspace--sources' : ''}${isOverview ? ' tenant-workspace--overview' : ''}`}>
 
         {activeSection === 'Vue générale' ? (
           <div className="tenant-overview">
@@ -112,6 +98,7 @@ export function TenantWorkspace({
                 <div><dt>Identifiant technique</dt><dd><code>{tenant.id}</code></dd></div>
               </dl>
             </section>}
+            {lifecycleControls}
           </div>
         ) : activeSection === 'Sources' && adminIntegration !== undefined ? (
           adminIntegration

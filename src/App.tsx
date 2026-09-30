@@ -547,6 +547,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
   const [tenantSidebarTarget, setTenantSidebarTarget] = useState<HTMLDivElement | null>(null)
+  const [tenantHeaderTarget, setTenantHeaderTarget] = useState<HTMLElement | null>(null)
   const [navigationState, dispatchNavigation] = useReducer(
     dashboardNavigationReducer,
     INITIAL_DASHBOARD_NAVIGATION_STATE,
@@ -630,7 +631,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
       </aside>
 
       <main className="main-content" id={navigationState.activePage}>
-        <header className={isTenant ? 'page-header page-header--tenant' : 'page-header'}>
+        <header className={isTenant ? 'page-header page-header--tenant' : 'page-header'} ref={isTenant ? setTenantHeaderTarget : undefined}>
           {!isTenant ? <div>
             <p className="eyebrow">Administration</p>
             <h1>{isOverview ? 'Vue d’ensemble' : 'Clients'}</h1>
@@ -743,6 +744,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
         ) : navigationState.selectedTenantId !== null ? (
           <AdminTenantWorkspacePage
             apiBaseUrl={apiBaseUrl}
+            headingTarget={tenantHeaderTarget}
             sidebarTarget={tenantSidebarTarget}
             onBack={() => dispatchNavigation({
               type: 'open_page',

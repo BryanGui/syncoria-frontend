@@ -35,7 +35,7 @@ export function TenantNavigation({
   function destination(section: TenantSection, isTool = false) {
     return <button
       aria-current={activeSection === section ? 'page' : undefined}
-      className={`tenant-navigation__item${activeSection === section ? ' tenant-navigation__item--active' : ''}${activeSection === 'Sources' && section === 'Sources' ? ' tenant-navigation__item--sources-active' : ''}${activeSection === 'Vue générale' && section === 'Vue générale' && isAdmin ? ' tenant-navigation__item--overview-active' : ''}${isTool ? ' tenant-navigation__item--tool' : ''}`}
+      className={`tenant-navigation__item${activeSection === section ? ' tenant-navigation__item--active' : ''}${isTool ? ' tenant-navigation__item--tool' : ''}`}
       key={section}
       onClick={() => select(section)}
       type="button"
@@ -61,7 +61,7 @@ export function TenantNavigation({
             <button
               aria-controls={`tenant-group-${group.label}`}
               aria-expanded={openGroups[group.label]}
-              className={`tenant-navigation__group-toggle${activeSection === 'Sources' && group.label === 'Configuration' ? ' tenant-navigation__group-toggle--sources-active' : ''}`}
+              className={`tenant-navigation__group-toggle${group.sections.some((section) => section === activeSection) ? ' tenant-navigation__group-toggle--active' : ''}`}
               onClick={() => setOpenGroups((current) => ({ ...current, [group.label]: !current[group.label] }))}
               type="button"
             ><span>{group.label}</span><span aria-hidden="true">{openGroups[group.label] ? '⌄' : '›'}</span></button>
