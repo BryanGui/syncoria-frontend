@@ -209,6 +209,39 @@ for (const width of [1280, 390]) {
   })
 }
 
+test('Geist is bundled locally with a lighter tenant typography', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 850 })
+  await openTenant(page)
+  await page.evaluate(() => document.fonts.ready)
+
+  await expect(page.locator('html')).toHaveCSS('font-family', /Geist Variable/)
+  await expect(page.locator('html')).toHaveCSS('font-weight', '400')
+  await expect(page.locator('.tenant-workspace__title')).toHaveCSS('font-weight', '600')
+  await expect(page.getByRole('heading', { name: 'Outils connectés' })).toHaveCSS('font-weight', '600')
+  await expect(page.getByRole('button', { name: 'Se déconnecter' })).toHaveCSS('font-weight', '500')
+  await expect(page.getByRole('navigation', { name: 'Navigation du client' }).getByRole('button', { name: 'Sources' })).toHaveCSS('font-weight', '500')
+  const fontUrls = await page.evaluate(() => performance.getEntriesByType('resource')
+    .map((entry) => entry.name).filter((url) => url.includes('.woff2')))
+  expect(fontUrls.length).toBeGreaterThan(0)
+  expect(fontUrls.every((url) => new URL(url).origin === new URL(page.url()).origin)).toBe(true)
+  await page.screenshot({ path: 'docs/screenshots/ticket-112/overview-desktop.png', fullPage: true })
+
+  await selectSection(page, 'Sources')
+  await expect(page.locator('.tenant-integration__heading p')).toHaveCSS('font-weight', '400')
+  await expect(page.getByRole('button', { name: '+ Connecter un outil' })).toHaveCSS('font-weight', '500')
+  await page.screenshot({ path: 'docs/screenshots/ticket-112/sources-desktop.png', fullPage: true })
+  await selectSection(page, 'Ingestion')
+  await expect(page.getByText('Provider à ingérer')).toHaveCSS('font-weight', '500')
+  await page.screenshot({ path: 'docs/screenshots/ticket-112/ingestion-desktop.png', fullPage: true })
+
+  await selectSection(page, 'Vue générale')
+  await page.setViewportSize({ width: 390, height: 850 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  await page.screenshot({ path: 'docs/screenshots/ticket-112/overview-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: 'Menu du client' }).click()
+  await page.screenshot({ path: 'docs/screenshots/ticket-112/sidebar-mobile.png', fullPage: true })
+})
+
 test('menu actions preserve verification, editing and explicit disable confirmation', async ({ page }) => {
   const { requests } = await openSources(page)
   const rows = page.locator('.source-connection')

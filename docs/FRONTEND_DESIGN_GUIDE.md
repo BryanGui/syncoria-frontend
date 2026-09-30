@@ -207,3 +207,9 @@ Ces deux écrans utilisent localement un fond `#F5F7FB`, une surface blanche, un
 Vue générale présente les providers réellement retournés par l’API en capsules horizontales, sans nom de connexion ni KPI inventé. Les informations techniques sont secondaires et repliables. Sources conserve une ligne par connexion, les détails dépliables et les actions existantes. La destination Sources active dans la sidebar utilise le même bleu.
 
 Dans le workspace tenant, le nom du client figure au-dessus de la carte de contenu, à gauche du bouton global de déconnexion sur ordinateur. Les sections n'affichent pas de breadcrumb ni de badge de statut dans leur en-tête. Les contrôles d'archivage et de réactivation restent dans Vue générale. Toutes les destinations sélectionnées de la sidebar partagent l'état actif bleu de Sources ; les groupes parents reçoivent un accent plus discret.
+
+## 13. Typographie
+
+Geist Variable est la police principale. Son fichier variable est fourni par `@fontsource-variable/geist` et chargé localement par Vite, sans CDN. Conserver les polices monospace pour le code et les données techniques.
+
+Utiliser 400 pour le texte courant et secondaire, 500 pour les libellés, statuts, boutons et liens de navigation, et 600 pour les titres, marques, groupes de navigation et accents actifs. Éviter les graisses 700 et supérieures dans l'interface.
