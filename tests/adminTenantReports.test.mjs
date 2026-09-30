@@ -154,8 +154,8 @@ test('restores only active audit operations in the launcher', () => {
 })
 
 test('keeps report actions in the compact row menu without spacing hacks', async () => {
-  assert.match(auditReportsSource, /ActionMenu ariaLabel="Actions de l’audit" label="⋯"/)
-  assert.match(auditReportsSource, /tenant-audit__history-summary/)
+  assert.match(auditReportsSource, /ActionMenu ariaLabel="Actions de l’audit" label="⋯" portal/)
+  assert.match(auditReportsSource, /tenant-audit__history-table/)
   assert.match(auditReportsSource, /tenant-audit__open-report/)
   assert.doesNotMatch(auditReportsSource, /handleRowClick|handleRowKeyDown/)
   const styles = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')

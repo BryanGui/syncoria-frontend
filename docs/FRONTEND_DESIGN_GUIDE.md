@@ -213,3 +213,9 @@ Dans le workspace tenant, le nom du client figure au-dessus de la carte de conte
 Geist Variable est la police principale. Son fichier variable est fourni par `@fontsource-variable/geist` et chargé localement par Vite, sans CDN. Conserver les polices monospace pour le code et les données techniques.
 
 Utiliser 400 pour le texte courant et secondaire, 500 pour les libellés, statuts, boutons et liens de navigation, et 600 pour les titres, marques, groupes de navigation et accents actifs. Éviter les graisses 700 et supérieures dans l'interface.
+
+## 14. Audit
+
+Le launcher présente d’abord le périmètre sous forme de lignes à cases à cocher, puis le titre et l’action. Les connexions non auditables restent visibles et désactivées. La progression utilise un stepper vertical léger ; les métriques finales et l’historique utilisent des lignes et un tableau, sans carte par audit.
+
+Le lancement actuel de l’API est limité à un identifiant de provider dans l’URL. L’interface conserve la sélection multiple, mais ne lance un audit que lorsqu’un seul provider est sélectionné. Elle signale clairement qu’un lancement multi-provider dépend d’une évolution du contrat backend. La colonne « Périmètre » de l’historique utilise les métadonnées existantes pour afficher le nombre réel de providers d’un audit global.

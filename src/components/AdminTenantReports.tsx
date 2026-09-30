@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchAdminTenantProviderAudit,
   fetchLatestAdminTenantProviderAudit,
@@ -17,6 +17,8 @@ import {
 } from '../api/adminTenantReports'
 import { ActionMenu } from './ui/ActionMenu'
 import { SelectableList } from './ui/SelectableList'
+import { ProviderLogo } from './ProviderLogo'
+import { resolveProvider } from '../providers/catalog'
 import { formatLocalCalendarDate, formatReportDate } from '../tenantReports/model'
 
 interface AdminTenantReportsProps {
@@ -46,10 +48,30 @@ function titleByteLength(value: string): number {
 }
 
 function providerLabel(provider: string): string {
+  const catalogLabel = resolveProvider(provider)?.label
+  if (catalogLabel) return catalogLabel
   if (provider.toLowerCase() === 'n8n') return 'n8n'
   return provider.split(/[_ -]+/).filter(Boolean).map((part) => (
     part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
   )).join(' ')
+}
+
+function defaultAuditTitle(selectedProviders: AdminProviderRecord[]): string {
+  if (selectedProviders.length === 0) return ''
+  const date = formatReportDate(formatLocalCalendarDate(new Date()))
+  if (selectedProviders.length > 2) return `Audit multi-provider — ${date}`
+  const labels = selectedProviders.map((provider) => providerLabel(provider.provider))
+  const names = new Set(labels).size === labels.length
+    ? labels
+    : selectedProviders.map((provider) => provider.name.trim() || providerLabel(provider.provider))
+  const title = `Audit ${names.join(' + ')} — ${date}`
+  return titleByteLength(title) <= 120 ? title : `Audit multi-provider — ${date}`
+}
+
+function reportScopeLabel(report: AdminTenantReport): string {
+  return report.tenant_provider_record_ids.length > 1
+    ? `${report.tenant_provider_record_ids.length} providers`
+    : providerLabel(report.provider)
 }
 
 function reportStatusLabel(status: AdminTenantReport['status']): string {
@@ -99,7 +121,7 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const [archiveError, setArchiveError] = useState<string | null>(null)
   const [providerState, setProviderState] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [providers, setProviders] = useState<AdminProviderRecord[]>([])
-  const [selectedProviderId, setSelectedProviderId] = useState('')
+  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>([])
   const [auditOperation, setAuditOperation] = useState<AdminProviderAuditOperation | null>(null)
   const [auditError, setAuditError] = useState<string | null>(null)
   const [isLaunching, setIsLaunching] = useState(false)
@@ -115,7 +137,10 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   const polling = useRef<{ controller: AbortController; timer: number | null } | null>(null)
   const reportsTenant = useRef<string | null>(null)
   const lastActiveAudit = useRef<AdminProviderAuditOperation | null>(null)
-  const selectedProvider = useMemo(() => providers.find((provider) => provider.id === selectedProviderId) ?? null, [providers, selectedProviderId])
+  const selectedProviders = useMemo(() => selectedProviderIds
+    .map((id) => providers.find((provider) => provider.id === id))
+    .filter((provider): provider is AdminProviderRecord => provider !== undefined), [providers, selectedProviderIds])
+  const launchProvider = selectedProviders.length === 1 ? selectedProviders[0] : null
   const activeProviders = useMemo(() => providers.filter((provider) => provider.status === 'active'), [providers])
   const visibleReports = useMemo(() => {
     if (state.status !== 'loaded') return []
@@ -160,76 +185,81 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController(); setProviderState('loading'); setProviders([]); setSelectedProviderId(''); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null); setIsLaunching(false); setDisplayTitle('')
-    async function loadAuditState() { const result = await fetchAdminTenantProviders(apiBaseUrl, tenantId, controller.signal); if (controller.signal.aborted) return; if (result.status === 'unauthenticated') { onSessionExpired(); return } if (result.status !== 'loaded') { setProviderState('error'); return } const auditable = result.providers.find((provider) => provider.status === 'active' && provider.audit_supported); setProviderState('loaded'); setProviders(result.providers); setSelectedProviderId(auditable?.id ?? '') }
+    const controller = new AbortController(); setProviderState('loading'); setProviders([]); setSelectedProviderIds([]); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null); setIsLaunching(false); setDisplayTitle('')
+    async function loadAuditState() { const result = await fetchAdminTenantProviders(apiBaseUrl, tenantId, controller.signal); if (controller.signal.aborted) return; if (result.status === 'unauthenticated') { onSessionExpired(); return } if (result.status !== 'loaded') { setProviderState('error'); return } const auditable = result.providers.find((provider) => provider.status === 'active' && provider.audit_supported); setProviderState('loaded'); setProviders(result.providers); setSelectedProviderIds(auditable ? [auditable.id] : []) }
     void loadAuditState()
     return () => { controller.abort(); auditRequest.current?.abort(); auditRequest.current = null; stopPolling() }
   }, [apiBaseUrl, onSessionExpired, stopPolling, tenantId])
 
   useEffect(() => {
+    setDisplayTitle(defaultAuditTitle(selectedProviders))
+    setTitleError(null)
+  }, [selectedProviders])
+
+  useEffect(() => {
     const controller = new AbortController(); auditRequest.current?.abort(); auditRequest.current = controller; stopPolling(); setAuditOperation(null); lastActiveAudit.current = null; setAuditError(null)
-    if (selectedProvider === null || selectedProvider.status !== 'active' || !selectedProvider.audit_supported) return () => controller.abort()
-    setDisplayTitle(`Audit ${providerLabel(selectedProvider.provider)} — ${formatLocalCalendarDate(new Date())}`); setTitleError(null)
-    void fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal).then((latest) => { if (controller.signal.aborted) return; if (latest.status === 'unauthenticated') onSessionExpired(); else if (latest.status === 'loaded' && isActiveAuditOperation(latest.operation)) { applyAuditOperation(latest.operation); beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status !== 'loaded' && latest.status !== 'not_found') setAuditError('L’état de l’audit n’est pas disponible pour le moment.') })
+    if (launchProvider === null || launchProvider.status !== 'active' || !launchProvider.audit_supported) return () => controller.abort()
+    void fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, launchProvider.id, controller.signal).then((latest) => { if (controller.signal.aborted) return; if (latest.status === 'unauthenticated') onSessionExpired(); else if (latest.status === 'loaded' && isActiveAuditOperation(latest.operation)) { applyAuditOperation(latest.operation); beginPolling(launchProvider.id, latest.operation.correlation_id) } else if (latest.status !== 'loaded' && latest.status !== 'not_found') setAuditError('L’état de l’audit n’est pas disponible pour le moment.') })
     return () => { controller.abort(); if (auditRequest.current === controller) auditRequest.current = null; stopPolling() }
-  }, [apiBaseUrl, applyAuditOperation, beginPolling, onSessionExpired, selectedProvider, stopPolling, tenantId])
+  }, [apiBaseUrl, applyAuditOperation, beginPolling, onSessionExpired, launchProvider, stopPolling, tenantId])
 
   function auditFailureMessage(errorCode: string | null): string { if (errorCode === 'credential') return 'Vérifiez la configuration de cette connexion.'; if (errorCode === 'unsupported') return 'Cet audit n’est pas disponible pour cette connexion.'; if (errorCode === 'invalid_context') return 'La configuration de l’audit est invalide.'; return 'L’audit n’a pas pu être terminé. Vous pouvez réessayer.' }
   async function launchAudit() {
-    if (selectedProvider === null || selectedProvider.status !== 'active' || !selectedProvider.audit_supported || !selectedProvider.credential_configured || isLaunching || auditOperation?.status === 'pending' || auditOperation?.status === 'running') return
+    if (launchProvider === null || launchProvider.status !== 'active' || !launchProvider.audit_supported || !launchProvider.credential_configured || isLaunching || auditOperation?.status === 'pending' || auditOperation?.status === 'running') return
     const normalizedTitle = displayTitle.trim(); if (!normalizedTitle || titleByteLength(normalizedTitle) > 120) { setTitleError('Saisissez un titre de 1 à 120 octets.'); return }
     auditRequest.current?.abort(); const controller = new AbortController(); auditRequest.current = controller; setIsLaunching(true); setAuditError(null); setTitleError(null)
-    const result = await launchAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, { signal: controller.signal, displayTitle: normalizedTitle })
+    const result = await launchAdminTenantProviderAudit(apiBaseUrl, tenantId, launchProvider.id, { signal: controller.signal, displayTitle: normalizedTitle })
     if (controller.signal.aborted) return
     if (result.status === 'unauthenticated') { auditRequest.current = null; setIsLaunching(false); onSessionExpired(); return }
-    if (result.status === 'conflict') { const latest = await fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, selectedProvider.id, controller.signal); if (controller.signal.aborted) return; auditRequest.current = null; setIsLaunching(false); if (latest.status === 'loaded' && isActiveAuditOperation(latest.operation)) { applyAuditOperation(latest.operation); beginPolling(selectedProvider.id, latest.operation.correlation_id) } else if (latest.status === 'unauthenticated') onSessionExpired(); else setAuditError('Un audit est déjà actif, mais son état ne peut pas être récupéré.'); return }
+    if (result.status === 'conflict') { const latest = await fetchLatestAdminTenantProviderAudit(apiBaseUrl, tenantId, launchProvider.id, controller.signal); if (controller.signal.aborted) return; auditRequest.current = null; setIsLaunching(false); if (latest.status === 'loaded' && isActiveAuditOperation(latest.operation)) { applyAuditOperation(latest.operation); beginPolling(launchProvider.id, latest.operation.correlation_id) } else if (latest.status === 'unauthenticated') onSessionExpired(); else setAuditError('Un audit est déjà actif, mais son état ne peut pas être récupéré.'); return }
     auditRequest.current = null; setIsLaunching(false); if (result.status !== 'loaded') { setAuditError(result.status === 'invalid' ? 'L’audit est indisponible ou mal configuré pour cette connexion.' : 'L’audit n’a pas pu être lancé. Réessayez.'); return }
-    applyAuditOperation(result.operation); if (isActiveAuditOperation(result.operation)) beginPolling(selectedProvider.id, result.operation.correlation_id); else if (result.operation.status === 'completed') setReloadKey((key) => key + 1)
+    applyAuditOperation(result.operation); if (isActiveAuditOperation(result.operation)) beginPolling(launchProvider.id, result.operation.correlation_id); else if (result.operation.status === 'completed') setReloadKey((key) => key + 1)
   }
 
   function renderAuditLauncher() {
     const auditActive = auditOperation?.status === 'pending' || auditOperation?.status === 'running'
-    const disabled = providerState !== 'loaded' || selectedProvider === null
-      || selectedProvider.status !== 'active' || !selectedProvider.audit_supported || !selectedProvider.credential_configured
+    const disabled = providerState !== 'loaded' || launchProvider === null
+      || launchProvider.status !== 'active' || !launchProvider.audit_supported || !launchProvider.credential_configured
       || isLaunching || auditActive
     return <section aria-label="Lancement de l’audit" className="tenant-audit__launcher">
-      <div className="tenant-audit__launcher-title"><h4>Lancer un audit</h4><span className="tenant-audit__launcher-note">Une connexion par audit</span></div>
-      <div className="tenant-audit__launcher-fields">
-        <div className="tenant-audit__field">
-          <label className="tenant-audit__provider-label" htmlFor="audit-title">Titre de l’audit</label>
-          <input aria-invalid={titleError !== null} id="audit-title" maxLength={120} onChange={(event) => { setDisplayTitle(event.target.value); setTitleError(null) }} value={displayTitle} />
-          {titleError ? <p role="alert">{titleError}</p> : null}
+      <fieldset className="tenant-audit__provider-list" disabled={auditActive || isLaunching || providerState !== 'loaded'}>
+        <legend className="tenant-audit__provider-label">Providers à auditer</legend>
+        <div aria-describedby="audit-provider-help" className="tenant-audit__provider-options">
+          <SelectableList
+            ariaLabel="Providers à auditer"
+            name="audit-provider"
+            onChange={(providerId, checked) => setSelectedProviderIds((current) => checked
+              ? current.includes(providerId) ? current : [...current, providerId]
+              : current.filter((id) => id !== providerId))}
+            options={providers.map((provider) => {
+              const selectable = provider.status === 'active' && provider.audit_supported
+              const availabilityLabel = selectable ? 'Auditable' : provider.status !== 'active' ? 'Indisponible' : 'Non auditable'
+              return {
+                disabled: !selectable,
+                status: <span className="tenant-audit__provider-status">{availabilityLabel}</span>,
+                title: <span className="tenant-audit__provider-identity"><ProviderLogo provider={provider.provider} /><span><span>{providerLabel(provider.provider)}</span><small>{provider.name}</small></span></span>,
+                value: provider.id,
+              }
+            })}
+            selectedValues={selectedProviderIds}
+            type="checkbox"
+          />
         </div>
-        <fieldset className="tenant-audit__field tenant-audit__provider-list" disabled={auditActive || isLaunching || providerState !== 'loaded'}>
-          <legend className="tenant-audit__provider-label">Provider à auditer</legend>
-          <div aria-describedby="audit-provider-help" className="tenant-audit__provider-options">
-            <SelectableList
-              ariaLabel="Providers à auditer"
-              name="audit-provider"
-              onChange={(providerId, checked) => { if (checked) setSelectedProviderId(providerId) }}
-              options={providers.map((provider) => {
-                const selectable = provider.status === 'active' && provider.audit_supported
-                const availabilityLabel = selectable ? 'Auditable' : provider.status !== 'active' ? 'Indisponible' : 'Non auditable'
-                return {
-                  disabled: !selectable,
-                  status: <span className="tenant-audit__provider-status">{availabilityLabel}</span>,
-                  title: `${providerLabel(provider.provider)} — ${provider.name}`,
-                  value: provider.id,
-                }
-              })}
-              selectedValue={selectedProviderId}
-            />
-          </div>
-          <small id="audit-provider-help">Les connexions non auditables ou indisponibles restent visibles mais ne peuvent pas être sélectionnées.</small>
-        </fieldset>
+        <p className="tenant-audit__selection-count" aria-live="polite">{selectedProviderIds.length} provider{selectedProviderIds.length > 1 ? 's' : ''} sélectionné{selectedProviderIds.length > 1 ? 's' : ''}</p>
+        <small id="audit-provider-help">Les connexions non auditables ou indisponibles restent visibles mais ne peuvent pas être sélectionnées.</small>
+      </fieldset>
+      <div className="tenant-audit__field">
+        <label className="tenant-audit__provider-label" htmlFor="audit-title">Titre de l’audit</label>
+        <input aria-invalid={titleError !== null} id="audit-title" maxLength={120} onChange={(event) => { setDisplayTitle(event.target.value); setTitleError(null) }} value={displayTitle} />
+        {titleError ? <p role="alert">{titleError}</p> : null}
       </div>
+      {selectedProviderIds.length > 1 ? <p className="tenant-audit__transport-note" role="status">Le lancement d’un audit multi-provider attend la prise en charge de l’API d’audit.</p> : null}
       <div className="tenant-audit__launcher-action"><button className="primary-button" disabled={disabled} onClick={() => void launchAudit()} type="button">{isLaunching ? 'Lancement…' : auditActive ? 'Audit en cours…' : 'Lancer l’audit'}</button></div>
       {providerState === 'loading' ? <p aria-live="polite">Recherche des connexions…</p> : null}
       {providerState === 'error' ? <p role="alert">Les connexions ne peuvent pas être vérifiées pour le moment.</p> : null}
       {providerState === 'loaded' && activeProviders.length === 0 ? <p role="status">Aucune connexion active n’est disponible pour ce tenant.</p> : null}
-      {selectedProvider !== null && (selectedProvider.status !== 'active' || !selectedProvider.audit_supported) ? <p role="status">Audit indisponible pour cette connexion.</p> : null}
-      {selectedProvider?.status === 'active' && selectedProvider.audit_supported && !selectedProvider.credential_configured ? <p role="status">Configurez d’abord le credential pour lancer l’audit.</p> : null}
-      {auditOperation !== null ? <div className="tenant-audit__launcher-status">{auditOperation.status === 'failed' ? <><strong>Échec de l’audit</strong><p>{auditFailureMessage(auditOperation.error_code)}</p><AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} /></> : auditOperation.status === 'completed' ? <><strong>État : Terminé</strong><AuditProgress lastActiveOperation={null} operation={auditOperation} /><dl><div><dt>Sources analysées</dt><dd>{auditOperation.sources_total}</dd></div><div><dt>Sources retenues</dt><dd>{auditOperation.sources_retained}</dd></div><div><dt>Sources écartées</dt><dd>{auditOperation.sources_excluded}</dd></div><div><dt>Décisions nécessaires</dt><dd>{auditOperation.decisions_required}</dd></div><div><dt>Enregistrements retenus</dt><dd>{auditOperation.records_retained}</dd></div></dl></> : <AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} />}</div> : null}
+      {launchProvider !== null && !launchProvider.credential_configured ? <p role="status">Configurez d’abord le credential pour lancer l’audit.</p> : null}
+      {auditOperation !== null ? <div className="tenant-audit__launcher-status">{auditOperation.status === 'failed' ? <><strong>Échec de l’audit</strong><p>{auditFailureMessage(auditOperation.error_code)}</p><AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} /></> : auditOperation.status === 'completed' ? <><strong>État : Terminé</strong><AuditProgress lastActiveOperation={null} operation={auditOperation} /><dl className="tenant-audit__metrics"><div><dt>Sources analysées</dt><dd>{auditOperation.sources_total}</dd></div><div><dt>Retenues</dt><dd>{auditOperation.sources_retained}</dd></div><div><dt>Écartées</dt><dd>{auditOperation.sources_excluded}</dd></div><div><dt>Décisions nécessaires</dt><dd>{auditOperation.decisions_required}</dd></div><div><dt>Enregistrements retenus</dt><dd>{auditOperation.records_retained}</dd></div></dl></> : <AuditProgress lastActiveOperation={lastActiveAudit.current} operation={auditOperation} />}</div> : null}
       {auditError ? <p role="alert">{auditError}</p> : null}
     </section>
   }
@@ -293,113 +323,63 @@ export function AdminTenantReports({ apiBaseUrl, tenantId, tenantLabel, onSessio
   }
 
   function renderReportHistory(reports: AdminTenantReport[]) {
-    return (
-      <section aria-label="Historique des audits" className="tenant-audit__history">
-        <div className="tenant-audit__section-heading">
-          <div>
-            <p className="tenant-audit__eyebrow">Historique</p>
-            <h4>{showArchives ? 'Audits archivés' : 'Audits'}</h4>
-          </div>
-          <button
-            className="secondary-button tenant-audit__archive-toggle"
-            onClick={() => {
-              setShowArchives((visible) => !visible)
-            }}
-            type="button"
-          >
-            {showArchives ? 'Retour aux audits' : 'Voir les archives'}
-          </button>
-        </div>
-        {reports.length === 0 ? (
-          <p className="tenant-audit__empty-note">
-            {showArchives ? 'Aucun audit archivé.' : 'Aucun audit publié pour ce client.'}
-          </p>
-        ) : (
-          <ul>
-            {reports.map((report) => {
+    return <section aria-label="Historique des audits" className="tenant-audit__history">
+      <div className="tenant-audit__section-heading">
+        <h4>{showArchives ? 'Audits archivés' : 'Historique des audits'}</h4>
+        <button className="secondary-button tenant-audit__archive-toggle" onClick={() => setShowArchives((visible) => !visible)} type="button">
+          {showArchives ? 'Retour aux audits' : 'Voir les archives'}
+        </button>
+      </div>
+      {reports.length === 0 ? <p className="tenant-audit__empty-note">{showArchives ? 'Aucun audit archivé.' : 'Aucun audit publié pour ce client.'}</p> :
+        <div aria-label="Table de l’historique des audits" className="tenant-audit__table-scroll" role="region" tabIndex={0}>
+          <table className="tenant-audit__history-table">
+            <thead><tr><th scope="col">Audit</th><th scope="col">Date</th><th scope="col">Périmètre</th><th scope="col">Sources</th><th scope="col">Décisions</th><th scope="col">Statut</th><th aria-label="Actions" scope="col" /></tr></thead>
+            <tbody>{reports.map((report) => {
               const renaming = editingReportId === report.id
               const reference = reportReference(report)
               const hasManagementActions = reference !== null || report.status === 'completed'
-              const openReport = () => {
-                window.open(
-                  buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id),
-                  '_blank',
-                  'noopener,noreferrer',
-                )
-              }
-              return (
-                <li className="tenant-audit__history-row" key={report.id}>
-                  <article
-                    aria-label={`${report.title} — ${formatReportDate(report.report_date)}`}
-                    className="tenant-audit__history-item"
-                  >
-                    <div className="tenant-audit__history-summary">
-                      <button className="tenant-audit__open-report" onClick={openReport} type="button">
-                        <strong className="tenant-audit__history-title">{report.title} — {formatReportDate(report.report_date)}</strong>
-                        <span>{providerLabel(report.provider)} · <time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></span>
-                      </button>
-                      <div className="tenant-audit__history-stat">
-                        <strong className={report.status === 'archived' ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>
-                          {reportStatusLabel(report.status)}
-                        </strong>
-                        <span>{report.sources_analyzed} sources{report.decisions_required === null ? '' : ` · Décisions nécessaires : ${report.decisions_required}`}</span>
-                      </div>
-                      {hasManagementActions ? (
-                        <ActionMenu ariaLabel="Actions de l’audit" label="⋯">
-                          <a href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>
-                            Télécharger le PDF
-                          </a>
-                          {reference ? (
-                            <>
-                              <button onClick={() => void downloadArtifact(report, 'ddl')} type="button">
-                                Télécharger le DDL
-                              </button>
-                              <button onClick={() => void downloadArtifact(report, 'er')} type="button">
-                                Télécharger l’ER
-                              </button>
-                              <button disabled={isRenaming} onClick={() => beginRename(report)} type="button">
-                                Renommer
-                              </button>
-                            </>
-                          ) : null}
-                          {report.status === 'completed' ? (
-                            <button disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">
-                              Archiver
-                            </button>
-                          ) : null}
-                        </ActionMenu>
-                      ) : null}
-                    </div>
-                    {renaming ? (
-                      <div className="tenant-audit__inline-rename">
-                        <label htmlFor={`rename-${report.id}`}>Nouveau titre</label>
-                        <input id={`rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} />
-                        <div className="tenant-audit__actions">
-                          <button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button>
-                          <button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button>
-                        </div>
-                        {renameError ? <p role="alert">{renameError}</p> : null}
-                      </div>
-                    ) : null}
-                    {confirmationId === report.id ? (
-                      <div aria-describedby={`archive-${report.id}-description`} aria-labelledby={`archive-${report.id}-title`} className="tenant-audit__confirmation" role="alertdialog">
-                        <strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong>
-                        <p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p>
-                        <div className="tenant-audit__actions">
-                          <button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button>
-                          <button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button>
-                        </div>
-                        {archiveError ? <p role="alert">{archiveError}</p> : null}
-                      </div>
-                    ) : null}
-                  </article>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
-    )
+              const openReport = () => window.open(buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id), '_blank', 'noopener,noreferrer')
+              return <Fragment key={report.id}>
+                <tr className="tenant-audit__history-item">
+                  <td><button className="tenant-audit__open-report" onClick={openReport} type="button"><strong className="tenant-audit__history-title">{report.title}</strong></button></td>
+                  <td><time dateTime={report.report_date}>{formatReportDate(report.report_date)}</time></td>
+                  <td>{reportScopeLabel(report)}</td>
+                  <td>{report.sources_analyzed}</td>
+                  <td>{report.decisions_required ?? '—'}</td>
+                  <td><span className={report.status === 'archived' ? 'tenant-audit__status tenant-audit__status--archived' : 'tenant-audit__status'}>{reportStatusLabel(report.status)}</span></td>
+                  <td>{hasManagementActions ? <ActionMenu ariaLabel="Actions de l’audit" label="⋯" portal>
+                    <a href={buildAdminTenantReportPdfUrl(apiBaseUrl, tenantId, report.id, true)}>Télécharger le PDF</a>
+                    {reference ? <>
+                      <button onClick={() => void downloadArtifact(report, 'ddl')} type="button">Télécharger le DDL</button>
+                      <button onClick={() => void downloadArtifact(report, 'er')} type="button">Télécharger l’ER</button>
+                      <button disabled={isRenaming} onClick={() => beginRename(report)} type="button">Renommer</button>
+                    </> : null}
+                    {report.status === 'completed' ? <button disabled={pendingId !== null} onClick={() => { setConfirmationId(report.id); setArchiveError(null) }} type="button">Archiver</button> : null}
+                  </ActionMenu> : null}</td>
+                </tr>
+                {renaming ? <tr className="tenant-audit__detail-row"><td colSpan={7}><div className="tenant-audit__inline-rename">
+                  <label htmlFor={`rename-${report.id}`}>Nouveau titre</label>
+                  <input id={`rename-${report.id}`} maxLength={120} onChange={(event) => setTitleDraft(event.target.value)} value={titleDraft} />
+                  <div className="tenant-audit__actions">
+                    <button className="secondary-button" disabled={isRenaming} onClick={() => { setEditingReportId(null); setRenameError(null) }} type="button">Annuler</button>
+                    <button className="primary-button" disabled={isRenaming} onClick={() => void saveRename(report)} type="button">{isRenaming ? 'Enregistrement…' : 'Enregistrer'}</button>
+                  </div>
+                  {renameError ? <p role="alert">{renameError}</p> : null}
+                </div></td></tr> : null}
+                {confirmationId === report.id ? <tr className="tenant-audit__detail-row"><td colSpan={7}><div aria-describedby={`archive-${report.id}-description`} aria-labelledby={`archive-${report.id}-title`} className="tenant-audit__confirmation" role="alertdialog">
+                  <strong id={`archive-${report.id}-title`}>Archiver {report.title} du {formatReportDate(report.report_date)} ?</strong>
+                  <p id={`archive-${report.id}-description`}>Le rapport sera déplacé dans « Rapports archivés ». Son PDF et ses métadonnées seront conservés.</p>
+                  <div className="tenant-audit__actions">
+                    <button autoFocus className="secondary-button" disabled={pendingId !== null} onClick={() => { setConfirmationId(null); setArchiveError(null) }} type="button">Annuler</button>
+                    <button className="primary-button" disabled={pendingId !== null} onClick={() => void archiveReport(report.id)} type="button">{pendingId === report.id ? 'Archivage…' : 'Confirmer l’archivage'}</button>
+                  </div>
+                  {archiveError ? <p role="alert">{archiveError}</p> : null}
+                </div></td></tr> : null}
+              </Fragment>
+            })}</tbody>
+          </table>
+        </div>}
+    </section>
   }
 
   return <section aria-label="Audit" className="tenant-audit"><h3>Audit</h3>{renderAuditLauncher()}{state.status === 'loading' ? <p role="status">Chargement des rapports…</p> : state.status !== 'loaded' ? <div role="alert"><p>Les rapports ne sont pas disponibles pour le moment.</p><button className="secondary-button" onClick={() => setReloadKey((key) => key + 1)} type="button">Réessayer</button></div> : <>{reportsError ? <p role="alert">{reportsError}</p> : null}{renderReportHistory(visibleReports)}</>}</section>
