@@ -5,7 +5,7 @@ export function getInitialIngestionStatusLabel(status: InitialIngestionStatus): 
   if (status === 'running') return 'En cours'
   if (status === 'completed') return 'Terminé'
   if (status === 'partial') return 'Partiel'
-  if (status === 'failed') return 'Erreur'
+  if (status === 'failed') return 'Échec'
   return 'Interrompu'
 }
 
@@ -25,8 +25,8 @@ export function getProgressWidth(processed: number, expected: number | null): nu
 
 export function getProgressCountLabel(processed: number, expected: number | null): string {
   const percentage = getProgressPercentage(processed, expected)
-  if (percentage === null) return `${processed} traités · volume attendu indisponible`
-  return `${processed} / ${expected} traités · ${Math.round(percentage)} %`
+  if (percentage === null) return `${processed} éléments traités · volume attendu indisponible`
+  return `${processed} / ${expected} éléments traités · ${Math.round(percentage)} %`
 }
 
 export function isLaunchResponseCurrent(

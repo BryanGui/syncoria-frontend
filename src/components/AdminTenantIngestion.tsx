@@ -7,20 +7,17 @@ import {
   fetchLatestAdminTenantIngestion,
   launchAdminTenantIngestion,
   type AdminInitialIngestion,
-  type AdminInitialIngestionSource,
 } from '../api/adminTenantIngestions'
 import {
   fetchAdminTenantProviders,
   type AdminProviderRecord,
 } from '../api/adminTenantProviders'
 import {
-  getInitialIngestionStatusLabel,
-  getProgressCountLabel,
-  getProgressWidth,
   isInitialIngestionActive,
   isLaunchResponseCurrent,
 } from '../tenantIngestion'
-import { ActionMenu } from './ui/ActionMenu'
+import { getProviderLabel } from '../providers/catalog'
+import { IngestionHistoryTable, IngestionSourcesTable, IngestionSummary } from './IngestionTables'
 
 const POLLING_INTERVAL_MS = 5_000
 
@@ -31,47 +28,8 @@ interface AdminTenantIngestionProps {
   onSessionExpired: () => void
 }
 
-function formatDate(value: string | null): string {
-  if (value === null) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Date indisponible'
-  return new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
-
-function formatDuration(
-  seconds: number | null,
-  status: AdminInitialIngestion['status'],
-): string {
-  if (seconds === null) {
-    return isInitialIngestionActive(status) ? 'En cours' : 'Durée indisponible'
-  }
-  if (!Number.isSafeInteger(seconds) || seconds < 0) return 'Durée indisponible'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes === 0) return `${seconds} s`
-  return `${minutes} min ${seconds % 60} s`
-}
-
-function formatProviderType(provider: string): string {
-  return provider.length === 0
-    ? 'Provider inconnu'
-    : `${provider.slice(0, 1).toUpperCase()}${provider.slice(1)}`
-}
-
 function formatProvider(provider: AdminProviderRecord): string {
-  return `${formatProviderType(provider.provider)} — ${provider.name}`
-}
-
-function formatHistoryProvider(
-  operation: AdminInitialIngestion,
-  providers: AdminProviderRecord[],
-): string {
-  const provider = providers.find((item) => item.id === operation.tenant_provider_record_id)
-  return provider === undefined
-    ? formatProviderType(operation.provider)
-    : formatProvider(provider)
+  return `${getProviderLabel(provider.provider)} — ${provider.name}`
 }
 
 function upsertOperation(
@@ -85,165 +43,6 @@ function upsertOperation(
   return operations.map((operation, operationIndex) => (
     operationIndex === index ? nextOperation : operation
   ))
-}
-
-function ProgressBar({
-  expected,
-  processed,
-  label,
-}: {
-  expected: number | null
-  processed: number
-  label: string
-}) {
-  const width = getProgressWidth(processed, expected)
-  const isIndeterminate = width === null
-
-  return (
-    <div
-      aria-label={label}
-      aria-valuemax={expected === null || expected <= 0 ? undefined : expected}
-      aria-valuemin={expected === null || expected <= 0 ? undefined : 0}
-      aria-valuenow={expected === null || expected <= 0 ? undefined : processed}
-      className={isIndeterminate ? 'ingestion-progress ingestion-progress--indeterminate' : 'ingestion-progress'}
-      role="progressbar"
-    >
-      <span
-        className="ingestion-progress__value"
-        style={width === null ? undefined : { width: `${width}%` }}
-      />
-    </div>
-  )
-}
-
-function CountSummary({
-  operation,
-}: {
-  operation: AdminInitialIngestion | AdminInitialIngestionSource
-}) {
-  return (
-    <div className="ingestion-count-summary">
-      <span>{operation.items_received} lus</span>
-      <span>{operation.items_processed} traités</span>
-      <span>{operation.items_inserted} insérés</span>
-      <span>{operation.items_duplicate} doublons</span>
-      <span>{operation.items_rejected} rejetés</span>
-      <span>{operation.items_not_attempted} non tentés</span>
-    </div>
-  )
-}
-
-function SourceDetail({ source }: { source: AdminInitialIngestionSource }) {
-  return (
-    <article className="ingestion-source">
-      <div className="ingestion-source__header">
-        <div>
-          <h5>{source.source_name}</h5>
-          <code>{source.external_source_id}</code>
-        </div>
-        <span className={`ingestion-status ingestion-status--${source.status}`}>
-          {getInitialIngestionStatusLabel(source.status)}
-        </span>
-      </div>
-      <CountSummary operation={source} />
-      <dl className="ingestion-source__details">
-        <div><dt>Volume audité</dt><dd>{source.observed_record_count ?? '—'}</dd></div>
-        <div><dt>Début</dt><dd>{formatDate(source.started_at)}</dd></div>
-        <div><dt>Fin</dt><dd>{formatDate(source.completed_at)}</dd></div>
-        <div><dt>Run technique</dt><dd>{source.run_id ?? '—'}</dd></div>
-        <div><dt>Versions</dt><dd>{source.capture_contract_versions.join(', ') || '—'}</dd></div>
-      </dl>
-      {source.error_code !== null ? (
-        <p className="ingestion-source__error" role="alert">Erreur : {source.error_code}</p>
-      ) : null}
-    </article>
-  )
-}
-
-function OperationDetail({ operation }: { operation: AdminInitialIngestion }) {
-  return (
-    <div className="ingestion-history__detail">
-      <div className="ingestion-operation__progress-heading">
-        <h5>Progression globale</h5>
-        <span>{getProgressCountLabel(operation.items_processed, operation.items_expected)}</span>
-      </div>
-      <ProgressBar
-        expected={operation.items_expected}
-        label={`Progression de l’ingestion ${operation.correlation_id}`}
-        processed={operation.items_processed}
-      />
-      <CountSummary operation={operation} />
-      <dl className="ingestion-history__metadata">
-        <div><dt>Correlation ID</dt><dd>{operation.correlation_id}</dd></div>
-        <div><dt>Durée</dt><dd>{formatDuration(operation.duration_seconds, operation.status)}</dd></div>
-        <div><dt>Versions</dt><dd>{operation.capture_contract_versions.join(', ') || '—'}</dd></div>
-        <div><dt>Erreurs</dt><dd>{operation.error_codes.join(', ') || 'Aucune'}</dd></div>
-      </dl>
-      <div className="ingestion-history__sources">
-        <h5>Sources</h5>
-        <div className="ingestion-source-grid">
-          {operation.sources.map((source) => (
-            <SourceDetail key={source.external_source_id} source={source} />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function HistoryItem({
-  expanded,
-  operation,
-  providerLabel,
-  onToggle,
-  onArchive,
-  isArchiving,
-}: {
-  expanded: boolean
-  operation: AdminInitialIngestion
-  providerLabel: string
-  onToggle: () => void
-  onArchive: () => void
-  isArchiving: boolean
-}) {
-  return (
-    <article className="ingestion-history__item">
-      <div className="ingestion-history__row">
-        <button
-          aria-controls={`ingestion-detail-${operation.correlation_id}`}
-          aria-expanded={expanded}
-          className="ingestion-history__row-trigger"
-          onClick={onToggle}
-          type="button"
-        >
-          <span className="ingestion-history__identity">
-            <span className="provider-card__eyebrow">{providerLabel}</span>
-            <strong>{formatDate(operation.started_at)}</strong>
-            <span className={`ingestion-status ingestion-status--${operation.status}`}>
-              {getInitialIngestionStatusLabel(operation.status)}
-            </span>
-          </span>
-          <span className="ingestion-history__metrics">
-            <span>{operation.sources_total} sources</span>
-            <span>{operation.items_received} reçus · {operation.items_inserted} insérés · {operation.items_duplicate} doublons</span>
-            <span>{formatDuration(operation.duration_seconds, operation.status)}</span>
-          </span>
-        </button>
-        {!operation.archived && !isInitialIngestionActive(operation.status) ? (
-          <ActionMenu ariaLabel="Actions de l’ingestion" label="⋯">
-            <button disabled={isArchiving} onClick={onArchive} type="button">
-              Archiver
-            </button>
-          </ActionMenu>
-        ) : null}
-      </div>
-      {expanded ? (
-        <div id={`ingestion-detail-${operation.correlation_id}`}>
-          <OperationDetail operation={operation} />
-        </div>
-      ) : null}
-    </article>
-  )
 }
 
 export function AdminTenantIngestion({
@@ -397,9 +196,6 @@ export function AdminTenantIngestion({
         operationRef.current = result.operation
         setOperation(result.operation)
         setHistory((current) => upsertOperation(current, result.operation))
-        if (isInitialIngestionActive(result.operation.status)) {
-          setExpandedCorrelationId(result.operation.correlation_id)
-        }
         setOperationState('idle')
       } else if (result.status === 'not_found') {
         setOperationState('none')
@@ -469,12 +265,12 @@ export function AdminTenantIngestion({
       operationRef.current = result.operation
       setOperation(result.operation)
       setHistory((current) => upsertOperation(current, result.operation))
-      setExpandedCorrelationId(result.operation.correlation_id)
+      setExpandedCorrelationId(null)
       setOperationState('idle')
       return
     }
     setErrorMessage(result.status === 'conflict'
-      ? 'Une ingestion est déjà en cours pour ce provider.'
+      ? 'Une ingestion est déjà en cours pour cet outil.'
       : 'L’ingestion ne peut pas être lancée pour le moment.')
   }
 
@@ -525,21 +321,21 @@ export function AdminTenantIngestion({
       <div className="tenant-ingestion__heading">
         <div>
           <h3 id="tenant-ingestion-title">Ingestion</h3>
-          <p>Un run correspond à un provider et reste consultable dans l’historique.</p>
+          <p>Suivez la collecte des données depuis vos sources.</p>
         </div>
       </div>
 
       {providerState === 'loading' ? (
-        <div aria-live="polite" className="ingestion-empty"><span className="session-loading__indicator" aria-hidden="true" />Chargement des providers…</div>
+        <div aria-live="polite" className="ingestion-empty"><span className="session-loading__indicator" aria-hidden="true" />Chargement des outils…</div>
       ) : providerState === 'error' ? (
-        <p className="ingestion-error" role="alert">Les providers ne peuvent pas être chargés pour le moment.</p>
+        <p className="ingestion-error" role="alert">Les outils ne peuvent pas être chargés pour le moment.</p>
       ) : providers.length === 0 ? (
-        <p className="ingestion-empty">Aucun provider configuré pour ce tenant.</p>
+        <p className="ingestion-empty">Aucun outil configuré pour ce client.</p>
       ) : (
         <>
           <div className="ingestion-launcher">
             <label className="ingestion-provider-select">
-              Provider à ingérer
+              Outil à ingérer
               <select
                 disabled={isLaunching}
                 onChange={(event) => {
@@ -570,19 +366,25 @@ export function AdminTenantIngestion({
           </div>
           {selectedProvider !== null && !isSelectedProviderSupported ? (
             <p className="ingestion-notice">
-              Ce provider est visible mais indisponible pour l’ingestion initiale.
+              Cet outil est visible mais indisponible pour l’ingestion initiale.
             </p>
           ) : null}
           {errorMessage !== null ? <p className="ingestion-error" role="alert">{errorMessage}</p> : null}
           {operationState === 'loading' ? <p className="ingestion-empty">Chargement de la dernière ingestion…</p> : null}
-          {operationState === 'none' ? <p className="ingestion-empty">Aucune ingestion n’a encore été lancée pour ce provider.</p> : null}
+          {operationState === 'none' ? <p className="ingestion-empty">Aucune ingestion n’a encore été lancée pour cet outil.</p> : null}
+          {operation !== null ? <>
+            <IngestionSummary operation={operation} />
+            <section aria-labelledby="ingestion-sources-title" className="ingestion-sources">
+              <h4 id="ingestion-sources-title">Sources</h4>
+              <IngestionSourcesTable key={operation.correlation_id} operation={operation} />
+            </section>
+          </> : null}
         </>
       )}
 
       <section aria-labelledby="ingestion-history-title" className="ingestion-history">
         <div className="ingestion-history__heading">
           <div>
-            <p className="provider-card__eyebrow">Runs persistés</p>
             <h4 id="ingestion-history-title">Historique des ingestions</h4>
           </div>
           <button
@@ -605,21 +407,14 @@ export function AdminTenantIngestion({
             {showArchives ? 'Aucune ingestion archivée pour ce tenant.' : 'Aucune ingestion persistée pour ce tenant.'}
           </p>
         ) : (
-          <div className="ingestion-history__list">
-            {visibleHistory.map((historyOperation) => (
-              <HistoryItem
-                expanded={expandedCorrelationId === historyOperation.correlation_id}
-                key={historyOperation.correlation_id}
-                isArchiving={isArchiving}
-                onArchive={() => void archiveIngestion(historyOperation)}
-                onToggle={() => setExpandedCorrelationId((current) => (
-                  current === historyOperation.correlation_id ? null : historyOperation.correlation_id
-                ))}
-                operation={historyOperation}
-                providerLabel={formatHistoryProvider(historyOperation, providers)}
-              />
-            ))}
-          </div>
+          <IngestionHistoryTable
+            expandedCorrelationId={expandedCorrelationId}
+            isArchiving={isArchiving}
+            onArchive={(historyOperation) => void archiveIngestion(historyOperation)}
+            onToggle={(correlationId) => setExpandedCorrelationId((current) => current === correlationId ? null : correlationId)}
+            operations={visibleHistory}
+            providers={providers}
+          />
         )}
       </section>
     </section>

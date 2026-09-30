@@ -231,7 +231,7 @@ test('Geist is bundled locally with a lighter tenant typography', async ({ page 
   await expect(page.getByRole('button', { name: '+ Connecter un outil' })).toHaveCSS('font-weight', '500')
   await page.screenshot({ path: 'docs/screenshots/ticket-112/sources-desktop.png', fullPage: true })
   await selectSection(page, 'Ingestion')
-  await expect(page.getByText('Provider à ingérer')).toHaveCSS('font-weight', '500')
+  await expect(page.getByText('Outil à ingérer')).toHaveCSS('font-weight', '500')
   await page.screenshot({ path: 'docs/screenshots/ticket-112/ingestion-desktop.png', fullPage: true })
 
   await selectSection(page, 'Vue générale')
