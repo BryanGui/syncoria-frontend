@@ -15,12 +15,9 @@ export function TenantConnectedTools({ state, onManageSources }: TenantConnected
   return (
     <section aria-labelledby="tenant-connected-tools-title" className="tenant-connected-tools">
       <div className="tenant-connected-tools__heading">
-        <div>
-          <h3 id="tenant-connected-tools-title">Outils connectés</h3>
-          <p>Les connexions configurées pour ce client</p>
-        </div>
+        <h3 id="tenant-connected-tools-title">Outils connectés</h3>
         {onManageSources ? (
-          <button className="secondary-button" onClick={onManageSources} type="button">Gérer les sources</button>
+          <button className="tenant-connected-tools__manage" onClick={onManageSources} type="button">Gérer les sources <span aria-hidden="true">→</span></button>
         ) : null}
       </div>
       {state.status === 'loading' ? (
@@ -37,10 +34,7 @@ export function TenantConnectedTools({ state, onManageSources }: TenantConnected
           {state.tools.map((tool) => (
             <article className="tenant-connected-tools__card" key={tool.id}>
               <ProviderLogo provider={tool.provider} />
-              <div className="tenant-connected-tools__card-copy">
-                <h4>{tool.label}</h4>
-                {tool.connectionName ? <p title={tool.connectionName}>{tool.connectionName}</p> : null}
-              </div>
+              <h4>{tool.label}</h4>
               <span className={`tenant-connected-tools__status tenant-connected-tools__status--${tool.statusTone}`}>
                 {tool.statusLabel}
               </span>

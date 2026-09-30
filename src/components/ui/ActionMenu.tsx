@@ -8,6 +8,10 @@ interface ActionMenuProps {
   portal?: boolean
 }
 
+// The portal is outside the trigger's containing block. Give it a bounded width
+// before measuring so an inherited inline-menu right edge cannot stretch it.
+const portalWidth = 'min(240px, calc(100vw - 16px))'
+
 function PortalActionMenu({ ariaLabel, children, label }: ActionMenuProps) {
   const contentId = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -38,6 +42,8 @@ function PortalActionMenu({ ariaLabel, children, label }: ActionMenuProps) {
       setPosition({
         top,
         left,
+        right: 'auto',
+        width: portalWidth,
         maxHeight: Math.max(0, window.innerHeight - margin * 2),
       })
     }
@@ -139,7 +145,7 @@ function PortalActionMenu({ ariaLabel, children, label }: ActionMenuProps) {
           }}
           onKeyDown={handlePortalKeyDown}
           ref={contentRef}
-          style={position ?? { visibility: 'hidden', top: 0, left: 0 }}
+          style={position ?? { visibility: 'hidden', top: 0, left: 0, right: 'auto', width: portalWidth }}
         >{children}</div>,
         document.body,
       ) : null}

@@ -21,8 +21,8 @@ function provider(id: string, slug: string, name: string, verified = true) {
   }
 }
 
-const notion = provider('notion-id', 'notion', 'Notion Novalia')
-const n8n = provider('n8n-id', 'n8n', 'novalia - n8n', false)
+const notion = provider('notion-id', 'notion', 'Notion démo')
+const n8n = provider('n8n-id', 'n8n', 'n8n démo', false)
 const unknown = provider('custom-id', 'custom_tool', 'Outil sur mesure')
 
 async function openSources(page: Page, records: Provider[] = [notion, n8n, unknown]) {
@@ -75,10 +75,19 @@ async function expectMenuFullyVisible(page: Page, trigger: Locator) {
   const viewport = page.viewportSize()
   expect(box).not.toBeNull()
   expect(viewport).not.toBeNull()
+  const triggerBox = await trigger.boundingBox()
+  expect(triggerBox).not.toBeNull()
+  expect(box!.width).toBeLessThan(320)
+  if (viewport!.width >= 768) expect(box!.width).toBeLessThan(viewport!.width * 0.5)
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.y).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width)
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height)
+  expect(Math.abs(box!.x + box!.width - triggerBox!.x - triggerBox!.width)).toBeLessThan(24)
+  expect(Math.min(
+    Math.abs(box!.y - triggerBox!.y - triggerBox!.height),
+    Math.abs(box!.y + box!.height - triggerBox!.y),
+  )).toBeLessThan(24)
   const uncovered = await menu.evaluate((element) => {
     const box = element.getBoundingClientRect()
     return [
@@ -112,7 +121,13 @@ test('Sources uses compact accessible rows, real details and a scoped header/sid
   await expect(rows.nth(2).getByRole('img', { name: 'Logo indisponible pour custom tool' })).toBeVisible()
   await expect(rows.nth(0).getByText('Connecté')).toBeVisible()
   await expect(rows.nth(1).getByText('À vérifier')).toBeVisible()
-  const firstToggle = rows.nth(0).getByRole('button', { name: 'Détails de la connexion Notion Novalia' })
+  const intro = await page.locator('.tenant-integration__heading > div').boundingBox()
+  const toolbar = await page.locator('.tenant-integration__heading').boundingBox()
+  const list = await page.locator('.source-connections').boundingBox()
+  expect(intro && toolbar && list).toBeTruthy()
+  expect(toolbar!.height).toBeGreaterThanOrEqual(intro!.height)
+  expect(list!.y).toBeGreaterThan(toolbar!.y + toolbar!.height + 16)
+  const firstToggle = rows.nth(0).getByRole('button', { name: 'Détails de la connexion Notion démo' })
   await expect(firstToggle).toHaveAttribute('aria-expanded', 'false')
   await expect(rows.nth(0).getByText('Espace synthétique')).toBeHidden()
   await firstToggle.focus()
@@ -120,7 +135,7 @@ test('Sources uses compact accessible rows, real details and a scoped header/sid
   await expect(firstToggle).toHaveAttribute('aria-expanded', 'true')
   await expect(rows.nth(0).getByText('Espace synthétique')).toBeVisible()
   await expect(rows.nth(0).getByText('HTTP 200')).toBeVisible()
-  await rows.nth(1).getByRole('button', { name: 'Détails de la connexion novalia - n8n' }).click()
+  await rows.nth(1).getByRole('button', { name: 'Détails de la connexion n8n démo' }).click()
   await expect(firstToggle).toHaveAttribute('aria-expanded', 'false')
   await expect(rows.nth(1).getByText('https://automation.example.test')).toBeVisible()
   await expect(page.getByRole('button', { name: '+ Connecter un outil' })).toBeVisible()
@@ -134,39 +149,39 @@ test('Sources uses compact accessible rows, real details and a scoped header/sid
 test('menu actions preserve verification, editing and explicit disable confirmation', async ({ page }) => {
   const { requests } = await openSources(page)
   const rows = page.locator('.source-connection')
-  const n8nToggle = rows.nth(1).getByRole('button', { name: 'Détails de la connexion novalia - n8n' })
+  const n8nToggle = rows.nth(1).getByRole('button', { name: 'Détails de la connexion n8n démo' })
   await n8nToggle.click()
-  const n8nMenu = await expectMenuFullyVisible(page, rows.nth(1).getByRole('button', { name: 'Actions pour novalia - n8n' }))
+  const n8nMenu = await expectMenuFullyVisible(page, rows.nth(1).getByRole('button', { name: 'Actions pour n8n démo' }))
   await expect(n8nToggle).toHaveAttribute('aria-expanded', 'true')
   await expect(n8nMenu.getByRole('button').allTextContents()).resolves.toEqual([
     'Modifier', 'Modifier les identifiants', 'Vérifier la connexion', 'Désactiver',
   ])
   await n8nMenu.getByRole('button', { name: 'Vérifier la connexion' }).click()
   await expect(rows.nth(1).getByText('Connecté')).toBeVisible()
-  await expect(rows.nth(1).getByRole('button', { name: 'Actions pour novalia - n8n' })).toBeFocused()
+  await expect(rows.nth(1).getByRole('button', { name: 'Actions pour n8n démo' })).toBeFocused()
   expect(requests).toContain(`POST ${prefix}/providers/n8n-id/verify`)
 
-  const notionMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion Novalia' }))
+  const notionMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion démo' }))
   await notionMenu.getByRole('button', { name: 'Modifier', exact: true }).click()
   await expect(rows.nth(0).getByRole('button', { name: 'Enregistrer' })).toBeVisible()
   await rows.nth(0).getByRole('button', { name: 'Annuler' }).click()
-  const credentialMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion Novalia' }))
+  const credentialMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion démo' }))
   await credentialMenu.getByRole('button', { name: 'Modifier les identifiants' }).click()
   await expect(rows.nth(0).getByRole('button', { name: 'Remplacer' })).toBeVisible()
   await rows.nth(0).getByRole('button', { name: 'Annuler' }).click()
-  const disableMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion Novalia' }))
+  const disableMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion démo' }))
   await disableMenu.getByRole('button', { name: 'Désactiver' }).click()
   const confirmation = rows.nth(0).getByRole('alertdialog')
   await expect(confirmation).toBeVisible()
   expect(requests).not.toContain(`DELETE ${prefix}/providers/notion-id`)
   await confirmation.getByRole('button', { name: 'Annuler' }).click()
   expect(requests).not.toContain(`DELETE ${prefix}/providers/notion-id`)
-  const finalMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion Novalia' }))
+  const finalMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion démo' }))
   await finalMenu.getByRole('button', { name: 'Désactiver' }).click()
   await rows.nth(0).getByRole('alertdialog').getByRole('button', { name: 'Confirmer la désactivation' }).click()
   await expect(rows.nth(0).getByText('Inactif')).toBeVisible()
   expect(requests).toContain(`DELETE ${prefix}/providers/notion-id`)
-  const inactiveMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion Novalia' }))
+  const inactiveMenu = await expectMenuFullyVisible(page, rows.nth(0).getByRole('button', { name: 'Actions pour Notion démo' }))
   await expect(inactiveMenu.getByRole('button', { name: 'Activer' })).toBeVisible()
 })
 
@@ -191,11 +206,24 @@ test('portal menu stays above adjacent rows and inside the viewport at middle, l
   expect(overflow).toBe(false)
 })
 
+test('menu geometry holds for first, middle, last and right-edge rows on a short desktop viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 340 })
+  const records = Array.from({ length: 12 }, (_, index) => provider(`record-${index}`, index % 2 ? 'n8n' : 'notion', `Connexion ${index}`))
+  await openSources(page, records)
+  for (const index of [0, 5, 11]) {
+    const trigger = page.locator('.source-connection').nth(index).getByRole('button', { name: `Actions pour Connexion ${index}` })
+    await trigger.scrollIntoViewIfNeeded()
+    const menu = await expectMenuFullyVisible(page, trigger)
+    await expect(menu.getByRole('button', { name: 'Modifier', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+  }
+})
+
 test('desktop menu opens below its trigger and supports Enter, Tab, Escape and outside click', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openSources(page)
-  await page.screenshot({ path: '/tmp/syncoria-107-sources-desktop.png', fullPage: true })
-  const trigger = page.getByRole('button', { name: 'Actions pour Notion Novalia' })
+  await page.screenshot({ path: 'docs/screenshots/ticket-109/sources-desktop.png', fullPage: true })
+  const trigger = page.getByRole('button', { name: 'Actions pour Notion démo' })
   await trigger.focus()
   await page.keyboard.press('Enter')
   const contentId = await trigger.getAttribute('aria-controls')
@@ -204,6 +232,9 @@ test('desktop menu opens below its trigger and supports Enter, Tab, Escape and o
   const menuBox = await menu.boundingBox()
   const triggerBox = await trigger.boundingBox()
   expect(menuBox!.y).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height)
+  expect(menuBox!.width).toBeLessThan(320)
+  expect(menuBox!.width).toBeLessThan(1440 * .5)
+  await page.screenshot({ path: 'docs/screenshots/ticket-109/sources-menu-desktop.png' })
   await page.keyboard.press('Tab')
   await expect(menu.getByRole('button', { name: 'Modifier', exact: true })).toBeFocused()
   await page.keyboard.press('Escape')
@@ -218,7 +249,7 @@ test('desktop menu opens below its trigger and supports Enter, Tab, Escape and o
 test('mobile Sources screenshot and compact layout', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openSources(page)
-  await page.screenshot({ path: '/tmp/syncoria-107-sources-mobile.png', fullPage: true })
+  await page.screenshot({ path: 'docs/screenshots/ticket-109/sources-mobile.png', fullPage: true })
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   expect(overflow).toBe(false)
   await expect(page.locator('.source-connection')).toHaveCount(3)

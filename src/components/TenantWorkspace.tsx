@@ -47,6 +47,7 @@ export function TenantWorkspace({
   const closeChat = useCallback(() => setChatOpen(false), [])
   const isAdmin = adminIntegration !== undefined
   const isSources = isAdmin && activeSection === 'Sources'
+  const isOverview = isAdmin && activeSection === 'Vue générale'
   const name = tenantLabel ?? tenant.slug
   const group = isAdmin
     ? ADMIN_TENANT_GROUPS.find((item) => item.sections.some((section) => section === activeSection))?.label
@@ -64,14 +65,14 @@ export function TenantWorkspace({
   return (
     <div className={sidebarTarget ? 'tenant-workspace-layout tenant-workspace-layout--portal' : 'tenant-workspace-layout'}>
       {sidebarTarget ? createPortal(navigation, sidebarTarget) : navigation}
-      <section aria-labelledby="tenant-workspace-title" className={isSources ? 'tenant-workspace tenant-workspace--sources' : 'tenant-workspace'}>
+      <section aria-labelledby="tenant-workspace-title" className={`tenant-workspace${isSources ? ' tenant-workspace--sources' : ''}${isOverview ? ' tenant-workspace--overview' : ''}`}>
         <div className="tenant-workspace__heading">
           <div>
-            {!isSources ? <p className="tenant-workspace__breadcrumb">{isAdmin ? 'Clients / ' : ''}{name} / {group ? `${group} / ` : ''}{activeSection}</p> : null}
+            {!isSources && !isOverview ? <p className="tenant-workspace__breadcrumb">{isAdmin ? 'Clients / ' : ''}{name} / {group ? `${group} / ` : ''}{activeSection}</p> : null}
             <h2 id="tenant-workspace-title">{name}</h2>
           </div>
           <div className="tenant-workspace__heading-actions">
-            {!isSources ? <span className={tenant.status === 'active'
+            {!isSources && !isOverview ? <span className={tenant.status === 'active'
               ? 'tenant-status tenant-status--active'
               : 'tenant-status'}>
               {getTenantStatusLabel(tenant.status)}
@@ -79,13 +80,6 @@ export function TenantWorkspace({
             {lifecycleControls}
           </div>
         </div>
-
-        {isSources ? (
-          <div className="tenant-workspace__sources-intro">
-            <h3>Sources</h3>
-            <p>Gérez les outils et services connectés à cet espace.</p>
-          </div>
-        ) : null}
 
         {activeSection === 'Vue générale' ? (
           <div className="tenant-overview">
@@ -95,14 +89,29 @@ export function TenantWorkspace({
                 state={connectedToolsState}
               />
             ) : null}
-            <section aria-labelledby="tenant-overview-details-title" className="tenant-overview__details">
+            {isAdmin ? <section aria-labelledby="tenant-overview-links-title" className="tenant-overview__links">
+              <h3 id="tenant-overview-links-title">Accès rapides</h3>
+              <div>
+                <button aria-label="Ouvrir les sources" onClick={() => setActiveSection('Sources')} type="button">Sources <span aria-hidden="true">↗</span></button>
+                <button aria-label="Ouvrir l’audit" onClick={() => setActiveSection('Audit')} type="button">Audit <span aria-hidden="true">↗</span></button>
+                <button aria-label="Ouvrir Superset" onClick={() => setActiveSection('Superset')} type="button">Superset <span aria-hidden="true">↗</span></button>
+                <button aria-label="Ouvrir le chat IA" onClick={() => setChatOpen(true)} type="button">Chat IA <span aria-hidden="true">↗</span></button>
+              </div>
+            </section> : null}
+            {isAdmin ? <details className="tenant-overview__details">
+              <summary>Informations techniques <span className={tenant.status === 'active' ? 'tenant-overview__status tenant-overview__status--active' : 'tenant-overview__status'}>{getTenantStatusLabel(tenant.status)}</span></summary>
+              <dl>
+                <div><dt>Slug</dt><dd>{tenant.slug}</dd></div>
+                <div><dt>Identifiant technique</dt><dd><code>{tenant.id}</code></dd></div>
+              </dl>
+            </details> : <section aria-labelledby="tenant-overview-details-title" className="tenant-overview__details">
               <h3 id="tenant-overview-details-title">Informations du tenant</h3>
               <dl>
                 <div><dt>Statut</dt><dd>{getTenantStatusLabel(tenant.status)}</dd></div>
                 <div><dt>Slug</dt><dd>{tenant.slug}</dd></div>
                 <div><dt>Identifiant technique</dt><dd><code>{tenant.id}</code></dd></div>
               </dl>
-            </section>
+            </section>}
           </div>
         ) : activeSection === 'Sources' && adminIntegration !== undefined ? (
           adminIntegration
