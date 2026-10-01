@@ -34,17 +34,23 @@ test('action menu closes after selection and when focus leaves the menu', async 
 
   await trigger.click()
   await expect(menu).toHaveAttribute('open', '')
+  // Native details toggles before React receives its asynchronous toggle event.
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
 
   await menu.getByRole('button', { name: 'Ouvrir', exact: true }).click()
   await expect(menu).not.toHaveAttribute('open', '')
 
   await trigger.click()
   await expect(menu).toHaveAttribute('open', '')
+  // Native details toggles before React receives its asynchronous toggle event.
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
   await page.locator('#action-menu-focus-target').focus()
   await expect(menu).not.toHaveAttribute('open', '')
 
   await trigger.click()
   await expect(menu).toHaveAttribute('open', '')
+  // Native details toggles before React receives its asynchronous toggle event.
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
   await page.keyboard.press('Escape')
   await expect(menu).not.toHaveAttribute('open', '')
   await expect(trigger).toHaveAttribute('aria-expanded', 'false')

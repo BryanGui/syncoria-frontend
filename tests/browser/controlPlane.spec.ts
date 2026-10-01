@@ -40,6 +40,7 @@ test("real registry, explicit demo, tenant context and disabled runtime", async 
   await expect(page.getByText("synthetic/demo", { exact: true })).toBeVisible();
   await expect(page.getByText("50", { exact: true })).toBeVisible();
   await mkdir("docs/screenshots/control-plane", { recursive: true });
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.screenshot({
     path: "docs/screenshots/control-plane/overview.png",
     fullPage: true,
@@ -51,6 +52,7 @@ test("real registry, explicit demo, tenant context and disabled runtime", async 
   await expect(
     page.getByRole("heading", { name: "Analyser les erreurs de l’agent" }),
   ).toHaveCount(1);
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.screenshot({
     path: "docs/screenshots/control-plane/tenant.png",
     fullPage: true,
@@ -88,6 +90,7 @@ test("mobile fleet remains usable without horizontal overflow", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await page.evaluate(() => window.scrollTo(0, 0))
   await page.screenshot({
     path: "docs/screenshots/control-plane/mobile.png",
     fullPage: true,
