@@ -1,4 +1,5 @@
 export type FleetStatus = 'critical' | 'watch' | 'due' | 'healthy' | 'unknown'
+export type ControlPlaneProvenance = 'provider' | 'syncoria' | 'synthetic/demo'
 export type ActionType =
   | 'request'
   | 'incident'
@@ -19,14 +20,14 @@ export interface OperatorAction {
   dueAt: string
   completedAt: string | null
   notes: string
-  provenance: 'synthetic/demo'
+  provenance: ControlPlaneProvenance
 }
 export interface FleetTenant {
   id: string
   name: string
   lifecycle: string
   status: FleetStatus
-  provenance: 'syncoria' | 'synthetic/demo'
+  provenance: ControlPlaneProvenance
   reason: string
   referent: string | null
   providers: string[]
