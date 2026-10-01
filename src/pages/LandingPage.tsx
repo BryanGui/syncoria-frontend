@@ -4,33 +4,33 @@ interface LandingPageProps {
 
 const journey = [
   {
-    title: 'Connecter',
-    description: 'Reliez les outils que votre équipe utilise déjà.',
+    title: 'Cartographier',
+    description: 'Identifiez les providers, les agents et les usages de chaque client.',
   },
   {
     title: 'Auditer',
-    description: 'Visualisez simplement vos données et leurs sources.',
+    description: 'Examinez les licences, les permissions et la gouvernance IA.',
   },
   {
-    title: 'Structurer',
-    description: 'Donnez un cadre clair à l’information dispersée.',
+    title: 'Surveiller',
+    description: 'Repérez les incidents, les dérives de coût et les besoins de formation.',
   },
   {
-    title: 'Synchroniser',
-    description: 'Gardez les bons éléments à jour partout.',
+    title: 'Intervenir',
+    description: 'Analysez dans le contexte du client et suivez les actions techniques.',
   },
   {
-    title: 'Automatiser',
-    description: 'Faites avancer vos processus avec moins de tâches manuelles.',
+    title: 'Accompagner',
+    description: 'Préparez les revues et soutenez le référent IA interne.',
   },
 ]
 
 const productAreas = [
   { label: 'Clients', tone: 'violet' },
-  { label: 'Données', tone: 'blue' },
-  { label: 'Synchronisation', tone: 'green' },
-  { label: 'Processus', tone: 'orange' },
-  { label: 'Intégration', tone: 'lilac' },
+  { label: 'Gouvernance', tone: 'blue' },
+  { label: 'Alertes', tone: 'green' },
+  { label: 'Actions', tone: 'orange' },
+  { label: 'Providers IA', tone: 'lilac' },
 ]
 
 export function LandingPage({ onLogin }: LandingPageProps) {
@@ -52,10 +52,10 @@ export function LandingPage({ onLogin }: LandingPageProps) {
 
       <section className="landing-hero" id="top">
         <div className="landing-hero__content">
-          <p className="landing-eyebrow">L’espace de travail qui relie vos outils</p>
-          <h1>Vos outils restent.<br />Vos données travaillent enfin ensemble.</h1>
+          <p className="landing-eyebrow">Le cockpit du responsable IA externalisé</p>
+          <h1>Pilotez le parc IA<br />de vos entreprises clientes.</h1>
           <p className="landing-hero__description">
-            Syncoria structure les données dispersées de votre entreprise, les maintient synchronisées et automatise vos processus sans remplacer vos outils existants.
+            Syncoria aide l’opérateur à comprendre les usages IA, surveiller les alertes, suivre les coûts et intervenir auprès de plusieurs entreprises. Les clients gardent ChatGPT, Claude et leurs outils habituels.
           </p>
           <div className="landing-hero__actions">
             <a className="landing-button landing-button--primary" href="#produit">
@@ -74,14 +74,14 @@ export function LandingPage({ onLogin }: LandingPageProps) {
             <div className="landing-hero-card__topline">
               <span className="landing-hero-card__dot" />
               <span>Syncoria</span>
-              <span className="landing-hero-card__status">À jour</span>
+              <span className="landing-hero-card__status">Aperçu conceptuel</span>
             </div>
             <div className="landing-hero-card__line landing-hero-card__line--strong" />
             <div className="landing-hero-card__line" />
             <div className="landing-hero-card__line landing-hero-card__line--short" />
             <div className="landing-hero-card__metrics">
-              <span><strong>5</strong> sources reliées</span>
-              <span><strong>24</strong> processus suivis</span>
+              <span><strong>50</strong> clients · illustration</span>
+              <span><strong>3</strong> priorités · illustration</span>
             </div>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
       <section aria-labelledby="journey-title" className="landing-section landing-journey" id="fonctionnement">
         <div className="landing-section__heading">
           <p className="landing-eyebrow">Un chemin plus simple</p>
-          <h2 id="journey-title">De la donnée dispersée à l’action.</h2>
+          <h2 id="journey-title">Du signal à l’intervention.</h2>
         </div>
         <div className="landing-journey__steps">
           {journey.map((step, index) => (
@@ -106,22 +106,22 @@ export function LandingPage({ onLogin }: LandingPageProps) {
 
       <section aria-labelledby="product-title" className="landing-section landing-product" id="produit">
         <div className="landing-product__copy">
-          <p className="landing-eyebrow">Une vue claire de votre activité</p>
+          <p className="landing-eyebrow">Une vue claire du parc IA</p>
           <h2 id="product-title">Tout ce qui compte, au même endroit.</h2>
           <p>
-            Syncoria donne à vos équipes une lecture commune de leurs outils, de leurs données et des actions à mener.
+            L’opérateur retrouve les clients prioritaires, les actions ouvertes et les prochaines revues. Le référent IA du client porte les décisions métier.
           </p>
         </div>
         <div aria-label="Aperçu des espaces Syncoria" className="landing-product__preview" role="img">
           <div className="landing-product__sidebar">
             <span className="landing-product__sidebar-brand"><span aria-hidden="true">S</span> Syncoria</span>
             <span className="landing-product__sidebar-item landing-product__sidebar-item--active">Vue d’ensemble</span>
-            <span className="landing-product__sidebar-item">Espaces</span>
-            <span className="landing-product__sidebar-item">Paramètres</span>
+            <span className="landing-product__sidebar-item">Clients</span>
+            <span className="landing-product__sidebar-item">Chat opérateur</span>
           </div>
           <div className="landing-product__body">
             <div className="landing-product__body-header">
-              <span>Votre activité</span>
+              <span>Parc IA multi-clients</span>
               <span className="landing-product__body-pill">Cette semaine</span>
             </div>
             <div className="landing-product__area-grid">
@@ -149,7 +149,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
       <section aria-labelledby="final-cta-title" className="landing-final-cta">
         <div>
           <p className="landing-eyebrow">Prêt à y voir plus clair ?</p>
-          <h2 id="final-cta-title">Découvrez ce que Syncoria peut simplifier dans votre entreprise.</h2>
+          <h2 id="final-cta-title">Un seul cockpit pour accompagner plusieurs entreprises.</h2>
         </div>
         <button className="landing-button landing-button--primary" onClick={onLogin} type="button">
           Se connecter
@@ -159,7 +159,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
 
       <footer className="landing-footer">
         <span>Syncoria</span>
-        <span>Des outils qui travaillent ensemble.</span>
+        <span>AI Control Plane · supervision multi-clients.</span>
       </footer>
     </main>
   )
