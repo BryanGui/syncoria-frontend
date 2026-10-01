@@ -99,6 +99,7 @@ async function openIngestion(page: Page, scenario: Scenario = 'completed', compl
     return route.fulfill({ status: 404, json: {} })
   })
   await page.goto('/')
+  await page.getByRole('button', { name: 'Outils existants · legacy' }).click()
   await page.getByRole('button', { name: 'Clients', exact: true }).click()
   await page.getByRole('button', { name: 'Client synthétique', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Client synthétique', exact: true })).toBeVisible()

@@ -1,5 +1,10 @@
 # Syncoria Frontend
 
+## Cockpit opérateur V2
+
+La session admin ouvre le nouveau AI Control Plane multi-clients. [Guide et provenance](docs/AI_CONTROL_PLANE_V2.md). Les outils legacy restent disponibles depuis le cockpit.
+
+
 ## Configuration de l'API
 
 Le dashboard lit l'URL de base de FastAPI depuis la variable Vite

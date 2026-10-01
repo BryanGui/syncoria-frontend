@@ -20,11 +20,11 @@ const indexStyles = await readFile(
 )
 
 test('landing page contains the public message and five product blocks', () => {
-  assert.match(landingSource, /Vos outils restent\.<br \/>Vos données travaillent enfin ensemble\./)
-  assert.match(landingSource, /Syncoria structure les données dispersées/)
+  assert.match(landingSource, /Pilotez le parc IA<br \/>de vos entreprises clientes\./)
+  assert.match(landingSource, /Syncoria aide l’opérateur/)
   assert.match(landingSource, /Découvrir Syncoria/)
-  assert.match(landingSource, /Découvrez ce que Syncoria peut simplifier dans votre entreprise\./)
-  for (const label of ['Produit', 'Fonctionnement', 'Clients', 'Données', 'Synchronisation', 'Processus', 'Intégration']) {
+  assert.match(landingSource, /Un seul cockpit pour accompagner plusieurs entreprises\./)
+  for (const label of ['Produit', 'Fonctionnement', 'Clients', 'Gouvernance', 'Alertes', 'Actions', 'Providers IA']) {
     assert.match(landingSource, new RegExp(label))
   }
 })

@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import './App.css'
+import { OperatorCockpit } from './controlPlane/OperatorCockpit'
 import {
   createAdminSession,
   deleteAdminSession,
@@ -317,7 +318,7 @@ function LoginModeSelector({
         onClick={() => onSelectMode('admin')}
         type="button"
       >
-        Administration Syncoria
+        Opérateur Syncoria
       </button>
     </div>
   )
@@ -538,12 +539,13 @@ function ClientLoginPage({
 }
 
 interface DashboardProps {
+  onReturnCockpit: () => void
   onLogout: () => Promise<boolean>
   onSessionExpired: () => void
   onShowPublic: () => void
 }
 
-function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps) {
+function Dashboard({ onLogout, onSessionExpired, onShowPublic, onReturnCockpit }: DashboardProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
   const [tenantSidebarTarget, setTenantSidebarTarget] = useState<HTMLDivElement | null>(null)
@@ -654,6 +656,7 @@ function Dashboard({ onLogout, onSessionExpired, onShowPublic }: DashboardProps)
             >
               {isLoggingOut ? 'Déconnexion…' : 'Se déconnecter'}
             </button>
+            <button className="secondary-button" onClick={onReturnCockpit} type="button">← Cockpit V2</button>
             {logoutError && (
               <p aria-live="polite" className="logout-error" role="alert">
                 Déconnexion impossible. Réessayez.
@@ -771,7 +774,8 @@ function App() {
   const [sessionState, setSessionState] = useState<ApplicationSessionState>({
     status: 'loading',
   })
-  const [loginMode, setLoginMode] = useState<LoginMode>('client')
+  const [loginMode, setLoginMode] = useState<LoginMode>('admin')
+  const [showLegacy, setShowLegacy] = useState(false)
   const [isLoginOpen, setIsLoginOpen] = useState(false)
   const [isPublicPreviewOpen, setIsPublicPreviewOpen] = useState(false)
   const [isInitialSessionCheck, setIsInitialSessionCheck] = useState(true)
@@ -935,7 +939,7 @@ function App() {
     return (
       <>
         <LandingPage onLogin={() => {
-          setLoginMode(selectLoginMode('client'))
+          setLoginMode(selectLoginMode('admin'))
           setIsLoginOpen(true)
         }} />
         {isLoginOpen && (
@@ -977,7 +981,7 @@ function App() {
           Revenir à l’espace connecté
         </button>
         <LandingPage onLogin={() => {
-          setLoginMode(selectLoginMode('client'))
+          setLoginMode(selectLoginMode('admin'))
           setIsLoginOpen(true)
         }} />
         {isLoginOpen && (
@@ -1042,8 +1046,17 @@ function App() {
     return renderPublicShell()
   }
 
+  if (!showLegacy) return <OperatorCockpit
+    apiBaseUrl={apiBaseUrl}
+    onSessionExpired={handleSessionExpired}
+    onLegacy={() => setShowLegacy(true)}
+    onLogout={handleLogout}
+    onShowPublic={() => setIsPublicPreviewOpen(true)}
+  />
+
   return (
     <Dashboard
+      onReturnCockpit={() => setShowLegacy(false)}
       onLogout={handleLogout}
       onSessionExpired={handleSessionExpired}
       onShowPublic={() => setIsPublicPreviewOpen(true)}
