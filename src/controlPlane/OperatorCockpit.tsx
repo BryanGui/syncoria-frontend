@@ -275,6 +275,8 @@ export function OperatorCockpit({
             )}
             {view === 'clients' && selected && (
               <TenantControlPlaneSheet
+                apiBaseUrl={apiBaseUrl}
+                onSessionExpired={onSessionExpired}
                 selected={selected}
                 mode={mode}
                 visibleActions={visibleActions}

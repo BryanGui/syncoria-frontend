@@ -96,3 +96,51 @@ test("mobile fleet remains usable without horizontal overflow", async ({
     fullPage: true,
   });
 });
+
+const estateTenantId = '11111111-1111-4111-8111-111111111111'
+const estatePath = `**/admin/control-plane/tenants/${estateTenantId}/estate`
+function estateFixture() {
+  return {
+    tenant: { tenant_id: estateTenantId, slug: 'test', name: 'Tenant réel test', status: 'active' },
+    read_at: '2026-10-01T10:00:00Z',
+    identities: [], groups: [], identity_groups: [], memberships: [], licenses: [], automations: [], permissions: [], metrics: [], states: [],
+  }
+}
+test('real tenant snapshot keeps missing observations unknown', async ({ page }) => {
+  await connect(page)
+  await page.route(estatePath, route => route.fulfill({ json: estateFixture() }))
+  await page.getByRole('button', { name: /Tenant réel test/ }).click()
+  await expect(page.getByRole('heading', { name: 'Parc IA du tenant' })).toBeVisible()
+  await expect(page.getByText('Non connecté / non évalué — aucune observation disponible.').first()).toBeVisible()
+  await expect(page.getByText('synthetic/demo', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Chat opérateur non raccordé.', { exact: false })).toBeVisible()
+})
+test('real metrics and qualitative states display their provenance and freshness', async ({ page }) => {
+  await connect(page)
+  const payload = { ...estateFixture(),
+    metrics: [{ signal_id: '22222222-2222-4222-8222-222222222222', tenant_id: estateTenantId, provider: 'openai', kind: 'costs', value: 120, unit: 'EUR', provenance: 'provider', observed_at: '2026-09-30T10:00:00Z' }],
+    states: [{ signal_id: '33333333-3333-4333-8333-333333333333', tenant_id: estateTenantId, provider: 'openai', kind: 'service_health', state: 'degraded', provenance: 'syncoria', observed_at: '2026-09-30T10:00:00Z' }],
+  }
+  await page.route(estatePath, route => route.fulfill({ json: payload }))
+  await page.getByRole('button', { name: /Tenant réel test/ }).click()
+  await page.getByText('Mesures agrégées', { exact: true }).click()
+  await expect(page.getByText('openai · costs · 120 EUR', { exact: true })).toBeVisible()
+  await page.getByText('États qualitatifs', { exact: true }).click()
+  await expect(page.getByText('openai · service_health · degraded', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Provenance : provider/)).toBeVisible()
+  await expect(page.getByText(/Provenance : syncoria/)).toBeVisible()
+})
+test('fixture provenance in a real snapshot fails closed; demo makes no estate call', async ({ page }) => {
+  await connect(page)
+  let calls = 0
+  await page.route(estatePath, route => {
+    calls++
+    return route.fulfill({ json: { ...estateFixture(), states: [{ signal_id: '33333333-3333-4333-8333-333333333333', tenant_id: estateTenantId, provider: 'openai', kind: 'service_health', state: 'healthy', provenance: 'synthetic/demo', observed_at: '2026-09-30T10:00:00Z' }] } })
+  })
+  await page.getByRole('button', { name: /Tenant réel test/ }).click()
+  await expect(page.getByRole('heading', { name: 'Parc IA indisponible' })).toBeVisible()
+  await page.getByRole('button', { name: 'Démo synthétique' }).click()
+  await page.getByRole('button', { name: /Novalia Démo/ }).click()
+  await expect(page.getByRole('heading', { name: 'Novalia Démo', exact: true })).toBeVisible()
+  expect(calls).toBe(1)
+})
