@@ -7,6 +7,10 @@ Après authentification admin, Syncoria ouvre le cockpit opérateur multi-client
 
 ## Provenance
 
+`ControlPlaneProvenance` est commun à `OperatorAction` et `FleetTenant` et accepte `provider`, `syncoria`, `synthetic/demo`, comme le backend. Il décrit l'origine, sans accorder de droit ni prouver qu'un provider est connecté. Le registre conserve `syncoria` ; les fixtures conservent exclusivement `synthetic/demo`. Le mode de vue choisit toujours explicitement un dataset, sans les fusionner.
+
+Le backend sépare `ObservabilityMetric` (mesures numériques, par exemple coûts en EUR, utilisateurs, usage en %) et `ObservabilityState` (états qualitatifs, par exemple santé dégradée ou permission nécessitant une approbation). `TenantControlPlaneSnapshot` contient `metrics` et `states` séparément et contrôle leur tenant. Aucun adapter ni transport de ces observations n'est ajouté au frontend dans ce ticket.
+
 Le **registre réel** est la vue par défaut : session admin et `GET /admin/tenants` existants. Identité et statut des tenants sont réels. Santé IA non évaluée ; coûts, adoption, alertes, agents et historique non connectés. Une panne registre affiche une erreur/retry, jamais un fallback démo. Les tenants archivés restent identifiés et comptés.
 
 La **démo synthétique**, choisie explicitement, utilise uniquement `src/controlPlane/fixtures.ts` : 50 entreprises fictives, 3 critiques, 7 à surveiller, 5 avec revue/formation due, 35 OK ; 15 actions en lecture seule. Tous les IDs commencent par `demo:`, provenance `synthetic/demo`, scénario daté du 1 octobre 2026. Aucun appel provider, aucune écriture, aucun utilisateur ou tenant réel créé. Les compteurs dérivent du même dataset que les fiches et actions. Les populations de licences peuvent se recouvrir ; ne pas les additionner comme des utilisateurs distincts.

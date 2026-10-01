@@ -63,3 +63,23 @@ test("priority order is stable without mutating source", () => {
     ids,
   );
 });
+
+test("tenant and action types accept all backend provenances and reject unknown ones", async () => {
+  const ts = await import("typescript");
+  const { fileURLToPath } = await import("node:url");
+  const program = ts.createProgram({
+    rootNames: [fileURLToPath(new URL("./controlPlane.provenance.ts", import.meta.url))],
+    options: {
+      noEmit: true,
+      strict: true,
+      skipLibCheck: true,
+      target: ts.ScriptTarget.ES2023,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      allowImportingTsExtensions: true,
+      types: [],
+    },
+  });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.equal(diagnostics.length, 0, diagnostics.map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n")).join("\n"));
+});
