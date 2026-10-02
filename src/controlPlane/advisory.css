@@ -1,0 +1,111 @@
+.advisory-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.advisory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.advisory-grid > .cp-panel {
+  min-width: 0;
+}
+.advisory-card {
+  border-top: 1px solid var(--color-border);
+  padding: 16px 0;
+}
+.advisory-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.advisory-card-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.advisory-facts {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.advisory-profile-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.advisory-facts dt {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.advisory-facts dd {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.advisory-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.advisory-form-grid > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.advisory-form-grid input:not([type='checkbox']),
+.advisory-form-grid select,
+.advisory-form-grid textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.advisory-form-grid textarea {
+  resize: vertical;
+}
+.advisory-wide {
+  grid-column: 1 / -1;
+}
+.advisory-editor fieldset {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.advisory-form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.advisory-launch {
+  display: inline-block;
+  padding: 10px 0;
+}
+.advisory-timeline {
+  list-style: none;
+  padding: 0;
+}
+.advisory-timeline li {
+  display: flex;
+  gap: 20px;
+  border-top: 1px solid var(--color-border);
+  padding: 16px 0;
+}
+.advisory-timeline time {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+@media (max-width: 760px) {
+  .advisory-grid,
+  .advisory-form-grid,
+  .advisory-profile-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .advisory-timeline li {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .advisory-collection .cp-panel-heading {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}

@@ -368,6 +368,8 @@ test('keeps the editable title and its 120-byte validation', async ({ page }) =>
   await openAudit(page)
   const launch = launcher(page)
   const title = launch.getByLabel('Titre de l’audit')
+  // Provider loading initializes the controlled title asynchronously.
+  await expect(title).toHaveValue(/Audit Notion — \d{2}\/\d{2}\/\d{4}/)
   await title.fill('Audit recrutement synthétique')
   await expect(title).toHaveValue('Audit recrutement synthétique')
   await title.fill('')
