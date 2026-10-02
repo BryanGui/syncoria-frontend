@@ -115,7 +115,11 @@ L’API backend compose conseil/estate/intégrations ; le frontend envoie seulem
 le texte utilisateur et les IDs de route. Texte assistant final validé, sans
 reasoning, arguments/output tool ni faux streaming modèle. Les tools affichent
 nom/label/statut allowlistés ; le texte est rendu comme texte, jamais comme HTML.
-Contexte discret et indication PUBLIC/PRIVATE. Les APIs advisory/estate et les
+Contexte discret et chat tenant privé dès l’ouverture ; confirmation PRIVATE
+avant injection du contexte. Tout événement PUBLIC est refusé. Web direct
+désactivé ; Python/workspace/MCP restent disponibles. Public Research Tool
+isolé, sans contexte client et avec approbation explicite de la requête par
+l’opérateur : différé, aucun bouton ni recherche automatique dans cette V1. Les APIs advisory/estate et les
 parcours legacy restent accessibles. Migration backend 043 et broker avec mode
 chat requis avant activation opérationnelle ; aucune configuration privée côté
 frontend. Rétention : archive manuelle, pas de suppression automatique.

@@ -31,6 +31,7 @@ function message(role = 'assistant', content = 'Conseil visible', tenant = a) {
 }
 async function connect(page: Page) {
   const state = {
+    publicPrivacy: false,
     foreign: false,
     error: false,
     expired: false,
@@ -111,7 +112,10 @@ async function connect(page: Page) {
             label: 'Exécution sandbox',
             status: 'completed',
           },
-          { type: 'privacy_state_changed', state: 'private' },
+          {
+            type: 'privacy_state_changed',
+            state: state.publicPrivacy ? 'public' : 'private',
+          },
           ...(!state.error && !state.cancel
             ? [
                 {
@@ -146,7 +150,9 @@ async function connect(page: Page) {
     return route.fulfill({ status: 404, json: {} })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Chat opérateur', exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Chat opérateur', exact: true })
+    .click()
   await page.getByLabel('Client actif').selectOption(a)
   return state
 }
@@ -158,6 +164,10 @@ test('new thread, send, confirmed tools, final, resume and archive', async ({
   await expect(
     page.getByText('Contexte tenant fixé', { exact: false }),
   ).toBeVisible()
+  await expect(
+    page.getByText('Chat tenant privé — accès Web public désactivé'),
+  ).toBeVisible()
+  await expect(page.getByText('Recherche publique disponible')).toHaveCount(0)
   await page.getByLabel('Message opérateur').fill('Prépare le rendez-vous')
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
   await expect(page.getByText('Conseil visible', { exact: true })).toBeVisible()
@@ -167,11 +177,18 @@ test('new thread, send, confirmed tools, final, resume and archive', async ({
   ).toBeVisible()
   await expect(page.getByText(/2 intégrations disponibles/)).toBeVisible()
   await mkdir('docs/screenshots/operator-chat', { recursive: true })
-  await page.screenshot({ path: 'docs/screenshots/operator-chat/chat-desktop.png', fullPage: true })
+  await page.screenshot({
+    path: 'docs/screenshots/operator-chat/chat-desktop.png',
+    fullPage: true,
+  })
   await page.getByLabel('Conversations récentes').selectOption(thread)
   await expect(
     page.getByText('Historique visible', { exact: true }),
   ).toBeVisible()
+  await expect(
+    page.getByText('Chat tenant privé — accès Web public désactivé'),
+  ).toBeVisible()
+  await expect(page.getByText('Recherche publique disponible')).toHaveCount(0)
   await page.getByRole('button', { name: 'Archiver', exact: true }).click()
   await expect(page.getByLabel('Message opérateur')).toBeDisabled()
   expect(state.archive).toBe(1)
@@ -224,11 +241,19 @@ test('late stream after tenant switch is discarded', async ({ page }) => {
 })
 test('expired operator session returns to login', async ({ page }) => {
   const state = await connect(page)
-  await expect(page.getByLabel('Conversations récentes').locator('option')).toHaveCount(2)
+  await expect(
+    page.getByLabel('Conversations récentes').locator('option'),
+  ).toHaveCount(2)
   state.expired = true
   await page.getByRole('button', { name: 'Nouveau chat' }).click()
-  await expect(page.getByRole('button', { name: 'Nouveau chat' })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: 'Pilotez le parc IA de vos entreprises clientes.' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Nouveau chat' })).toHaveCount(
+    0,
+  )
+  await expect(
+    page.getByRole('heading', {
+      name: 'Pilotez le parc IA de vos entreprises clientes.',
+    }),
+  ).toBeVisible()
 })
 test('mobile and demo never launch runtime', async ({ page }) => {
   const state = await connect(page)
@@ -236,7 +261,10 @@ test('mobile and demo never launch runtime', async ({ page }) => {
   await page.getByRole('button', { name: 'Nouveau chat' }).click()
   await expect(page.getByLabel('Message opérateur')).toBeEnabled()
   await mkdir('docs/screenshots/operator-chat', { recursive: true })
-  await page.screenshot({ path: 'docs/screenshots/operator-chat/chat-390.png', fullPage: true })
+  await page.screenshot({
+    path: 'docs/screenshots/operator-chat/chat-390.png',
+    fullPage: true,
+  })
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -247,4 +275,19 @@ test('mobile and demo never launch runtime', async ({ page }) => {
     page.getByText('Runtime réel indisponible sur les fixtures'),
   ).toBeVisible()
   expect(state.sends).toBe(0)
+})
+
+test('public privacy event fails closed in tenant chat', async ({ page }) => {
+  const state = await connect(page)
+  state.publicPrivacy = true
+  await page.getByRole('button', { name: 'Nouveau chat' }).click()
+  await page.getByLabel('Message opérateur').fill('Message client privé')
+  await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
+  await expect(page.getByText('Conseil visible', { exact: true })).toHaveCount(
+    0,
+  )
+  await expect(page.getByText('Recherche publique disponible')).toHaveCount(0)
+  await expect(
+    page.getByText('Chat tenant privé — accès Web public désactivé'),
+  ).toBeVisible()
 })

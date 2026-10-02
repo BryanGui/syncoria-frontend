@@ -21,3 +21,21 @@ test('SSE supports split UTF-8 and requires terminal event',async()=>{
 test('demo never sends a runtime request',async()=>{
  await assert.rejects(chatRequest('https://example.test','demo:1','','POST'))
 })
+
+test('tenant chat accepts only confirmed private privacy events', () => {
+  assert.throws(() =>
+    parseChatEvent(
+      { type: 'privacy_state_changed', state: 'public' },
+      tenant,
+      thread,
+    ),
+  )
+  assert.equal(
+    parseChatEvent(
+      { type: 'privacy_state_changed', state: 'private' },
+      tenant,
+      thread,
+    ).state,
+    'private',
+  )
+})

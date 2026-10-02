@@ -25,7 +25,9 @@ export function RealOperatorChat({
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [activity, setActivity] = useState('')
-  const [privacy, setPrivacy] = useState('')
+  const [privacy, setPrivacy] = useState(
+    'Chat tenant privé — accès Web public désactivé',
+  )
   const [context, setContext] = useState(
     'Contexte reconstruit à chaque envoi : dossier conseil et parc IA.',
   )
@@ -98,7 +100,7 @@ export function RealOperatorChat({
       setMessages([])
       setBefore(null)
       setActivity('')
-      setPrivacy('')
+      setPrivacy('Chat tenant privé — accès Web public désactivé')
     })
   const resume = (threadId: string, cursor?: string) =>
     run(async (signal) => {
@@ -108,7 +110,7 @@ export function RealOperatorChat({
         setBefore(null)
         setContent('')
         setActivity('')
-        setPrivacy('')
+        setPrivacy('Chat tenant privé — accès Web public désactivé')
       }
       if (!threadId) return
       const snapshot: unknown = await (
@@ -157,7 +159,7 @@ export function RealOperatorChat({
       if (!current || !content.trim()) return
       const text = content
       setActivity('Analyse en cours…')
-      setPrivacy('')
+      setPrivacy('Chat tenant privé — accès Web public désactivé')
       const response = await chatRequest(
         apiBaseUrl,
         tenantId,
@@ -183,11 +185,7 @@ export function RealOperatorChat({
             `${event.label} · ${event.status === 'running' ? 'en cours' : event.status === 'completed' ? 'terminé' : 'échec'}`,
           )
         if (event.type === 'privacy_state_changed')
-          setPrivacy(
-            event.state === 'public'
-              ? 'Recherche publique disponible'
-              : 'Session privée — accès Web public désactivé',
-          )
+          setPrivacy('Session privée — accès Web public désactivé')
         if (event.type === 'completed') setActivity('Terminé')
         if (event.type === 'cancelled') setActivity('Réponse interrompue')
         if (event.type === 'error') {
@@ -227,7 +225,7 @@ export function RealOperatorChat({
         setMessages([])
         setBefore(null)
         setActivity('')
-        setPrivacy('')
+        setPrivacy('Chat tenant privé — accès Web public désactivé')
       }
     })
   return (

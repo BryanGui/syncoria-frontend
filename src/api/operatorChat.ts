@@ -31,7 +31,7 @@ export type ChatEvent =
       partial: boolean
     }
   | { type: 'runtime_state'; status: 'running' }
-  | { type: 'privacy_state_changed'; state: 'public' | 'private' }
+  | { type: 'privacy_state_changed'; state: 'private' }
   | {
       type: 'tool_started' | 'tool_completed'
       tool: string
@@ -164,8 +164,7 @@ export function parseChatEvent(
       break
     case 'privacy_state_changed':
       exact(row, ['type', 'state'])
-      if (!['public', 'private'].includes(String(row.state)))
-        throw new Error('invalid_response')
+      if (row.state !== 'private') throw new Error('invalid_response')
       break
     case 'tool_started':
     case 'tool_completed': {
