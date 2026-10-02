@@ -1,5 +1,10 @@
+import { RealOperatorChat } from './RealOperatorChat'
 import type { FleetTenant, OperatorAction } from './model'
 interface Props {
+  apiBaseUrl: string | null
+  onSessionExpired: () => void
+  mode: 'live' | 'demo'
+
   selectedId: string | null
   setSelectedId: (id: string | null) => void
   tenants: FleetTenant[]
@@ -7,6 +12,9 @@ interface Props {
   visibleActions: OperatorAction[]
 }
 export function OperatorChat({
+  apiBaseUrl,
+  onSessionExpired,
+  mode,
   selectedId,
   setSelectedId,
   tenants,
@@ -38,32 +46,47 @@ export function OperatorChat({
           </strong>
           <p>{selected.reason}</p>
           <p>
-            {visibleActions.length} actions dans ce contexte. Aucun autre tenant
-            inclus.
+            Contexte tenant fixé · {visibleActions.length} actions visibles.
           </p>
         </div>
       )}
-      <div className="cp-chat-unavailable">
-        <span aria-hidden="true">◇</span>
-        <h3>Runtime non raccordé au cockpit</h3>
-        <p>
-          La connexion sécurisée au runtime existant nécessite un ticket dédié.
-          Aucun message n’est envoyé et aucune action technique n’est exécutée.
-        </p>
-      </div>
-      <label>
-        Message opérateur
-        <textarea
-          disabled
-          placeholder={
-            selected
-              ? `Pourquoi ${selected.name} nécessite une intervention ?`
-              : 'Choisissez un client pour définir le contexte.'
-          }
-          rows={3}
+      {mode === 'live' && selected && selected.lifecycle === 'active' ? (
+        <RealOperatorChat
+          key={`${apiBaseUrl}:${selected.id}`}
+          tenantId={selected.id}
+          apiBaseUrl={apiBaseUrl}
+          onSessionExpired={onSessionExpired}
         />
-      </label>
-      <button disabled>Envoi indisponible</button>
+      ) : (
+        <>
+          <div className="cp-chat-unavailable">
+            <span aria-hidden="true">◇</span>
+            <h3>
+              {mode === 'demo'
+                ? 'Runtime réel indisponible sur les fixtures'
+                : 'Sélectionnez un client actif'}
+            </h3>
+            <p>
+              La connexion sécurisée au runtime existant nécessite un ticket
+              dédié. Aucun message n’est envoyé et aucune action technique n’est
+              exécutée.
+            </p>
+          </div>
+          <label>
+            Message opérateur
+            <textarea
+              disabled
+              placeholder={
+                selected
+                  ? `Pourquoi ${selected.name} nécessite une intervention ?`
+                  : 'Choisissez un client pour définir le contexte.'
+              }
+              rows={3}
+            />
+          </label>
+          <button disabled>Envoi indisponible</button>
+        </>
+      )}
       <details>
         <summary>Contrat de raccordement</summary>
         <p>

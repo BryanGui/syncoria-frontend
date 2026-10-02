@@ -102,3 +102,20 @@ réponses tardives, launcher actif/sans URL/révoqué, absence de secret dans le
 desktop/mobile et accès estate/legacy). Captures : `docs/screenshots/advisory/`.
 La migration backend 042 devra précéder le frontend lors d’un futur déploiement
 explicitement autorisé ; aucun déploiement VPS n’est effectué pour ce ticket.
+
+## Chat Operator réel (#180)
+
+Les tenants réels actifs disposent de nouveau chat, conversations récentes,
+reprise, historique paginé, envoi SSE, activité tools confirmée, stop et archive.
+Le tenant est affiché et fixé ; changer tenant/source/origine API démonte le chat
+et annule les requêtes en vol. Réponses tardives et scopes étrangers sont refusés.
+La démo garde un placeholder explicite et n’appelle jamais le runtime.
+
+L’API backend compose conseil/estate/intégrations ; le frontend envoie seulement
+le texte utilisateur et les IDs de route. Texte assistant final validé, sans
+reasoning, arguments/output tool ni faux streaming modèle. Les tools affichent
+nom/label/statut allowlistés ; le texte est rendu comme texte, jamais comme HTML.
+Contexte discret et indication PUBLIC/PRIVATE. Les APIs advisory/estate et les
+parcours legacy restent accessibles. Migration backend 043 et broker avec mode
+chat requis avant activation opérationnelle ; aucune configuration privée côté
+frontend. Rétention : archive manuelle, pas de suppression automatique.

@@ -338,6 +338,9 @@ export function OperatorCockpit({
             )}
             {view === 'chat' && (
               <OperatorChat
+                apiBaseUrl={apiBaseUrl}
+                onSessionExpired={onSessionExpired}
+                mode={mode}
                 selectedId={selectedId}
                 setSelectedId={setSelectedId}
                 tenants={tenants}

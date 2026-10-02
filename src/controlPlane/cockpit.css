@@ -652,3 +652,8 @@
     margin-top: 10px;
   }
 }
+
+.cp-chat-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-block: var(--space-3); }
+.cp-chat-messages article { padding-block: var(--space-3); border-bottom: 1px solid var(--color-border); }
+.cp-chat-messages p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cp-real-chat { min-width: 0; }
