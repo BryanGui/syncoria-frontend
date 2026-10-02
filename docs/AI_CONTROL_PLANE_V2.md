@@ -40,3 +40,23 @@ Captures générées par Playwright avec API mockée, pas de données production
 - [Mobile](screenshots/control-plane/mobile.png)
 
 Aucun déploiement ni changement Nginx/Docker/Caddy. La PR reste non mergée. Les builds/captures locaux permettent la revue sans remplacer la version servie sur le VPS.
+
+## Snapshot réel du parc IA (#176)
+
+La fiche d'un tenant actif charge
+`GET /admin/control-plane/tenants/{tenant_id}/estate` avec la session admin.
+Le contrat conserve les identités canoniques distinctes des comptes fournisseur,
+les groupes et liens, licences, automatisations, permissions observées,
+`ObservabilityMetric` et `ObservabilityState`. Aucun adapter réel n'est connecté.
+
+La fiche affiche provenance et `observed_at` pour chaque observation. `read_at`
+est la date de lecture du registre, pas une mesure de fraîcheur fournisseur.
+Les listes vides restent « Non connecté / non évalué » ; une erreur reste
+« Indisponible » sans fixture de secours. Les données `provider` et `syncoria`
+sont admises. Un snapshot réel contenant `synthetic/demo`, un scope étranger
+ou des champs imprévus est refusé dans son intégralité : aucun mélange silencieux.
+La démo existante conserve ses fixtures marquées et ne sollicite pas cette API.
+
+La navigation V2, le registre réel par défaut, le chat explicitement non raccordé
+et les outils legacy restent inchangés. Les providers futurs alimenteront la
+persistance backend ; la fiche ne calcule ni ROI, alertes ou santé à partir du vide.
