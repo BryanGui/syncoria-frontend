@@ -18,7 +18,7 @@
 .cp-shell textarea {
   font: inherit;
 }
-.cp-shell button {
+.cp-shell button:where(:not(.ui-button)) {
   cursor: pointer;
   border: 1px solid var(--cp-line);
   border-radius: 7px;
@@ -26,17 +26,17 @@
   background: white;
   color: var(--cp-ink);
 }
-.cp-shell button:hover {
+.cp-shell button:where(:not(.ui-button)):hover {
   background: #eef2f8;
 }
-.cp-shell button:focus-visible,
+.cp-shell button:where(:not(.ui-button)):focus-visible,
 .cp-shell a:focus-visible,
 .cp-shell input:focus-visible,
 .cp-shell select:focus-visible {
   outline: 3px solid #819ae0;
   outline-offset: 3px;
 }
-.cp-shell button:disabled {
+.cp-shell button:where(:not(.ui-button)):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -379,9 +379,9 @@
   font-size: 12px;
   color: var(--cp-muted);
 }
-.cp-shell input,
-.cp-shell select,
-.cp-shell textarea {
+.cp-shell input:where(:not(.ui-input)),
+.cp-shell select:where(:not(.ui-input)),
+.cp-shell textarea:where(:not(.ui-input)) {
   border: 1px solid var(--cp-line);
   border-radius: 7px;
   padding: 10px;

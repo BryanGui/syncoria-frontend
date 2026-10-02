@@ -1,4 +1,4 @@
-import { RealTenantEstate } from './RealTenantEstate'
+import { RealTenantAdvisory } from './RealTenantAdvisory'
 import { formatCostEur } from './model'
 import type { FleetTenant, OperatorAction } from './model'
 import { Actions, Status } from './presentation'
@@ -32,7 +32,7 @@ export function TenantControlPlaneSheet({
         <button onClick={onChat}>Explorer avec le chat →</button>
       </div>
       {mode === 'live' ? (
-        <RealTenantEstate
+        <RealTenantAdvisory
           key={selected.id}
           tenantId={selected.id}
           apiBaseUrl={apiBaseUrl}

@@ -163,7 +163,11 @@ export function OperatorCockpit({
           <div>
             <p className="cp-eyebrow">PILOTER · COMPRENDRE · INTERVENIR</p>
             <h1>{title}</h1>
-            <p>Le parc IA de vos entreprises clientes, dans un seul cockpit.</p>
+            <p>
+              {selected && view === 'clients' && mode === 'live'
+                ? 'Contexte, besoins, décisions et prochaines étapes de votre accompagnement IA.'
+                : 'Le parc IA de vos entreprises clientes, dans un seul cockpit.'}
+            </p>
           </div>
           <div className="cp-mode" role="group" aria-label="Source des données">
             <button
@@ -195,7 +199,9 @@ export function OperatorCockpit({
           <span>
             {mode === 'demo'
               ? `50 entreprises fictives · scénario au ${new Date(DEMO_OBSERVED_AT).toLocaleDateString('fr-FR')} · aucune donnée provider réelle, aucune action exécutée.`
-              : 'Identité et statut des tenants uniquement. Coûts, adoption, alertes et santé IA non évalués.'}
+              : selected && view === 'clients'
+                ? 'Dossier conseil renseigné par l’opérateur. Les signaux IA non collectés restent non évalués.'
+                : 'Identité et statut des tenants uniquement. Coûts, adoption, alertes et santé IA non évalués.'}
           </span>
         </div>
         {mode === 'live' && loading ? (

@@ -60,3 +60,45 @@ La démo existante conserve ses fixtures marquées et ne sollicite pas cette API
 La navigation V2, le registre réel par défaut, le chat explicitement non raccordé
 et les outils legacy restent inchangés. Les providers futurs alimenteront la
 persistance backend ; la fiche ne calcule ni ROI, alertes ou santé à partir du vide.
+
+## Dossier conseil client — #178
+
+Pour un client réel, la fiche s’ouvre sur « Vue conseil » : synthèse de l’entreprise,
+interlocuteurs actifs (référent IA en premier), besoins actifs, opportunités
+prioritaires déclarées, prochaines actions, dernières décisions et réalisations.
+Les aperçus sont limités à trois éléments par collection ; « Voir tout » ouvre la
+liste complète. Les onglets Opportunités, Réalisations, Suivi et Parc IA conservent
+le design du cockpit. Les contacts inactifs et objets clôturés restent accessibles
+dans les listes complètes. La démo et les parcours legacy sont conservés.
+
+L’API admin `/admin/advisory/tenants/{tenant_id}/dossier` est la source des données
+persistantes. `PUT /profile`, `POST /{collection}` et `PUT /{collection}/{record_id}`
+permettent l’édition par formulaires des contacts, besoins, opportunités, décisions,
+réalisations, actions et accès client. Les valeurs inconnues restent explicites,
+la priorité est choisie par l’opérateur ; aucun scoring ou ROI calculé. Aucune
+suppression destructive. Les PUT remplacent tous les champs éditables.
+
+La chronologie récente est produite par le backend à partir des objets courants,
+sans événement stocké séparément : besoins/opportunités créés, décision acceptée,
+début/livraison de réalisation et clôture d’action. Elle est limitée à 50 jalons
+et ne constitue pas un historique immuable des éditions.
+
+Le launcher est dans Parc IA : URL HTTPS validée côté backend, sans credentials,
+paramètres, fragment ou percent-encoding ; `Ouvrir` exige un accès actif et ouvre
+un onglet avec `noopener noreferrer` / `no-referrer`. Sans URL, en attente ou
+révoqué, aucun lien d’ouverture. Le hint indique un compte professionnel à
+sélectionner, sans login automatique. Aucun password, token ou cookie dans les
+contrats. Une réponse API avec champ privé ou URL invalide est refusée avant
+rendu. Le chat ne reçoit pas le hint : runtime toujours non raccordé.
+
+Les lectures et mutations en vol sont abortées au changement de tenant. Un
+ancien snapshot n’est jamais affiché sous le tenant suivant. Les erreurs API
+restent distinctes d’un dossier vide ; aucune fixture en fallback. Une session
+expirée rend la main à l’authentification, y compris pendant une édition.
+
+Tests : contrats/transport Node et Playwright (vide/complet, création/édition de
+chaque ressource, liens/priorité manuels, erreurs/session, changement de tenant,
+réponses tardives, launcher actif/sans URL/révoqué, absence de secret dans le DOM,
+desktop/mobile et accès estate/legacy). Captures : `docs/screenshots/advisory/`.
+La migration backend 042 devra précéder le frontend lors d’un futur déploiement
+explicitement autorisé ; aucun déploiement VPS n’est effectué pour ce ticket.
