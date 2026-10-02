@@ -60,7 +60,7 @@ test("real registry, explicit demo, tenant context and disabled runtime", async 
   await page.getByRole("button", { name: "Explorer avec le chat" }).click();
   await expect(page.getByRole("combobox")).toHaveValue("demo:1");
   await expect(
-    page.getByText("1 actions dans ce contexte. Aucun autre tenant inclus."),
+    page.getByText("Contexte tenant fixé · 1 actions visibles."),
   ).toBeVisible();
   await expect(page.getByRole("textbox")).toBeDisabled();
   await expect(
@@ -114,7 +114,7 @@ test('real tenant snapshot keeps missing observations unknown', async ({ page })
   await expect(page.getByRole('heading', { name: 'Parc IA du tenant' })).toBeVisible()
   await expect(page.getByText('Non connecté / non évalué — aucune observation disponible.').first()).toBeVisible()
   await expect(page.getByText('synthetic/demo', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('Chat opérateur non raccordé.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Chat opérateur accessible depuis le cockpit.', { exact: false })).toBeVisible()
 })
 test('real metrics and qualitative states display their provenance and freshness', async ({ page }) => {
   await connect(page)

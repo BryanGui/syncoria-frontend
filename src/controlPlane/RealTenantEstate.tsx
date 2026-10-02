@@ -129,7 +129,7 @@ export function RealTenantEstate({
       ))}
       <p>
         Les permissions sont des observations ; elles n’autorisent aucune
-        action. Chat opérateur non raccordé.
+        action. Chat opérateur accessible depuis le cockpit.
       </p>
     </section>
   )
