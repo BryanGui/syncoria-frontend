@@ -39,3 +39,45 @@ test('tenant chat accepts only confirmed private privacy events', () => {
     'private',
   )
 })
+
+test('native assistant deltas are visible text only', () => {
+  assert.equal(parseChatEvent({ type: 'assistant_delta', text: 'Réponse progressive' }, tenant, thread).text, 'Réponse progressive')
+  assert.throws(() => parseChatEvent({ type: 'assistant_delta', text: 'Hello', reasoning: 'synthetic' }, tenant, thread))
+})
+
+test('conversation grouping orders recent discussions without mutating persistence', async () => {
+  const { conversationGroups } = await import('../src/api/operatorChat.ts')
+  const rows = [{ thread_id: 'old', updated_at: '2026-09-01T12:00:00Z' }, { thread_id: 'new', updated_at: '2026-10-04T10:00:00Z' }]
+  const groups = conversationGroups(rows, new Date('2026-10-04T12:00:00Z'))
+  assert.equal(groups[0].label, 'Aujourd’hui')
+  assert.equal(groups[0].threads[0].thread_id, 'new')
+  assert.equal(groups[1].label, 'Plus anciennes')
+  assert.equal(rows[0].thread_id, 'old')
+})
+
+test('unsupported capabilities and diagnostic secrets fail closed', async () => {
+  const { parseCapabilities, parseDiagnostics, parseMemoryResults } = await import('../src/api/operatorChat.ts')
+  assert.throws(() => parseCapabilities({ policy_version: 'v2', capabilities: [{ id: 'browser', label: 'Browser', supported: false, enabled: true, reason: null }] }))
+  assert.throws(() => parseDiagnostics([{ correlation_id: thread, snapshot: null, status: 'succeeded', duration_ms: 1, created_at: '2026-10-04T10:00:00Z', tools: [], credentials: 'synthetic' }]))
+  assert.throws(() => parseMemoryResults([{ thread_id: thread, title: null, archived: true, kind: 'resolution', content: 'synthetic', rank: 1, token: 'synthetic' }]))
+})
+
+test('attachment contract accepts only opaque IDs and unavailable ingestion', async () => {
+  const { parseAttachmentPolicy, parseAttachmentReference } = await import('../src/api/operatorChat.ts')
+  const policy = { available: false, reference: 'attachment_id', tenant_scoped: true, max_size_bytes: 10485760, allowed_media_types: ['text/plain', 'application/pdf'], lifetime: 'turn', host_paths_allowed: false }
+  assert.equal(parseAttachmentPolicy(policy).available, false)
+  assert.throws(() => parseAttachmentPolicy({ ...policy, available: true }))
+  assert.equal(parseAttachmentReference({ attachment_id: thread }).attachment_id, thread)
+  assert.throws(() => parseAttachmentReference({ attachment_id: '/etc/passwd' }))
+  assert.throws(() => parseAttachmentReference({ attachment_id: thread, path: '/etc/passwd' }))
+})
+
+test('diagnostic preserves the applied private configuration and rejects extra fields', async () => {
+  const { parseDiagnostics } = await import('../src/api/operatorChat.ts')
+  const snapshot = { model: 'model-test', reasoning_effort: 'medium', runtime_provider: 'codex', runtime_version: 'test', capabilities: { shell: true, workspace: true, python: true, multi_agent: false }, mcp: ['syncoria_chat_memory_search', 'syncoria_provider_request'], sandbox: 'workspace-write', privacy: 'private', network: 'private-egress-disabled', policy_version: 'operator-chat-v2', config_hash: 'a'.repeat(64), correlation_id: thread, timestamp: '2026-10-04T10:00:00Z' }
+  const row = { correlation_id: thread, snapshot, status: 'succeeded', duration_ms: 12, created_at: snapshot.timestamp, tools: [{ tool: 'shell', label: 'Exécution sandbox', status: 'completed' }] }
+  assert.equal(parseDiagnostics([row])[0].snapshot.config_hash, snapshot.config_hash)
+  assert.throws(() => parseDiagnostics([{ ...row, snapshot: { ...snapshot, token: 'synthetic' } }]))
+  assert.throws(() => parseDiagnostics([{ ...row, snapshot: { ...snapshot, privacy: 'public' } }]))
+  assert.throws(() => parseDiagnostics([{ ...row, tools: [{ ...row.tools[0], arguments: 'synthetic' }] }]))
+})

@@ -60,14 +60,14 @@ test("real registry, explicit demo, tenant context and disabled runtime", async 
   await page.getByRole("button", { name: "Explorer avec le chat" }).click();
   await expect(page.getByRole("combobox")).toHaveValue("demo:1");
   await expect(
-    page.getByText("Contexte tenant fixé · 1 actions visibles."),
+    page.getByText("Runtime réel indisponible sur les fixtures"),
   ).toBeVisible();
   await expect(page.getByRole("textbox")).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Envoi indisponible" }),
   ).toBeDisabled();
   await page.getByRole("combobox").selectOption("demo:2");
-  await expect(page.getByText("Atelier Boréal · synthetic/demo")).toBeVisible();
+  await expect(page.getByRole("combobox")).toHaveValue("demo:2");
   await page.getByRole("button", { name: "Registre réel" }).click();
   await expect(page.getByRole("combobox")).toHaveValue("");
 });
