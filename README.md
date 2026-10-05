@@ -2,7 +2,7 @@
 
 ## Cockpit opérateur V2
 
-La session admin ouvre le nouveau AI Control Plane multi-clients. [Guide et provenance](docs/AI_CONTROL_PLANE_V2.md). Les outils legacy restent disponibles depuis le cockpit.
+La session admin ouvre le nouveau AI Control Plane multi-clients. [Guide et provenance](docs/AI_CONTROL_PLANE_V2.md). Les outils legacy restent disponibles depuis le cockpit. [Prospection V1](docs/PROSPECTING.md) gère séparément les entreprises prospectées et leurs contacts commerciaux, via les API admin réelles.
 
 
 ## Configuration de l'API

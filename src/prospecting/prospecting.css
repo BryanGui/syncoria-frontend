@@ -1,0 +1,103 @@
+.prospecting {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.prospecting > button {
+  justify-self: start;
+}
+.prospecting .cp-provenance {
+  margin-bottom: 0;
+}
+.prospecting .cp-panel-heading {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.prospecting-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.prospecting-list > li {
+  border-top: 1px solid var(--cp-line);
+  padding: 12px 0;
+}
+.prospecting-company {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 10px;
+  text-align: left;
+  align-items: center;
+}
+.prospecting-company > span:last-child {
+  grid-column: 1 / -1;
+  color: var(--cp-muted);
+  font-size: 12px;
+}
+.prospecting-company strong,
+.prospecting-company span,
+.prospecting-contact {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.prospecting-status {
+  border-radius: 16px;
+  background: #f0f4f8;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.prospecting-contact {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+.prospecting-contact h3 {
+  margin: 0;
+}
+.prospecting-contact p {
+  margin: 6px 0;
+}
+.prospecting-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.prospecting-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.prospecting-form-grid > div {
+  min-width: 0;
+}
+.prospecting-wide {
+  grid-column: 1 / -1;
+}
+.prospecting-form input,
+.prospecting-form select,
+.prospecting-form textarea {
+  width: 100%;
+  min-width: 0;
+}
+.prospecting-form textarea {
+  resize: vertical;
+}
+.prospecting-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+@media (max-width: 760px) {
+  .prospecting-form-grid,
+  .prospecting-company {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prospecting-contact {
+    flex-wrap: wrap;
+  }
+}
