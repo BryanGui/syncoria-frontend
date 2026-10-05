@@ -39,6 +39,14 @@ async function connect(page: Page) {
     sends: 0,
     archive: 0,
     slow: false,
+    archived: false,
+    title: null as string | null,
+    capabilities: {
+      shell: true,
+      workspace: true,
+      python: true,
+      multi_agent: false,
+    },
   }
   await page.route('https://api.bryanlab.ovh/**', async (route) => {
     const path = new URL(route.request().url()).pathname,
@@ -56,6 +64,67 @@ async function connect(page: Page) {
     if (path.includes('/operator-chat/')) {
       if (state.expired) return route.fulfill({ status: 401, json: {} })
       const tenant = path.includes(b) ? b : a
+      if (
+        path.endsWith('/capabilities/reset') ||
+        path.endsWith('/capabilities')
+      ) {
+        if (method === 'PUT') {
+          const enabled = route.request().postDataJSON().enabled
+          expect(Object.keys(enabled).sort()).toEqual([
+            'multi_agent',
+            'python',
+            'shell',
+            'workspace',
+          ])
+          state.capabilities = enabled
+        }
+        if (path.endsWith('/reset'))
+          state.capabilities = {
+            shell: true,
+            workspace: true,
+            python: true,
+            multi_agent: false,
+          }
+        return route.fulfill({
+          json: {
+            policy_version: 'operator-chat-v2',
+            capabilities: [
+              ...Object.entries(state.capabilities).map(([id, enabled]) => ({
+                id,
+                label: id === 'shell' ? 'Shell' : id,
+                supported: true,
+                enabled,
+                reason: null,
+              })),
+              {
+                id: 'web_search',
+                label: 'Web Search',
+                supported: false,
+                enabled: false,
+                reason: 'Runtime privé',
+              },
+            ],
+          },
+        })
+      }
+      if (path.endsWith('/diagnostics')) return route.fulfill({ json: [] })
+      if (path.endsWith('/memory') && method === 'POST')
+        return route.fulfill({
+          json: { id: b, ...route.request().postDataJSON(), created_at: now },
+        })
+      if (path.endsWith('/memory/search'))
+        return route.fulfill({
+          json: [
+            {
+              thread_id: thread,
+              title: 'Incident synthétique',
+              archived: true,
+              kind: 'resolution',
+              content: 'Résolution synthétique',
+              rank: 1,
+            },
+          ],
+        })
       if (path.endsWith('/threads'))
         return route.fulfill({
           status: method === 'POST' ? 201 : 200,
@@ -63,7 +132,14 @@ async function connect(page: Page) {
             method === 'POST'
               ? threadRecord(tenant)
               : tenant === a
-                ? [threadRecord()]
+                ? new URL(route.request().url()).searchParams.get('status') ===
+                  'archived'
+                  ? state.archived
+                    ? [{ ...threadRecord(a, 'archived'), title: state.title }]
+                    : []
+                  : state.archived
+                    ? []
+                    : [{ ...threadRecord(), title: state.title }]
                 : [],
         })
       if (path.endsWith('/cancel')) {
@@ -72,10 +148,24 @@ async function connect(page: Page) {
       }
       if (path.endsWith('/archive')) {
         state.archive++
+        state.archived = true
         return route.fulfill({ json: threadRecord(tenant, 'archived') })
+      }
+      if (path.endsWith('/restore')) {
+        state.archived = false
+        return route.fulfill({
+          json: { ...threadRecord(tenant), title: state.title },
+        })
+      }
+      if (method === 'PATCH') {
+        state.title = route.request().postDataJSON().title
+        return route.fulfill({
+          json: { ...threadRecord(tenant), title: state.title },
+        })
       }
       if (path.endsWith('/messages')) {
         state.sends++
+        if (!state.title) state.title = 'Préparer le rendez-vous'
         if (state.slow) await new Promise((resolve) => setTimeout(resolve, 700))
         const terminal = state.cancel
           ? { type: 'cancelled' }
@@ -118,6 +208,12 @@ async function connect(page: Page) {
           },
           ...(!state.error && !state.cancel
             ? [
+                { type: 'assistant_delta', text: 'Conseil ' },
+                { type: 'assistant_delta', text: 'visible' },
+              ]
+            : []),
+          ...(!state.error && !state.cancel
+            ? [
                 {
                   type: 'assistant_message',
                   message: message('assistant', 'Conseil visible', tenant),
@@ -135,7 +231,10 @@ async function connect(page: Page) {
       }
       return route.fulfill({
         json: {
-          thread: threadRecord(tenant),
+          thread: {
+            ...threadRecord(tenant, state.archived ? 'archived' : 'active'),
+            title: state.title,
+          },
           messages: [
             message(
               'assistant',
@@ -160,34 +259,37 @@ test('new thread, send, confirmed tools, final, resume and archive', async ({
   page,
 }) => {
   const state = await connect(page)
-  await page.getByRole('button', { name: 'Nouveau chat' }).click()
-  await expect(
-    page.getByText('Contexte tenant fixé', { exact: false }),
-  ).toBeVisible()
+  await page.getByRole('button', { name: 'Nouveau chat', exact: true }).click()
+  await page.getByRole('button', { name: 'Diagnostic', exact: true }).click()
   await expect(
     page.getByText('Chat tenant privé — accès Web public désactivé'),
   ).toBeVisible()
+  await page.getByRole('button', { name: 'Fermer le panneau' }).click()
   await expect(page.getByText('Recherche publique disponible')).toHaveCount(0)
   await page.getByLabel('Message opérateur').fill('Prépare le rendez-vous')
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
   await expect(page.getByText('Conseil visible', { exact: true })).toBeVisible()
-  await expect(page.getByRole('status')).toHaveText('Terminé')
   await expect(
-    page.getByText('Session privée — accès Web public désactivé'),
+    page.getByRole('heading', { name: 'Préparer le rendez-vous' }),
   ).toBeVisible()
-  await expect(page.getByText(/2 intégrations disponibles/)).toBeVisible()
+  await expect(page.getByRole('status')).toHaveText('Terminé')
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.evaluate(() => window.scrollTo(0, 0))
   await mkdir('docs/screenshots/operator-chat', { recursive: true })
   await page.screenshot({
     path: 'docs/screenshots/operator-chat/chat-desktop.png',
-    fullPage: true,
+    fullPage: false,
   })
-  await page.getByLabel('Conversations récentes').selectOption(thread)
+  await page
+    .getByRole('navigation', { name: 'Conversations récentes' })
+    .getByRole('button')
+    .first()
+    .click()
   await expect(
     page.getByText('Historique visible', { exact: true }),
   ).toBeVisible()
-  await expect(
-    page.getByText('Chat tenant privé — accès Web public désactivé'),
-  ).toBeVisible()
+
   await expect(page.getByText('Recherche publique disponible')).toHaveCount(0)
   await page.getByRole('button', { name: 'Archiver', exact: true }).click()
   await expect(page.getByLabel('Message opérateur')).toBeDisabled()
@@ -198,7 +300,7 @@ test('runtime error and cancellation keep final responses absent', async ({
 }) => {
   const state = await connect(page)
   state.error = true
-  await page.getByRole('button', { name: 'Nouveau chat' }).click()
+  await page.getByRole('button', { name: 'Nouveau chat', exact: true }).click()
   await page.getByLabel('Message opérateur').fill('Hello')
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText(
@@ -219,17 +321,25 @@ test('foreign thread history fails closed and switching tenants clears chat', as
 }) => {
   const state = await connect(page)
   state.foreign = true
-  await page.getByLabel('Conversations récentes').selectOption(thread)
+  await page
+    .getByRole('navigation', { name: 'Conversations récentes' })
+    .getByRole('button')
+    .first()
+    .click()
   await expect(page.getByRole('alert')).toBeVisible()
   await expect(page.getByText('FOREIGN_SENTINEL')).toHaveCount(0)
   await page.getByLabel('Client actif').selectOption(b)
-  await expect(page.getByLabel('Conversations récentes')).toHaveValue('')
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Conversations récentes' })
+      .getByRole('button'),
+  ).toHaveCount(0)
   await expect(page.getByLabel('Message opérateur')).toBeDisabled()
 })
 test('late stream after tenant switch is discarded', async ({ page }) => {
   const state = await connect(page)
   state.slow = true
-  await page.getByRole('button', { name: 'Nouveau chat' }).click()
+  await page.getByRole('button', { name: 'Nouveau chat', exact: true }).click()
   await page.getByLabel('Message opérateur').fill('Hello')
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
   await page.getByLabel('Client actif').selectOption(b)
@@ -242,28 +352,43 @@ test('late stream after tenant switch is discarded', async ({ page }) => {
 test('expired operator session returns to login', async ({ page }) => {
   const state = await connect(page)
   await expect(
-    page.getByLabel('Conversations récentes').locator('option'),
-  ).toHaveCount(2)
+    page
+      .getByRole('navigation', { name: 'Conversations récentes' })
+      .getByRole('button'),
+  ).toHaveCount(1)
   state.expired = true
-  await page.getByRole('button', { name: 'Nouveau chat' }).click()
-  await expect(page.getByRole('button', { name: 'Nouveau chat' })).toHaveCount(
-    0,
-  )
+  await page.getByRole('button', { name: 'Nouveau chat', exact: true }).click()
+  await expect(
+    page.getByRole('button', { name: 'Nouveau chat', exact: true }),
+  ).toHaveCount(0)
   await expect(
     page.getByRole('heading', {
       name: 'Pilotez le parc IA de vos entreprises clientes.',
     }),
   ).toBeVisible()
 })
-test('mobile and demo never launch runtime', async ({ page }) => {
+test('mobile composer stays visible and demo never launches runtime', async ({
+  page,
+}) => {
   const state = await connect(page)
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Nouveau chat' }).click()
+  await page.getByRole('button', { name: 'Nouveau chat', exact: true }).click()
+  await expect(page.getByRole('navigation', { name: 'Conversations récentes' })).toBeHidden()
   await expect(page.getByLabel('Message opérateur')).toBeEnabled()
+  await page.getByLabel('Message opérateur').fill('Prépare le rendez-vous')
+  await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
+  await expect(page.getByText('Conseil visible', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Préparer le rendez-vous' }),
+  ).toBeVisible()
+  const answer = await page.getByText('Conseil visible', { exact: true }).boundingBox()
+  const composer = await page.getByLabel('Message opérateur').boundingBox()
+  expect(answer && composer && answer.y + answer.height < composer.y).toBe(true)
+  expect(composer && composer.y + composer.height <= 844).toBe(true)
   await mkdir('docs/screenshots/operator-chat', { recursive: true })
   await page.screenshot({
     path: 'docs/screenshots/operator-chat/chat-390.png',
-    fullPage: true,
+    fullPage: false,
   })
   expect(
     await page.evaluate(
@@ -274,20 +399,109 @@ test('mobile and demo never launch runtime', async ({ page }) => {
   await expect(
     page.getByText('Runtime réel indisponible sur les fixtures'),
   ).toBeVisible()
-  expect(state.sends).toBe(0)
+  expect(state.sends).toBe(1)
 })
 
 test('public privacy event fails closed in tenant chat', async ({ page }) => {
   const state = await connect(page)
   state.publicPrivacy = true
-  await page.getByRole('button', { name: 'Nouveau chat' }).click()
+  await page.getByRole('button', { name: 'Nouveau chat', exact: true }).click()
   await page.getByLabel('Message opérateur').fill('Message client privé')
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click()
   await expect(page.getByText('Conseil visible', { exact: true })).toHaveCount(
     0,
   )
   await expect(page.getByText('Recherche publique disponible')).toHaveCount(0)
+})
+
+test('titles, archive consultation, diagnostics, profile and memory workspace', async ({
+  page,
+}) => {
+  await connect(page)
+  await page
+    .getByRole('navigation', { name: 'Conversations récentes' })
+    .getByRole('button')
+    .first()
+    .click()
+  await page.getByRole('button', { name: 'Renommer', exact: true }).click()
+  await page.getByLabel('Titre de conversation').fill('Incident synthétique')
+  await page.getByRole('button', { name: 'Enregistrer le titre' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Incident synthétique' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Archiver', exact: true }).click()
+  await page.getByRole('button', { name: 'Archives', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Conversations archivées' })
+    .getByRole('button')
+    .click()
+  await expect(page.getByLabel('Message opérateur')).toBeDisabled()
+  await page.getByRole('button', { name: 'Diagnostic', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Diagnostic des tours' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Fermer le panneau' }).click()
+  await page
+    .getByRole('button', { name: 'Capacités Codex', exact: true })
+    .click()
+  await expect(page.getByLabel(/Web Search/)).toBeDisabled()
+  await page.getByLabel(/^Shell/).click()
+  await expect(page.getByLabel(/^workspace/)).not.toBeChecked()
+  await page
+    .getByRole('button', {
+      name: 'Restaurer les paramètres Syncoria par défaut',
+    })
+    .click()
+  await expect(page.getByLabel(/^Shell/)).toBeChecked()
+  await page.getByRole('button', { name: 'Fermer le panneau' }).click()
+  await page.getByRole('button', { name: 'Rechercher dans la mémoire' }).click()
+  await page.getByLabel('Type de mémoire').selectOption('resolution')
+  await page.getByLabel('Élément à mémoriser').fill('Résolution synthétique')
+  await page
+    .getByRole('button', { name: 'Enregistrer dans la mémoire' })
+    .click()
+  await expect(
+    page.getByText('Élément enregistré pour ce tenant.'),
+  ).toBeVisible()
+  await page.getByLabel('Rechercher un problème similaire').fill('incident')
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click()
+  await expect(page.getByText('Résolution synthétique')).toBeVisible()
+  await page.getByRole('button', { name: 'Consulter la conversation' }).click()
+  await expect(page.getByLabel('Message opérateur')).toBeDisabled()
+  await page.getByRole('button', { name: 'Restaurer', exact: true }).click()
+  await expect(page.getByLabel('Message opérateur')).toBeEnabled()
+})
+
+test('mobile panels cover the composer and keep settings and close usable', async ({
+  page,
+}) => {
+  await connect(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page
+    .getByRole('navigation', { name: 'Conversations récentes' })
+    .getByRole('button')
+    .first()
+    .click()
+  await expect(page.getByRole('navigation', { name: 'Conversations récentes' })).toBeHidden()
+  await page.getByRole('button', { name: 'Conversations et outils' }).click()
+  await page
+    .getByRole('button', { name: 'Capacités Codex', exact: true })
+    .click()
+  await page
+    .getByRole('button', {
+      name: 'Restaurer les paramètres Syncoria par défaut',
+    })
+    .click()
+  await expect(page.getByLabel(/^Shell/)).toBeChecked()
+  const panel = await page
+    .getByRole('region', { name: 'Capacités Codex' })
+    .boundingBox()
+  expect(panel && panel.y === 0 && panel.height === 844).toBe(true)
+  await page.getByRole('button', { name: 'Fermer le panneau' }).click()
+  await expect(page.getByLabel('Message opérateur')).toBeVisible()
+  await page.getByRole('button', { name: 'Diagnostic', exact: true }).click()
   await expect(
     page.getByText('Chat tenant privé — accès Web public désactivé'),
   ).toBeVisible()
+  await page.getByRole('button', { name: 'Fermer le panneau' }).click()
 })

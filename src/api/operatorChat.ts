@@ -23,6 +23,7 @@ export interface ChatMessage {
 export type ChatEvent =
   | { type: 'message_started'; message: ChatMessage; correlation_id: string }
   | { type: 'assistant_message'; message: ChatMessage }
+  | { type: 'assistant_delta'; text: string }
   | {
       type: 'context_ready'
       advisory: boolean
@@ -137,6 +138,11 @@ export function parseChatEvent(
         message: parseMessage(row.message, tenantId, threadId),
         correlation_id: row.correlation_id,
       }
+    case 'assistant_delta':
+      exact(row, ['type', 'text'])
+      if (typeof row.text !== 'string' || row.text.length > 16000)
+        throw new Error('invalid_response')
+      break
     case 'assistant_message':
       exact(row, ['type', 'message'])
       if (parseMessage(row.message, tenantId, threadId).role !== 'assistant')
@@ -173,6 +179,7 @@ export function parseChatEvent(
         shell: 'Exécution sandbox',
         workspace: 'Fichiers temporaires',
         syncoria_provider_request: 'Lecture provider via MCP',
+        syncoria_chat_memory_search: 'Recherche mémoire tenant',
       }
       if (
         typeof row.tool !== 'string' ||
@@ -214,7 +221,7 @@ export async function chatRequest(
   path: string,
   method = 'GET',
   signal?: AbortSignal,
-  content?: string,
+  content?: string | Record<string, unknown>,
 ): Promise<Response> {
   if (!apiBaseUrl || !uuid.test(tenantId)) throw new ChatRequestError(503)
   const response = await fetch(
@@ -224,7 +231,13 @@ export async function chatRequest(
       credentials: 'include',
       signal,
       headers: { 'Content-Type': 'application/json' },
-      ...(content !== undefined ? { body: JSON.stringify({ content }) } : {}),
+      ...(content !== undefined
+        ? {
+            body: JSON.stringify(
+              typeof content === 'string' ? { content } : content,
+            ),
+          }
+        : {}),
     },
   )
   if (!response.ok) throw new ChatRequestError(response.status)
@@ -273,4 +286,283 @@ export async function readChatStream(
     await reader.cancel()
     reader.releaseLock()
   }
+}
+
+/** Future uploads use opaque tenant-scoped IDs; host paths are never accepted. */
+export interface ChatAttachmentReference {
+  attachment_id: string
+}
+export interface ChatCapability {
+  id: string
+  label: string
+  supported: boolean
+  enabled: boolean
+  reason: string | null
+}
+export interface CapabilityProfile {
+  capabilities: ChatCapability[]
+  policy_version: string
+}
+export function parseCapabilities(value: unknown): CapabilityProfile {
+  const row = record(value)
+  exact(row, ['capabilities', 'policy_version'])
+  if (
+    !Array.isArray(row.capabilities) ||
+    row.capabilities.length > 32 ||
+    typeof row.policy_version !== 'string'
+  )
+    throw new Error('invalid_response')
+  const ids = new Set<string>()
+  const capabilities = row.capabilities.map((value) => {
+    const item = record(value)
+    exact(item, ['id', 'label', 'supported', 'enabled', 'reason'])
+    if (
+      typeof item.id !== 'string' ||
+      !/^[a-z_]{1,64}$/.test(item.id) ||
+      ids.has(item.id) ||
+      typeof item.label !== 'string' ||
+      item.label.length > 160 ||
+      typeof item.supported !== 'boolean' ||
+      typeof item.enabled !== 'boolean' ||
+      (!item.supported && item.enabled) ||
+      !(
+        item.reason === null ||
+        (typeof item.reason === 'string' && item.reason.length <= 400)
+      )
+    )
+      throw new Error('invalid_response')
+    ids.add(item.id)
+    return item as unknown as ChatCapability
+  })
+  return { capabilities, policy_version: row.policy_version }
+}
+export interface MemoryResult {
+  thread_id: string
+  title: string | null
+  archived: boolean
+  kind: string
+  content: string
+  rank: number
+}
+export function parseMemoryResults(value: unknown): MemoryResult[] {
+  if (!Array.isArray(value) || value.length > 100)
+    throw new Error('invalid_response')
+  return value.map((value) => {
+    const row = record(value)
+    exact(row, ['thread_id', 'title', 'archived', 'kind', 'content', 'rank'])
+    if (
+      !identifier(row.thread_id) ||
+      !(
+        row.title === null ||
+        (typeof row.title === 'string' && row.title.length <= 200)
+      ) ||
+      typeof row.archived !== 'boolean' ||
+      typeof row.kind !== 'string' ||
+      typeof row.content !== 'string' ||
+      row.content.length > 16000 ||
+      typeof row.rank !== 'number' ||
+      !Number.isFinite(row.rank)
+    )
+      throw new Error('invalid_response')
+    return row as unknown as MemoryResult
+  })
+}
+export async function operatorRequest(
+  apiBaseUrl: string | null,
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  if (!apiBaseUrl) throw new ChatRequestError(503)
+  const response = await fetch(`${apiBaseUrl}/admin/operator-chat${path}`, {
+    method,
+    credentials: 'include',
+    signal,
+    headers: { 'Content-Type': 'application/json' },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  })
+  if (!response.ok) throw new ChatRequestError(response.status)
+  return response.json()
+}
+export function conversationGroups(
+  threads: ChatThread[],
+  now = new Date(),
+): { label: string; threads: ChatThread[] }[] {
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime()
+  const groups = [
+    'Aujourd’hui',
+    'Hier',
+    '7 derniers jours',
+    'Plus anciennes',
+  ].map((label) => ({ label, threads: [] as ChatThread[] }))
+  for (const thread of [...threads].sort(
+    (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
+  )) {
+    const age = today - Date.parse(thread.updated_at)
+    groups[
+      age <= 0 ? 0 : age <= 86400000 ? 1 : age <= 6 * 86400000 ? 2 : 3
+    ].threads.push(thread)
+  }
+  return groups.filter((group) => group.threads.length)
+}
+export interface ChatSnapshot {
+  model: string
+  reasoning_effort: string
+  runtime_provider: 'codex'
+  runtime_version: string
+  capabilities: Record<string, boolean>
+  mcp: string[]
+  sandbox: 'workspace-write'
+  privacy: 'private'
+  network: 'private-egress-disabled'
+  policy_version: string
+  config_hash: string
+  correlation_id: string
+  timestamp: string
+}
+export interface ChatDiagnostic {
+  correlation_id: string
+  snapshot: ChatSnapshot | null
+  status: string
+  duration_ms: number | null
+  created_at: string
+  tools: { tool: string; label: string; status: string }[]
+}
+export function parseDiagnostics(value: unknown): ChatDiagnostic[] {
+  if (!Array.isArray(value) || value.length > 100)
+    throw new Error('invalid_response')
+  return value.map((value) => {
+    const row = record(value)
+    exact(row, [
+      'correlation_id',
+      'snapshot',
+      'status',
+      'duration_ms',
+      'created_at',
+      'tools',
+    ])
+    if (
+      !identifier(row.correlation_id) ||
+      !['running', 'succeeded', 'failed', 'cancelled'].includes(
+        String(row.status),
+      ) ||
+      !(
+        row.duration_ms === null ||
+        (typeof row.duration_ms === 'number' &&
+          row.duration_ms >= 0 &&
+          Number.isFinite(row.duration_ms))
+      ) ||
+      !date(row.created_at) ||
+      !Array.isArray(row.tools) ||
+      row.tools.length > 100
+    )
+      throw new Error('invalid_response')
+    for (const tool of row.tools) {
+      const item = record(tool)
+      exact(item, ['tool', 'label', 'status'])
+      parseChatEvent(
+        {
+          type: item.status === 'running' ? 'tool_started' : 'tool_completed',
+          ...item,
+        },
+        '11111111-1111-4111-8111-111111111111',
+        '11111111-1111-4111-8111-111111111111',
+      )
+    }
+    if (row.snapshot !== null) {
+      const snapshot = record(row.snapshot)
+      exact(snapshot, [
+        'model',
+        'reasoning_effort',
+        'runtime_provider',
+        'runtime_version',
+        'capabilities',
+        'mcp',
+        'sandbox',
+        'privacy',
+        'network',
+        'policy_version',
+        'config_hash',
+        'correlation_id',
+        'timestamp',
+      ])
+      const flags = record(snapshot.capabilities)
+      exact(flags, ['shell', 'workspace', 'python', 'multi_agent'])
+      if (
+        Object.values(flags).some((flag) => typeof flag !== 'boolean') ||
+        !Array.isArray(snapshot.mcp) ||
+        snapshot.mcp.length !== 2 || new Set(snapshot.mcp).size !== 2 ||
+        snapshot.mcp.some(
+          (tool) =>
+            ![
+              'syncoria_provider_request',
+              'syncoria_chat_memory_search',
+            ].includes(String(tool)),
+        ) ||
+        snapshot.runtime_provider !== 'codex' ||
+        snapshot.sandbox !== 'workspace-write' ||
+        snapshot.privacy !== 'private' ||
+        snapshot.network !== 'private-egress-disabled' ||
+        snapshot.correlation_id !== row.correlation_id ||
+        !date(snapshot.timestamp) ||
+        typeof snapshot.config_hash !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(snapshot.config_hash) ||
+        ['model', 'reasoning_effort', 'runtime_version', 'policy_version'].some(
+          (key) =>
+            typeof snapshot[key] !== 'string' ||
+            String(snapshot[key]).length > 200,
+        )
+      )
+        throw new Error('invalid_response')
+    }
+    return row as unknown as ChatDiagnostic
+  })
+}
+export interface ChatAttachmentPolicy {
+  available: false
+  reference: 'attachment_id'
+  tenant_scoped: true
+  max_size_bytes: number
+  allowed_media_types: string[]
+  lifetime: 'turn'
+  host_paths_allowed: false
+}
+export function parseAttachmentPolicy(value: unknown): ChatAttachmentPolicy {
+  const row = record(value)
+  exact(row, [
+    'available',
+    'reference',
+    'tenant_scoped',
+    'max_size_bytes',
+    'allowed_media_types',
+    'lifetime',
+    'host_paths_allowed',
+  ])
+  if (
+    row.available !== false ||
+    row.reference !== 'attachment_id' ||
+    row.tenant_scoped !== true ||
+    row.max_size_bytes !== 10485760 ||
+    !Array.isArray(row.allowed_media_types) ||
+    row.allowed_media_types.length !== 2 ||
+    !row.allowed_media_types.includes('text/plain') ||
+    !row.allowed_media_types.includes('application/pdf') ||
+    row.lifetime !== 'turn' ||
+    row.host_paths_allowed !== false
+  )
+    throw new Error('invalid_response')
+  return row as unknown as ChatAttachmentPolicy
+}
+export function parseAttachmentReference(
+  value: unknown,
+): ChatAttachmentReference {
+  const row = record(value)
+  exact(row, ['attachment_id'])
+  if (!identifier(row.attachment_id)) throw new Error('invalid_response')
+  return row as unknown as ChatAttachmentReference
 }

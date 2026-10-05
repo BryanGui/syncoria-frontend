@@ -19,12 +19,11 @@ export function OperatorChat({
   setSelectedId,
   tenants,
   selected,
-  visibleActions,
 }: Props) {
   return (
     <section className="cp-panel cp-chat">
       <p className="cp-eyebrow">INTERFACE CONVERSATIONNELLE OPÉRATEUR</p>
-      <h2>Comprendre avant d’agir</h2>
+      <h2>Chat opérateur</h2>
       <label>
         Client actif
         <select
@@ -39,17 +38,6 @@ export function OperatorChat({
           ))}
         </select>
       </label>
-      {selected && (
-        <div className="cp-chat-context">
-          <strong>
-            {selected.name} · {selected.provenance}
-          </strong>
-          <p>{selected.reason}</p>
-          <p>
-            Contexte tenant fixé · {visibleActions.length} actions visibles.
-          </p>
-        </div>
-      )}
       {mode === 'live' && selected && selected.lifecycle === 'active' ? (
         <RealOperatorChat
           key={`${apiBaseUrl}:${selected.id}`}
@@ -67,9 +55,9 @@ export function OperatorChat({
                 : 'Sélectionnez un client actif'}
             </h3>
             <p>
-              La connexion sécurisée au runtime existant nécessite un ticket
-              dédié. Aucun message n’est envoyé et aucune action technique n’est
-              exécutée.
+              Choisissez un client actif pour ouvrir son workspace
+              conversationnel privé. Les fixtures de démonstration n’appellent
+              pas le runtime.
             </p>
           </div>
           <label>
@@ -87,15 +75,6 @@ export function OperatorChat({
           <button disabled>Envoi indisponible</button>
         </>
       )}
-      <details>
-        <summary>Contrat de raccordement</summary>
-        <p>
-          Session opérateur vérifiée côté backend, tenant autorisé et fixé côté
-          serveur, contexte minimal, provenance, policies, approvals,
-          correlation_id et traces sanitisées. Les IDs demo sont interdits sur
-          le runtime réel.
-        </p>
-      </details>
     </section>
   )
 }
