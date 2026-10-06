@@ -1,0 +1,88 @@
+.agent-settings {
+  min-width: 0;
+}
+.agent-settings h4 {
+  margin: 24px 0 8px;
+  font-size: 14px;
+}
+.agent-settings > p {
+  line-height: 1.6;
+}
+.agent-settings-note {
+  color: var(--cp-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.cp-chat-detail .agent-settings form {
+  display: block;
+}
+.agent-settings fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.agent-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.agent-settings-grid > * {
+  min-width: 0;
+}
+.agent-settings-grid select,
+.agent-settings-grid input {
+  width: 100%;
+}
+.agent-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0 16px;
+}
+.agent-settings .cp-chat-capability {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 12px 0;
+}
+.agent-settings .cp-chat-capability input[type='checkbox'] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.agent-settings-advanced {
+  margin-top: 24px;
+}
+.agent-settings-advanced summary {
+  cursor: pointer;
+  font-size: 14px;
+}
+.agent-settings-advanced .agent-settings-grid {
+  margin-top: 16px;
+}
+.agent-settings ul {
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.agent-diagnostic-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+.agent-diagnostic-table th,
+.agent-diagnostic-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--cp-line);
+  overflow-wrap: anywhere;
+}
+.agent-diagnostic-table th {
+  font-weight: 500;
+}
+@media (max-width: 760px) {
+  .agent-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

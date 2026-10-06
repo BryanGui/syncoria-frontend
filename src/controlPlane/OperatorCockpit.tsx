@@ -168,7 +168,7 @@ export function OperatorCockpit({
           </button>
         </header>
         {logoutError && <p role="alert">Déconnexion impossible. Réessayez.</p>}
-        {view !== 'prospecting' && view !== 'follow-up' && (
+        {view !== 'prospecting' && view !== 'follow-up' && view !== 'chat' && (
           <div className="cp-view-controls">
             <div
               className="cp-mode"
@@ -196,7 +196,7 @@ export function OperatorCockpit({
             </div>
           </div>
         )}
-        {view !== 'prospecting' && view !== 'follow-up' && (
+        {view !== 'prospecting' && view !== 'follow-up' && view !== 'chat' && (
           mode === 'demo' ? (
             <p className="cp-data-note cp-data-note--demo">
               <strong>synthetic/demo</strong> · 50 entreprises fictives · scénario au{' '}
@@ -226,6 +226,8 @@ export function OperatorCockpit({
               setView('prospecting')
             }}
           />
+        ) : view === 'chat' ? (
+          <OperatorChat apiBaseUrl={apiBaseUrl} onSessionExpired={onSessionExpired} />
         ) : mode === 'live' && loading ? (
           <p role="status" className="cp-empty">
             Chargement du registre…
@@ -346,18 +348,6 @@ export function OperatorCockpit({
                   </p>
                 )}
               </section>
-            )}
-            {view === 'chat' && (
-              <OperatorChat
-                apiBaseUrl={apiBaseUrl}
-                onSessionExpired={onSessionExpired}
-                mode={mode}
-                selectedId={selectedId}
-                setSelectedId={setSelectedId}
-                tenants={tenants}
-                selected={selected}
-                visibleActions={visibleActions}
-              />
             )}
             {view === 'memory' && (
               <div className="cp-columns">
