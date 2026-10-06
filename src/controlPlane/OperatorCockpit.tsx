@@ -14,9 +14,11 @@ import { TenantControlPlaneSheet } from './TenantControlPlaneSheet'
 import { OperatorChat } from './OperatorChat'
 import { FleetOverview } from './FleetOverview'
 import { Prospecting } from '../prospecting/Prospecting'
+import { FollowUp } from '../followUp/FollowUp'
 
 type View =
   | 'prospecting'
+  | 'follow-up'
   | 'overview'
   | 'clients'
   | 'actions'
@@ -34,6 +36,7 @@ const navigation: [View, string, string][] = [
   ['overview', 'Vue globale', '◫'],
   ['clients', 'Clients', '◎'],
   ['prospecting', 'Prospection', '⌕'],
+  ['follow-up', 'Suivi', '◷'],
   ['actions', 'Alertes & actions', '⚑'],
   ['history', 'Historique', '↺'],
   ['chat', 'Assistant Syncoria', '◇'],
@@ -50,6 +53,7 @@ export function OperatorCockpit({
   const [mode, setMode] = useState<'live' | 'demo'>('live')
   const [view, setView] = useState<View>('overview')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [prospectingCompanyId, setProspectingCompanyId] = useState<string | null>(null)
   const [registry, setRegistry] = useState<FleetTenant[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -104,6 +108,7 @@ export function OperatorCockpit({
   }
   const changeView = (next: View) => {
     setView(next)
+    setProspectingCompanyId(null)
     if (next !== 'chat') setSelectedId(null)
   }
   const filtered = prioritizeTenants(tenants).filter(
@@ -163,7 +168,7 @@ export function OperatorCockpit({
           </button>
         </header>
         {logoutError && <p role="alert">Déconnexion impossible. Réessayez.</p>}
-        {view !== 'prospecting' && (
+        {view !== 'prospecting' && view !== 'follow-up' && (
           <div className="cp-view-controls">
             <div
               className="cp-mode"
@@ -191,7 +196,7 @@ export function OperatorCockpit({
             </div>
           </div>
         )}
-        {view !== 'prospecting' && (
+        {view !== 'prospecting' && view !== 'follow-up' && (
           mode === 'demo' ? (
             <p className="cp-data-note cp-data-note--demo">
               <strong>synthetic/demo</strong> · 50 entreprises fictives · scénario au{' '}
@@ -207,9 +212,19 @@ export function OperatorCockpit({
         )}
         {view === 'prospecting' ? (
           <Prospecting
-            key={apiBaseUrl}
+            key={`${apiBaseUrl}:${prospectingCompanyId ?? 'list'}`}
             apiBaseUrl={apiBaseUrl}
             onSessionExpired={onSessionExpired}
+            initialCompanyId={prospectingCompanyId}
+          />
+        ) : view === 'follow-up' ? (
+          <FollowUp
+            apiBaseUrl={apiBaseUrl}
+            onSessionExpired={onSessionExpired}
+            openCompany={(id) => {
+              setProspectingCompanyId(id)
+              setView('prospecting')
+            }}
           />
         ) : mode === 'live' && loading ? (
           <p role="status" className="cp-empty">

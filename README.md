@@ -4,6 +4,8 @@
 
 La session admin ouvre le nouveau AI Control Plane multi-clients. [Guide et provenance](docs/AI_CONTROL_PLANE_V2.md). Les outils legacy restent disponibles depuis le cockpit. [Prospection V1](docs/PROSPECTING.md) gère séparément les entreprises prospectées et leurs contacts commerciaux, via les API admin réelles.
 
+[Suivi commercial](docs/FOLLOW_UP.md) expose les actions FollowUp dans le cockpit et les fiches entreprises, avec filtres, recherche et échéances en Europe/Paris.
+
 
 ## Configuration de l'API
 

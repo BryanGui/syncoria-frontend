@@ -176,10 +176,16 @@ export function createAdminProspectingApi(
     offset >= 0
   const invalid = async (): Promise<{ status: 'invalid' }> => ({ status: 'invalid' })
   return {
-    listCompanies(limit = 25, offset = 0, signal?: AbortSignal) {
-      if (!validPage(limit, offset)) return invalid()
+    listCompanies(limit = 25, offset = 0, signal?: AbortSignal, q?: string) {
+      if (
+        !validPage(limit, offset) ||
+        (q !== undefined &&
+          (typeof q !== 'string' || [...q].length > 200 || q.includes('\0')))
+      )
+        return invalid()
+      const search = q?.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''
       return execute(
-        `/companies?limit=${limit}&offset=${offset}`,
+        `/companies?limit=${limit}&offset=${offset}${search}`,
         '/admin/prospecting/companies',
         'GET',
         (value) => parseList(value, parseCompany),

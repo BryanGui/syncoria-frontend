@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { createAdminProspectingApi } from '../api/adminProspecting'
+import { createAdminFollowUpApi } from '../api/adminFollowUp'
 import { Button, Panel } from '../components/ui'
 import { CompanySheet } from './CompanySheet'
 import { ProspectingForm } from './ProspectingForm'
@@ -55,12 +56,15 @@ function CompanyList({
 export function Prospecting({
   apiBaseUrl,
   onSessionExpired,
+  initialCompanyId = null,
 }: {
   apiBaseUrl: string | null
   onSessionExpired: () => void
+  initialCompanyId?: string | null
 }) {
   const api = useMemo(() => createAdminProspectingApi(apiBaseUrl), [apiBaseUrl])
-  const [selection, setSelection] = useState<string | null>(null)
+  const followUpApi = useMemo(() => createAdminFollowUpApi(apiBaseUrl), [apiBaseUrl])
+  const [selection, setSelection] = useState<string | null>(initialCompanyId)
   return (
     <div className="prospecting" key={apiBaseUrl}>
       {selection === null ? (
@@ -90,6 +94,7 @@ export function Prospecting({
               key={selection}
               api={api}
               companyId={selection}
+              followUpApi={followUpApi}
               onSessionExpired={onSessionExpired}
             />
           )}
