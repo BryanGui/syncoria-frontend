@@ -1,77 +1,58 @@
+import { useEffect, useState } from 'react'
+import { loadInternalContext } from '../api/internalAssistant'
+import { ChatRequestError } from '../api/operatorChat'
+import { Button, Notification } from '../components/ui'
 import { RealOperatorChat } from './RealOperatorChat'
-import type { FleetTenant, OperatorAction } from './model'
-interface Props {
-  apiBaseUrl: string | null
-  onSessionExpired: () => void
-  mode: 'live' | 'demo'
 
-  selectedId: string | null
-  setSelectedId: (id: string | null) => void
-  tenants: FleetTenant[]
-  selected: FleetTenant | undefined
-  visibleActions: OperatorAction[]
-}
 export function OperatorChat({
   apiBaseUrl,
   onSessionExpired,
-  mode,
-  selectedId,
-  setSelectedId,
-  tenants,
-  selected,
-}: Props) {
+}: {
+  apiBaseUrl: string | null
+  onSessionExpired: () => void
+}) {
+  const [context, setContext] = useState<{ tenant_id: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [revision, setRevision] = useState(0)
+  useEffect(() => {
+    const controller = new AbortController()
+    setContext(null)
+    setError(null)
+    void loadInternalContext(apiBaseUrl, controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) setContext(next)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        if (reason instanceof ChatRequestError && reason.status === 401) {
+          onSessionExpired()
+          return
+        }
+        setError(
+          reason instanceof ChatRequestError && reason.status === 503
+            ? 'L’espace interne est indisponible ou archivé. Aucun espace client ne peut le remplacer.'
+            : 'Impossible d’ouvrir l’Assistant interne. Réessayez.',
+        )
+      })
+    return () => controller.abort()
+  }, [apiBaseUrl, onSessionExpired, revision])
   return (
     <section className="cp-panel cp-chat">
-      <label>
-        Client actif
-        <select
-          value={selectedId ?? ''}
-          onChange={(e) => setSelectedId(e.target.value || null)}
-        >
-          <option value="">Sélectionner un client</option>
-          {tenants.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {mode === 'live' && selected && selected.lifecycle === 'active' ? (
+      {error ? (
+        <Notification tone="error">
+          {error}{' '}
+          <Button onClick={() => setRevision((value) => value + 1)}>Réessayer</Button>
+        </Notification>
+      ) : context ? (
         <RealOperatorChat
-          key={`${apiBaseUrl}:${selected.id}`}
-          tenantId={selected.id}
+          key={`${apiBaseUrl}:internal:${context.tenant_id}`}
+          tenantId={context.tenant_id}
+          scope="internal"
           apiBaseUrl={apiBaseUrl}
           onSessionExpired={onSessionExpired}
         />
       ) : (
-        <>
-          <div className="cp-chat-unavailable">
-            <span aria-hidden="true">◇</span>
-            <h3>
-              {mode === 'demo'
-                ? 'Runtime réel indisponible sur les fixtures'
-                : 'Sélectionnez un client actif'}
-            </h3>
-            <p>
-              Choisissez un client actif pour ouvrir son workspace
-              conversationnel privé. Les fixtures de démonstration n’appellent
-              pas le runtime.
-            </p>
-          </div>
-          <label>
-            Message opérateur
-            <textarea
-              disabled
-              placeholder={
-                selected
-                  ? `Pourquoi ${selected.name} nécessite une intervention ?`
-                  : 'Choisissez un client pour définir le contexte.'
-              }
-              rows={3}
-            />
-          </label>
-          <button disabled>Envoi indisponible</button>
-        </>
+        <p role="status">Ouverture de l’espace interne…</p>
       )}
     </section>
   )

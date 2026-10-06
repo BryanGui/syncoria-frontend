@@ -21,6 +21,8 @@ async function connect(page: import("@playwright/test").Page, fail = false) {
               },
             ],
       });
+    if (path === "/admin/operator-chat/internal/context") return route.fulfill({ json: { tenant_id: "11111111-1111-4111-8111-111111111111" } });
+    if (path === "/admin/operator-chat/internal/threads") return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: {} });
   });
   await page.goto("/");
@@ -87,18 +89,12 @@ test("real registry, explicit demo, tenant context and disabled runtime", async 
     fullPage: true,
   });
   await page.getByRole("button", { name: "Explorer avec le chat" }).click();
-  await expect(page.getByRole("combobox")).toHaveValue("demo:1");
-  await expect(
-    page.getByText("Runtime réel indisponible sur les fixtures"),
-  ).toBeVisible();
+  await expect(page.getByLabel("Client actif")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Démo synthétique" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Nouveau chat", exact: true })).toBeVisible();
   await expect(page.getByRole("textbox")).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "Envoi indisponible" }),
-  ).toBeDisabled();
-  await page.getByRole("combobox").selectOption("demo:2");
-  await expect(page.getByRole("combobox")).toHaveValue("demo:2");
-  await page.getByRole("button", { name: "Registre réel" }).click();
-  await expect(page.getByRole("combobox")).toHaveValue("");
+  await page.getByRole("navigation", { name: "Navigation opérateur" }).getByRole("button", { name: "Vue globale", exact: true }).click();
+  await expect(page.getByText("synthetic/demo", { exact: true })).toBeVisible();
 });
 test("registry error never silently substitutes fixtures", async ({ page }) => {
   await connect(page, true);

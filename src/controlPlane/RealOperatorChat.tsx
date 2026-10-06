@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui'
 import {
-  chatRequest,
   ChatRequestError,
   parseThread,
   parseMessage,
@@ -12,6 +11,13 @@ import {
   parseMemoryResults,
   parseDiagnostics,
 } from '../api/operatorChat'
+import {
+  createChatWorkspaceApi,
+  parseInternalDiagnostics,
+  type InternalChatDiagnostic,
+} from '../api/internalAssistant'
+import { AgentSettings } from '../assistant/AgentSettings'
+import { AgentTimingDiagnostic } from '../assistant/AgentTimingDiagnostic'
 import type {
   ChatThread,
   ChatMessage,
@@ -24,11 +30,18 @@ export function RealOperatorChat({
   tenantId,
   apiBaseUrl,
   onSessionExpired,
+  scope = 'tenant',
 }: {
   tenantId: string
   apiBaseUrl: string | null
   onSessionExpired: () => void
+  scope?: 'tenant' | 'internal'
 }) {
+  const { threads: scopedRequest, memory: memoryRequest } = createChatWorkspaceApi(
+    apiBaseUrl,
+    tenantId,
+    scope,
+  )
   const [threads, setThreads] = useState<ChatThread[]>([])
   const [selected, setSelected] = useState<ChatThread | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -37,14 +50,17 @@ export function RealOperatorChat({
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [streaming, setStreaming] = useState(false)
+  const [stopPending, setStopPending] = useState(false)
   const [activity, setActivity] = useState('')
   const [archives, setArchives] = useState(false)
   const [mobileSidebar, setMobileSidebar] = useState(true)
   const [panel, setPanel] = useState<
-    'diagnostic' | 'capabilities' | 'memory' | null
+    'diagnostic' | 'capabilities' | 'settings' | 'memory' | null
   >(null)
   const [profile, setProfile] = useState<CapabilityProfile | null>(null)
-  const [diagnostics, setDiagnostics] = useState<ChatDiagnostic[]>([])
+  const [diagnostics, setDiagnostics] = useState<
+    (ChatDiagnostic | InternalChatDiagnostic)[]
+  >([])
   const [query, setQuery] = useState('')
   const [memoryKind, setMemoryKind] = useState('summary')
   const [memoryContent, setMemoryContent] = useState('')
@@ -53,13 +69,13 @@ export function RealOperatorChat({
   const [rename, setRename] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const controller = useRef<AbortController | null>(null)
+  const activeTurn = useRef<{ stop: () => void } | null>(null)
   const alive = useRef(true)
   const bottom = useRef<HTMLDivElement>(null)
   const fail = (reason: unknown) => {
     if (!alive.current) return
     setActivity('')
-    if (reason instanceof ChatRequestError && reason.status === 401)
-      onSessionExpired()
+    if (reason instanceof ChatRequestError && reason.status === 401) onSessionExpired()
     setError(
       reason instanceof ChatRequestError && reason.status === 409
         ? 'Conversation occupée ou archivée. Rechargez les conversations.'
@@ -68,16 +84,9 @@ export function RealOperatorChat({
   }
   const loadThreads = async (archived: boolean, signal?: AbortSignal) => {
     const rows: unknown = await (
-      await chatRequest(
-        apiBaseUrl,
-        tenantId,
-        `?status=${archived ? 'archived' : 'active'}`,
-        'GET',
-        signal,
-      )
+      await scopedRequest(`?status=${archived ? 'archived' : 'active'}`, 'GET', signal)
     ).json()
-    if (!Array.isArray(rows) || rows.length > 100)
-      throw new Error('invalid_response')
+    if (!Array.isArray(rows) || rows.length > 100) throw new Error('invalid_response')
     const parsed = rows.map((row) => parseThread(row, tenantId))
     if (!signal?.aborted && alive.current) {
       setThreads(parsed)
@@ -124,9 +133,7 @@ export function RealOperatorChat({
   const create = () =>
     run(async (signal) => {
       const thread = parseThread(
-        await (
-          await chatRequest(apiBaseUrl, tenantId, '', 'POST', signal)
-        ).json(),
+        await (await scopedRequest('', 'POST', signal)).json(),
         tenantId,
       )
       if (signal.aborted) return
@@ -152,9 +159,7 @@ export function RealOperatorChat({
         setPanel(null)
       }
       const snapshot: unknown = await (
-        await chatRequest(
-          apiBaseUrl,
-          tenantId,
+        await scopedRequest(
           `/${threadId}${cursor ? `?before=${cursor}` : ''}`,
           'GET',
           signal,
@@ -175,11 +180,13 @@ export function RealOperatorChat({
       const parsed = snapshot.messages.map((row) =>
         parseMessage(row, tenantId, threadId),
       )
-      if (!(
-        snapshot.next_before === null ||
-        (typeof snapshot.next_before === 'string' &&
-          parsed[0]?.message_id === snapshot.next_before)
-      ))
+      if (
+        !(
+          snapshot.next_before === null ||
+          (typeof snapshot.next_before === 'string' &&
+            parsed[0]?.message_id === snapshot.next_before)
+        )
+      )
         throw new Error('invalid_response')
       if (signal.aborted) return
       setSelected(thread)
@@ -192,76 +199,95 @@ export function RealOperatorChat({
     run(async (signal) => {
       if (!selected || selected.status === 'archived' || !content.trim()) return
       const id = selected.thread_id
+      let acknowledged = false
+      let finished = false
+      let stopRequested = false
+      let cancellation: Promise<void> | null = null
+      const requestCancellation = () => {
+        if (!acknowledged || finished || cancellation || signal.aborted) return
+        cancellation = scopedRequest(`/${id}/cancel`, 'POST', signal)
+          .then(() => undefined)
+          .catch((reason: unknown) => {
+            // Keep retries explicit, and only while this same turn is active.
+            cancellation = null
+            stopRequested = false
+            if (!signal.aborted && alive.current) {
+              setStopPending(false)
+              fail(reason)
+            }
+          })
+      }
+      const turn = {
+        stop() {
+          if (finished || stopRequested || signal.aborted) return
+          stopRequested = true
+          setStopPending(true)
+          setError(null)
+          setActivity('Arrêt demandé…')
+          // message_started proves the server has admitted this turn. A cancel
+          // sent before that acknowledgement could succeed without stopping it.
+          requestCancellation()
+        },
+      }
+      activeTurn.current = turn
       setStreaming(true)
+      setStopPending(false)
       setDraft('')
       setActivity('Analyse…')
-      const response = await chatRequest(
-        apiBaseUrl,
-        tenantId,
-        `/${id}/messages`,
-        'POST',
-        signal,
-        content,
-      )
-      await readChatStream(response, tenantId, id, (event) => {
-        if (signal.aborted || !alive.current) return
-        if (event.type === 'message_started') {
-          setMessages((old) => [...old, event.message])
-          setContent('')
-        }
-        if (event.type === 'assistant_delta')
-          setDraft((old) => (old + event.text).slice(0, 16000))
-        if (event.type === 'assistant_message') {
-          setDraft('')
-          setMessages((old) => [...old, event.message])
-        }
-        if (event.type === 'tool_started')
-          setActivity(
-            event.tool === 'syncoria_provider_request'
-              ? 'Lecture provider…'
-              : event.tool === 'syncoria_chat_memory_search'
-                ? 'Consultation d’une source…'
-                : 'Exécution dans le workspace…',
-          )
-        if (event.type === 'tool_completed') setActivity('Analyse…')
-        if (event.type === 'completed') setActivity('Terminé')
-        if (event.type === 'cancelled') {
-          setDraft('')
-          setActivity('Réponse interrompue')
-        }
-        if (event.type === 'error') {
-          setDraft('')
-          setActivity('')
-          setError("La réponse n'a pas pu être terminée.")
-        }
-      })
-      await loadThreads(archives, signal)
+      try {
+        const response = await scopedRequest(`/${id}/messages`, 'POST', signal, content)
+        await readChatStream(response, tenantId, id, (event) => {
+          if (signal.aborted || !alive.current) return
+          if (event.type === 'message_started') {
+            acknowledged = true
+            setMessages((old) => [...old, event.message])
+            setContent('')
+            if (stopRequested) requestCancellation()
+          }
+          if (event.type === 'assistant_delta')
+            setDraft((old) => (old + event.text).slice(0, 16000))
+          if (event.type === 'assistant_message') {
+            setDraft('')
+            setMessages((old) => [...old, event.message])
+          }
+          if (event.type === 'tool_started' && !stopRequested)
+            setActivity(
+              event.tool === 'syncoria_provider_request'
+                ? 'Lecture provider…'
+                : event.tool === 'syncoria_chat_memory_search'
+                  ? 'Consultation d’une source…'
+                  : 'Exécution dans le workspace…',
+            )
+          if (event.type === 'tool_completed' && !stopRequested) setActivity('Analyse…')
+          if (['completed', 'cancelled', 'error'].includes(event.type)) finished = true
+          if (event.type === 'completed') setActivity('Terminé')
+          if (event.type === 'cancelled') {
+            setDraft('')
+            setActivity('Réponse interrompue')
+          }
+          if (event.type === 'error') {
+            setDraft('')
+            setActivity('')
+            setError("La réponse n'a pas pu être terminée.")
+          }
+        })
+        await loadThreads(archives, signal)
+      } finally {
+        finished = true
+        // The endpoint cancels the active turn of a conversation. Do not let
+        // the next turn start while a previous cancellation is still in flight.
+        await cancellation
+        if (activeTurn.current === turn) activeTurn.current = null
+        if (!signal.aborted && alive.current) setStopPending(false)
+      }
     })
-  const stop = async () => {
-    if (!selected) return
-    try {
-      await chatRequest(
-        apiBaseUrl,
-        tenantId,
-        `/${selected.thread_id}/cancel`,
-        'POST',
-      )
-    } catch (reason) {
-      fail(reason)
-    }
-  }
+  const stop = () => activeTurn.current?.stop()
   const changeThread = (action: 'archive' | 'restore') =>
     run(async (signal) => {
       if (!selected) return
       const changed = parseThread(
         await (
-          await chatRequest(
-            apiBaseUrl,
-            tenantId,
-            `/${selected.thread_id}/${action}`,
-            'POST',
-            signal,
-          )
+          await scopedRequest(`/${selected.thread_id}/${action}`, 'POST', signal)
         ).json(),
         tenantId,
       )
@@ -280,14 +306,9 @@ export function RealOperatorChat({
       if (!selected || !rename?.trim()) return
       const changed = parseThread(
         await (
-          await chatRequest(
-            apiBaseUrl,
-            tenantId,
-            `/${selected.thread_id}`,
-            'PATCH',
-            signal,
-            { title: rename.trim() },
-          )
+          await scopedRequest(`/${selected.thread_id}`, 'PATCH', signal, {
+            title: rename.trim(),
+          })
         ).json(),
         tenantId,
       )
@@ -314,15 +335,9 @@ export function RealOperatorChat({
         )
       if (next === 'diagnostic' && selected)
         setDiagnostics(
-          parseDiagnostics(
+          (scope === 'internal' ? parseInternalDiagnostics : parseDiagnostics)(
             await (
-              await chatRequest(
-                apiBaseUrl,
-                tenantId,
-                `/${selected.thread_id}/diagnostics`,
-                'GET',
-                signal,
-              )
+              await scopedRequest(`/${selected.thread_id}/diagnostics`, 'GET', signal)
             ).json(),
           ),
         )
@@ -332,8 +347,8 @@ export function RealOperatorChat({
       const enabledFlags = Object.fromEntries(
         ['shell', 'workspace', 'python', 'multi_agent'].map((key) => [
           key,
-          profile?.capabilities.find((capability) => capability.id === key)
-            ?.enabled ?? false,
+          profile?.capabilities.find((capability) => capability.id === key)?.enabled ??
+            false,
         ]),
       )
       if (id === 'shell' || id === 'workspace' || id === 'python')
@@ -358,9 +373,8 @@ export function RealOperatorChat({
   const saveMemory = () =>
     run(async (signal) => {
       if (!selected || !memoryContent.trim()) return
-      await operatorRequest(
-        apiBaseUrl,
-        `/tenants/${tenantId}/memory`,
+      await memoryRequest(
+        '',
         'POST',
         {
           thread_id: selected.thread_id,
@@ -377,9 +391,8 @@ export function RealOperatorChat({
   const search = () =>
     run(async (signal) => {
       const next = parseMemoryResults(
-        await operatorRequest(
-          apiBaseUrl,
-          `/tenants/${tenantId}/memory/search?q=${encodeURIComponent(query)}`,
+        await memoryRequest(
+          `/search?q=${encodeURIComponent(query)}`,
           'GET',
           undefined,
           signal,
@@ -419,9 +432,7 @@ export function RealOperatorChat({
           </button>
         </div>
         <nav
-          aria-label={
-            archives ? 'Conversations archivées' : 'Conversations récentes'
-          }
+          aria-label={archives ? 'Conversations archivées' : 'Conversations récentes'}
         >
           {conversationGroups(threads).map((group) => (
             <section key={group.label}>
@@ -429,31 +440,23 @@ export function RealOperatorChat({
               {group.threads.map((thread) => (
                 <button
                   className={
-                    selected?.thread_id === thread.thread_id
-                      ? 'is-selected'
-                      : ''
+                    selected?.thread_id === thread.thread_id ? 'is-selected' : ''
                   }
                   aria-current={
-                    selected?.thread_id === thread.thread_id
-                      ? 'page'
-                      : undefined
+                    selected?.thread_id === thread.thread_id ? 'page' : undefined
                   }
                   key={thread.thread_id}
                   disabled={busy}
                   onClick={() => void resume(thread.thread_id)}
                 >
                   {thread.title || 'Nouveau chat'}
-                  <time>
-                    {new Date(thread.updated_at).toLocaleDateString('fr-FR')}
-                  </time>
+                  <time>{new Date(thread.updated_at).toLocaleDateString('fr-FR')}</time>
                 </button>
               ))}
             </section>
           ))}
           {threads.length === 0 && (
-            <p>
-              Aucune conversation {archives ? 'archivée' : 'pour le moment'}.
-            </p>
+            <p>Aucune conversation {archives ? 'archivée' : 'pour le moment'}.</p>
           )}
         </nav>
         <Button
@@ -466,9 +469,11 @@ export function RealOperatorChat({
         <Button
           variant="ghost"
           disabled={busy}
-          onClick={() => void openPanel('capabilities')}
+          onClick={() =>
+            void openPanel(scope === 'internal' ? 'settings' : 'capabilities')
+          }
         >
-          Capacités Codex
+          {scope === 'internal' ? 'Réglages de l’agent' : 'Capacités Codex'}
         </Button>
       </aside>
       <main className="cp-chat-workspace">
@@ -545,7 +550,9 @@ export function RealOperatorChat({
                 ? 'Diagnostic'
                 : panel === 'memory'
                   ? 'Mémoire'
-                  : 'Capacités Codex'
+                  : panel === 'settings'
+                    ? 'Réglages de l’agent'
+                    : 'Capacités Codex'
             }
           >
             <button className="cp-chat-close" onClick={() => setPanel(null)}>
@@ -554,19 +561,25 @@ export function RealOperatorChat({
             {panel === 'diagnostic' && (
               <>
                 <h3>Diagnostic des tours</h3>
-                <p>Chat tenant privé — accès Web public désactivé</p>
+                <p>
+                  {scope === 'internal'
+                    ? 'Assistant interne privé — accès Web public désactivé'
+                    : 'Chat tenant privé — accès Web public désactivé'}
+                </p>
                 {diagnostics.length === 0 && <p>Aucun tour enregistré.</p>}
                 {diagnostics.map((row) => (
                   <details key={row.correlation_id}>
                     <summary>
-                      {new Date(row.created_at).toLocaleString('fr-FR')} ·{' '}
-                      {row.status}
+                      {new Date(row.created_at).toLocaleString('fr-FR')} · {row.status}
                     </summary>
                     <dl>
                       <dt>Correlation ID</dt>
                       <dd>{row.correlation_id}</dd>
                       <dt>Durée</dt>
                       <dd>{row.duration_ms ?? '—'} ms</dd>
+                      {'chosen_settings' in row && (
+                        <AgentTimingDiagnostic diagnostic={row} />
+                      )}
                       {row.snapshot && (
                         <>
                           <dt>Runtime / version</dt>
@@ -576,8 +589,7 @@ export function RealOperatorChat({
                           </dd>
                           <dt>Modèle / effort</dt>
                           <dd>
-                            {row.snapshot.model} /{' '}
-                            {row.snapshot.reasoning_effort}
+                            {row.snapshot.model} / {row.snapshot.reasoning_effort}
                           </dd>
                           <dt>Capacités actives</dt>
                           <dd>
@@ -595,9 +607,7 @@ export function RealOperatorChat({
                           </dd>
                           <dt>Horodatage du snapshot</dt>
                           <dd>
-                            {new Date(row.snapshot.timestamp).toLocaleString(
-                              'fr-FR',
-                            )}
+                            {new Date(row.snapshot.timestamp).toLocaleString('fr-FR')}
                           </dd>
                           <dt>Version de politique</dt>
                           <dd>{row.snapshot.policy_version}</dd>
@@ -616,13 +626,18 @@ export function RealOperatorChat({
                 ))}
               </>
             )}
-            {panel === 'capabilities' && (
+            {panel === 'settings' && (
+              <AgentSettings
+                apiBaseUrl={apiBaseUrl}
+                onSessionExpired={onSessionExpired}
+              />
+            )}
+            {panel === 'capabilities' && scope === 'tenant' && (
               <>
                 <h3>Profil global Codex</h3>
                 <p>
-                  Ces paramètres s’appliquent aux prochains tours de tous les
-                  tenants. Les protections Syncoria restent imposées par les
-                  services.
+                  Ces paramètres s’appliquent aux prochains tours de tous les tenants.
+                  Les protections Syncoria restent imposées par les services.
                 </p>
                 {profile?.capabilities.map((capability) => (
                   <label className="cp-chat-capability" key={capability.id}>
@@ -632,18 +647,12 @@ export function RealOperatorChat({
                       disabled={
                         busy ||
                         !capability.supported ||
-                        ![
-                          'shell',
-                          'workspace',
-                          'python',
-                          'multi_agent',
-                        ].includes(capability.id)
+                        !['shell', 'workspace', 'python', 'multi_agent'].includes(
+                          capability.id,
+                        )
                       }
                       onChange={(event) =>
-                        void updateCapabilities(
-                          capability.id,
-                          event.target.checked,
-                        )
+                        void updateCapabilities(capability.id, event.target.checked)
                       }
                     />
                     <span>
@@ -659,17 +668,16 @@ export function RealOperatorChat({
                     </span>
                   </label>
                 ))}
-                <Button
-                  disabled={busy}
-                  onClick={() => void updateCapabilities()}
-                >
+                <Button disabled={busy} onClick={() => void updateCapabilities()}>
                   Restaurer les paramètres Syncoria par défaut
                 </Button>
               </>
             )}
             {panel === 'memory' && (
               <>
-                <h3>Mémoire du tenant</h3>
+                <h3>
+                  {scope === 'internal' ? 'Mémoire interne' : 'Mémoire du tenant'}
+                </h3>
                 {selected && (
                   <form
                     className="cp-memory-create"
@@ -710,13 +718,16 @@ export function RealOperatorChat({
                         }}
                       />
                     </label>
-                    <Button
-                      type="submit"
-                      disabled={busy || !memoryContent.trim()}
-                    >
+                    <Button type="submit" disabled={busy || !memoryContent.trim()}>
                       Enregistrer dans la mémoire
                     </Button>
-                    {memorySaved && <p>Élément enregistré pour ce tenant.</p>}
+                    {memorySaved && (
+                      <p>
+                        {scope === 'internal'
+                          ? 'Élément enregistré dans la mémoire interne.'
+                          : 'Élément enregistré pour ce tenant.'}
+                      </p>
+                    )}
                   </form>
                 )}
                 <form
@@ -782,9 +793,7 @@ export function RealOperatorChat({
               <Button
                 variant="ghost"
                 disabled={busy}
-                onClick={() =>
-                  selected && void resume(selected.thread_id, before)
-                }
+                onClick={() => selected && void resume(selected.thread_id, before)}
               >
                 Messages précédents
               </Button>
@@ -844,19 +853,14 @@ export function RealOperatorChat({
             }}
           />
           <div className="cp-chat-composer-actions">
-            <small>
-              Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne
-            </small>
+            <small>Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne</small>
             {streaming ? (
-              <Button onClick={() => void stop()}>Stop</Button>
+              <Button disabled={stopPending} onClick={stop}>Stop</Button>
             ) : (
               <Button
                 variant="primary"
                 disabled={
-                  busy ||
-                  !selected ||
-                  selected.status === 'archived' ||
-                  !content.trim()
+                  busy || !selected || selected.status === 'archived' || !content.trim()
                 }
                 onClick={() => void send()}
               >
