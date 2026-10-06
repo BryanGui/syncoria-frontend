@@ -25,12 +25,41 @@ async function connect(page: import("@playwright/test").Page, fail = false) {
   });
   await page.goto("/");
 }
+
+for (const width of [390, 1440])
+  test(`cockpit navigation has one compact uppercase title per view at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await connect(page)
+    const views = ['Vue globale', 'Clients', 'Prospection', 'Alertes & actions', 'Historique', 'Assistant Syncoria', 'Mémoire opérationnelle']
+    for (const view of views) {
+      const navigation = page.getByRole('navigation', { name: 'Navigation opérateur' })
+      await navigation.getByRole('button', { name: view, exact: true }).click()
+      await expect(navigation.getByRole('button', { name: view, exact: true })).toHaveAttribute('aria-current', 'page')
+      const title = page.getByRole('heading', { level: 1 })
+      await expect(title).toHaveCount(1)
+      await expect(title).toHaveText(view.toLocaleUpperCase('fr-FR'))
+      await expect(page.locator('.cp-topbar').getByRole('heading')).toHaveCount(1)
+      await expect(page.getByRole('heading', { name: view, exact: true })).toHaveCount(0)
+      const titleBox = await title.boundingBox()
+      const logoutBox = await page.getByRole('button', { name: 'Se déconnecter', exact: true }).boundingBox()
+      expect(titleBox).not.toBeNull()
+      expect(logoutBox).not.toBeNull()
+      expect(Math.abs(titleBox!.y + titleBox!.height / 2 - logoutBox!.y - logoutBox!.height / 2)).toBeLessThan(2)
+      expect(await title.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeLessThanOrEqual(16)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      await expect(page.getByText(/Espace opérateur \/|PILOTER · COMPRENDRE · INTERVENIR/)).toHaveCount(0)
+      await expect(page.getByText('Vos entreprises prospectées et leurs contacts commerciaux.', { exact: true })).toHaveCount(0)
+      await expect(page.getByText('Données réelles · prospection interne', { exact: true })).toHaveCount(0)
+      await expect(page.getByText('Entreprises et contacts commerciaux. Les clients Syncoria disposent d’un registre distinct.', { exact: true })).toHaveCount(0)
+      await expect(page.getByText('Chat opérateur', { exact: true })).toHaveCount(0)
+    }
+  })
 test("real registry, explicit demo, tenant context and disabled runtime", async ({
   page,
 }) => {
   await connect(page);
   await expect(
-    page.getByText("Données réelles · registre Syncoria"),
+    page.getByText("Registre Syncoria · santé IA, coûts, adoption et alertes non évalués."),
   ).toBeVisible();
   await expect(
     page.getByText("Tenant réel test", { exact: true }),
@@ -47,7 +76,7 @@ test("real registry, explicit demo, tenant context and disabled runtime", async 
   });
   await page.getByRole("button", { name: /Novalia Démo/ }).click();
   await expect(
-    page.getByRole("heading", { name: "Novalia Démo", exact: true }),
+    page.locator(".cp-detail-toolbar").getByText("Novalia Démo", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Analyser les erreurs de l’agent" }),
@@ -83,7 +112,7 @@ test("mobile fleet remains usable without horizontal overflow", async ({
   await connect(page);
   await page.getByRole("button", { name: "Démo synthétique" }).click();
   await expect(
-    page.getByRole("heading", { name: "Vue globale", exact: true }),
+    page.getByRole("heading", { name: "VUE GLOBALE", exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -114,7 +143,7 @@ test('real tenant snapshot keeps missing observations unknown', async ({ page })
   await expect(page.getByRole('heading', { name: 'Parc IA du tenant' })).toBeVisible()
   await expect(page.getByText('Non connecté / non évalué — aucune observation disponible.').first()).toBeVisible()
   await expect(page.getByText('synthetic/demo', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('Chat opérateur accessible depuis le cockpit.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Assistant Syncoria accessible depuis le cockpit.', { exact: false })).toBeVisible()
 })
 test('real metrics and qualitative states display their provenance and freshness', async ({ page }) => {
   await connect(page)
@@ -144,6 +173,6 @@ test('fixture provenance in a real snapshot fails closed; demo makes no estate c
   await expect(page.getByRole('heading', { name: 'Parc IA indisponible' })).toBeVisible()
   await page.getByRole('button', { name: 'Démo synthétique' }).click()
   await page.getByRole('button', { name: /Novalia Démo/ }).click()
-  await expect(page.getByRole('heading', { name: 'Novalia Démo', exact: true })).toBeVisible()
+  await expect(page.locator('.cp-detail-toolbar').getByText('Novalia Démo', { exact: true })).toBeVisible()
   expect(calls).toBe(1)
 })

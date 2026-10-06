@@ -4,7 +4,7 @@ import { Button, Panel } from '../components/ui'
 import { CompanySheet } from './CompanySheet'
 import { ProspectingForm } from './ProspectingForm'
 import { companyFields, emptyCompany } from './formFields'
-import { PROSPECT_STATUS_LABELS } from './model'
+import { CompanyTable } from './ProspectingTables'
 import { useProspectingResource } from './state'
 import './prospecting.css'
 import { LoadError, Pagination, PAGE_SIZE, type ProspectingProps } from './presentation'
@@ -27,7 +27,6 @@ function CompanyList({
   return (
     <Panel className="cp-panel">
       <div className="cp-panel-heading">
-        <h2>Entreprises prospectées</h2>
         <Button variant="primary" onClick={createCompany}>
           Ajouter une entreprise
         </Button>
@@ -41,24 +40,7 @@ function CompanyList({
           {state.value.length === 0 ? (
             <p className="cp-empty">Aucune entreprise sur cette page.</p>
           ) : (
-            <ul className="prospecting-list">
-              {state.value.map((company) => (
-                <li key={company.id}>
-                  <button
-                    className="prospecting-company"
-                    onClick={() => openCompany(company.id)}
-                  >
-                    <strong>{company.name}</strong>
-                    <span>Ville : {company.city ?? 'Non renseignée'}</span>
-                    <span>Secteur : {company.sector ?? 'Non renseigné'}</span>
-                    <span className="prospecting-status">
-                      {PROSPECT_STATUS_LABELS[company.status]}
-                    </span>
-                    <span>Source : {company.source ?? 'Non renseignée'}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <CompanyTable companies={state.value} openCompany={openCompany} />
           )}
           <Pagination
             offset={offset}
@@ -81,13 +63,6 @@ export function Prospecting({
   const [selection, setSelection] = useState<string | null>(null)
   return (
     <div className="prospecting" key={apiBaseUrl}>
-      <div className="cp-provenance">
-        <strong>Données réelles · prospection interne</strong>
-        <span>
-          Entreprises et contacts commerciaux. Les clients Syncoria disposent d’un
-          registre distinct.
-        </span>
-      </div>
       {selection === null ? (
         <CompanyList
           api={api}

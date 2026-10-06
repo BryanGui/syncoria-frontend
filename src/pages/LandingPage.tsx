@@ -117,7 +117,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
             <span className="landing-product__sidebar-brand"><span aria-hidden="true">S</span> Syncoria</span>
             <span className="landing-product__sidebar-item landing-product__sidebar-item--active">Vue d’ensemble</span>
             <span className="landing-product__sidebar-item">Clients</span>
-            <span className="landing-product__sidebar-item">Chat opérateur</span>
+            <span className="landing-product__sidebar-item">Assistant Syncoria</span>
           </div>
           <div className="landing-product__body">
             <div className="landing-product__body-header">

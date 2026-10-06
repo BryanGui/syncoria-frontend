@@ -55,7 +55,6 @@ export function FleetOverview({
           <div className="cp-panel-heading">
             <div>
               <h2>Clients prioritaires</h2>
-              <p>L’attention au bon endroit.</p>
             </div>
             <button onClick={() => changeView('clients')}>
               Voir le parc →
@@ -113,16 +112,9 @@ export function FleetOverview({
           </button>
         </section>
       </div>
-      <section className="cp-panel cp-next">
-        <div>
-          <h2>De la supervision à l’intervention</h2>
-          <p>
-            Ouvrez un client pour retrouver ses signaux, ses actions et le
-            contexte du chat opérateur.
-          </p>
-        </div>
-        <button onClick={() => changeView('chat')}>Chat opérateur →</button>
-      </section>
+      <button className="cp-text-button" onClick={() => changeView('chat')}>
+        Assistant Syncoria →
+      </button>
     </>
   )
 }

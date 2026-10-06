@@ -250,7 +250,7 @@ async function connect(page: Page) {
   })
   await page.goto('/')
   await page
-    .getByRole('button', { name: 'Chat opérateur', exact: true })
+    .getByRole('button', { name: 'Assistant Syncoria', exact: true })
     .click()
   await page.getByLabel('Client actif').selectOption(a)
   return state

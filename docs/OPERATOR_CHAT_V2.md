@@ -1,4 +1,7 @@
-# Chat Operator V2
+# Assistant Syncoria — Operator Chat V2
+
+La navigation et la topbar du cockpit utilisent **Assistant Syncoria**. Ce libellé
+ne change ni le runtime, ni les routes, ni la mémoire, ni le streaming.
 
 Le workspace utilise exclusivement l’API Operator Chat existante et le runtime Codex App Server. La sidebar regroupe les conversations par date, permet le renommage et l’archivage. Les archives restent consultables en lecture seule ; seule une restauration explicite les réactive.
 

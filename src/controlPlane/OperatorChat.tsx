@@ -22,8 +22,6 @@ export function OperatorChat({
 }: Props) {
   return (
     <section className="cp-panel cp-chat">
-      <p className="cp-eyebrow">INTERFACE CONVERSATIONNELLE OPÉRATEUR</p>
-      <h2>Chat opérateur</h2>
       <label>
         Client actif
         <select

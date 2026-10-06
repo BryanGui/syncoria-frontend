@@ -129,7 +129,7 @@ export function RealTenantEstate({
       ))}
       <p>
         Les permissions sont des observations ; elles n’autorisent aucune
-        action. Chat opérateur accessible depuis le cockpit.
+        action. Assistant Syncoria accessible depuis le cockpit.
       </p>
     </section>
   )
