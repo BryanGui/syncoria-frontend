@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page, type Response } from '@playwright/test'
 import { mkdir } from 'node:fs/promises'
 // Test-only synthetic operational summaries; never provider fixtures or live PII.
 import {
@@ -246,95 +246,166 @@ test('empty dossier supports profile, contact and need creation, editing and vis
   ).toBe(true)
 })
 
-test('all advisory object editors preserve manual priorities, links and launcher fields', async ({
-  page,
-}) => {
-  const state = await connect(page)
-  for (const [
-    tab,
-    button,
-    titleLabel,
-    title,
-    descriptionLabel,
-    description,
-  ] of [
-    [
-      'Opportunités',
-      'Ajouter · Opportunités IA',
-      'Titre',
-      'Intégration ciblée',
-      'Hypothèse IA',
-      'Comparer un essai manuel',
-    ],
-    [
-      'Opportunités',
-      'Ajouter · Décisions & recommandations',
-      'Titre',
-      'Choix justifié',
-      'Recommandation / décision',
-      'Évaluer avant de déployer',
-    ],
-    [
-      'Réalisations',
-      'Ajouter · Réalisations',
-      'Titre',
-      'Nouvelle réalisation',
-      'Synthèse de la réalisation',
-      'Prototype limité',
-    ],
-    [
-      'Suivi',
-      'Ajouter · Prochaines actions',
-      'Titre',
-      'Planifier une revue',
-      'Notes (facultatif)',
-      'Entretien avec le référent',
-    ],
-    [
-      'Parc IA',
-      'Ajouter · Accès client',
-      'Libellé',
-      'Accès technique',
-      'URL de connexion HTTPS (facultatif)',
-      'https://console.anthropic.com/',
-    ],
-  ]) {
-    await page.getByRole('button', { name: tab, exact: true }).click()
-    await page.getByRole('button', { name: button, exact: true }).click()
-    await page.getByLabel(titleLabel, { exact: true }).fill(title)
-    await page.getByLabel(descriptionLabel, { exact: true }).fill(description)
-    if (button.includes('Opportunités')) {
-      await page
-        .getByLabel('Besoin associé (facultatif)', { exact: true })
-        .selectOption('22222222-2222-4222-8222-222222222222')
-      await page.getByLabel('Priorité', { exact: true }).selectOption('high')
-    }
-    if (button.includes('Décisions'))
-      await page
-        .getByLabel('Pourquoi cette approche ?', { exact: true })
-        .fill('Réduire le risque')
-    if (button.includes('Accès'))
-      await page.getByLabel('Provider', { exact: true }).fill('anthropic')
-    await page.getByRole('button', { name: 'Enregistrer', exact: true }).click()
-    await expect(
-      page.getByRole('heading', { name: title, exact: true }),
-    ).toBeVisible()
-    await page
-      .getByRole('button', { name: `Modifier · ${title}`, exact: true })
-      .click()
-    await page.getByLabel(titleLabel, { exact: true }).fill(title + ' révisé')
-    await page.getByRole('button', { name: 'Enregistrer', exact: true }).click()
-    await expect(
-      page.getByRole('heading', { name: title + ' révisé', exact: true }),
-    ).toBeVisible()
+const advisoryBase = `/admin/advisory/tenants/${tenantId}`
+const dossierResponse = (response: Response) =>
+  response.request().method() === 'GET' &&
+  new URL(response.url()).pathname === `${advisoryBase}/dossier`
+
+async function saveAndReload(
+  page: Page,
+  editor: Locator,
+  method: 'POST' | 'PUT',
+  path: string,
+  resource: string,
+  expected: Record<string, unknown>,
+) {
+  // Register both waits before the click: the dossier reload can follow the write immediately.
+  const saved = page.waitForResponse((response) =>
+    response.request().method() === method && new URL(response.url()).pathname === path,
+  )
+  const reloaded = page.waitForResponse(dossierResponse)
+  await editor.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+  const response = await saved
+  expect(response.status()).toBe(method === 'POST' ? 201 : 200)
+  expect(response.request().postDataJSON()).toMatchObject(expected)
+  expect(await response.json()).toMatchObject(expected)
+  const dossier = await reloaded
+  expect(dossier.status()).toBe(200)
+  expect((await dossier.json())[resource]).toContainEqual(expect.objectContaining(expected))
+  await expect(editor).toHaveCount(0)
+}
+
+const editorScenarios = [
+  {
+    resource: 'opportunities', idField: 'opportunity_id', tab: 'Opportunités',
+    label: 'Opportunités IA', title: 'Intégration ciblée',
+    descriptionLabel: 'Hypothèse IA', description: 'Comparer un essai manuel',
+    expected: { hypothesis: 'Comparer un essai manuel', priority: 'high', need_id: '22222222-2222-4222-8222-222222222222' },
+  },
+  {
+    resource: 'decisions', idField: 'decision_id', tab: 'Opportunités',
+    label: 'Décisions & recommandations', title: 'Choix justifié',
+    descriptionLabel: 'Recommandation / décision', description: 'Évaluer avant de déployer',
+    expected: { decision: 'Évaluer avant de déployer', rationale: 'Réduire le risque' },
+  },
+  {
+    resource: 'engagements', idField: 'engagement_id', tab: 'Réalisations',
+    label: 'Réalisations', title: 'Nouvelle réalisation',
+    descriptionLabel: 'Synthèse de la réalisation', description: 'Prototype limité',
+    expected: { summary: 'Prototype limité' },
+  },
+  {
+    resource: 'actions', idField: 'action_id', tab: 'Suivi',
+    label: 'Prochaines actions', title: 'Planifier une revue',
+    descriptionLabel: 'Notes (facultatif)', description: 'Entretien avec le référent',
+    expected: { notes: 'Entretien avec le référent' },
+  },
+] as const
+
+test.describe('isolated advisory editors', () => {
+  for (const scenario of editorScenarios) {
+    test(`${scenario.resource}: creation saves the entered fields and reloads the dossier`, async ({ page }) => {
+      const state = await connect(page)
+      await page.getByRole('button', { name: scenario.tab, exact: true }).click()
+      await page.getByRole('button', { name: `Ajouter · ${scenario.label}`, exact: true }).click()
+      const editor = page.getByRole('region', { name: `Créer · ${scenario.label}`, exact: true })
+      await editor.getByLabel('Titre', { exact: true }).fill(scenario.title)
+      await editor.getByLabel(scenario.descriptionLabel, { exact: true }).fill(scenario.description)
+      if (scenario.resource === 'opportunities') {
+        await editor.getByLabel('Besoin associé (facultatif)', { exact: true }).selectOption(scenario.expected.need_id)
+        await editor.getByLabel('Priorité', { exact: true }).selectOption('high')
+      }
+      if (scenario.resource === 'decisions')
+        await editor.getByLabel('Pourquoi cette approche ?', { exact: true }).fill(scenario.expected.rationale)
+      await saveAndReload(page, editor, 'POST', `${advisoryBase}/${scenario.resource}`, scenario.resource, {
+        title: scenario.title, ...scenario.expected,
+      })
+      await expect(page.getByRole('heading', { name: scenario.title, exact: true })).toBeVisible()
+      expect(state.writes).toHaveLength(1)
+    })
+
+    test(`${scenario.resource}: editing preserves the manual fields and reloads the revised record`, async ({ page }) => {
+      const payload = completeAdvisory()
+      const record: Record<string, unknown> = payload[scenario.resource][0]
+      Object.assign(record, { title: scenario.title, ...scenario.expected })
+      payload.recent_timeline = payload.recent_timeline.map((event) =>
+        event.resource === scenario.resource ? { ...event, title: scenario.title } : event,
+      )
+      const state = await connect(page, payload)
+      await page.getByRole('button', { name: scenario.tab, exact: true }).click()
+      await page.getByRole('button', { name: `Modifier · ${scenario.title}`, exact: true }).click()
+      const editor = page.getByRole('region', { name: `Modifier · ${scenario.label}`, exact: true })
+      await expect(editor.getByLabel(scenario.descriptionLabel, { exact: true })).toHaveValue(scenario.description)
+      if (scenario.resource === 'opportunities') {
+        await expect(editor.getByLabel('Besoin associé (facultatif)', { exact: true })).toHaveValue(scenario.expected.need_id)
+        await expect(editor.getByLabel('Priorité', { exact: true })).toHaveValue('high')
+      }
+      if (scenario.resource === 'decisions')
+        await expect(editor.getByLabel('Pourquoi cette approche ?', { exact: true })).toHaveValue(scenario.expected.rationale)
+      const title = `${scenario.title} révisé`
+      await editor.getByLabel('Titre', { exact: true }).fill(title)
+      await saveAndReload(page, editor, 'PUT', `${advisoryBase}/${scenario.resource}/${record[scenario.idField]}`, scenario.resource, {
+        title, ...scenario.expected,
+      })
+      await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: scenario.title, exact: true })).toHaveCount(0)
+      expect(state.writes).toHaveLength(1)
+    })
   }
-  expect(
-    state.writes.some(
-      (write) =>
-        write.body.priority === 'high' &&
-        write.body.need_id === '22222222-2222-4222-8222-222222222222',
-    ),
-  ).toBe(true)
+
+  test('provider_access: creation saves the provider and stored launcher URL', async ({ page }) => {
+    const state = await connect(page)
+    await page.getByRole('button', { name: 'Parc IA', exact: true }).click()
+    await page.getByRole('button', { name: 'Ajouter · Accès client', exact: true }).click()
+    const editor = page.getByRole('region', { name: 'Créer · Accès client', exact: true })
+    await editor.getByLabel('Libellé', { exact: true }).fill('Accès technique')
+    await editor.getByLabel('Provider', { exact: true }).fill('anthropic')
+    await editor.getByLabel('URL de connexion HTTPS (facultatif)', { exact: true }).fill('https://console.anthropic.com/')
+    await saveAndReload(page, editor, 'POST', `${advisoryBase}/provider-access`, 'provider_access', {
+      label: 'Accès technique', provider: 'anthropic', login_url: 'https://console.anthropic.com/',
+    })
+    await expect(page.getByRole('heading', { name: 'Accès technique', exact: true })).toBeVisible()
+    expect(state.writes).toHaveLength(1)
+  })
+
+  test('provider_access: editing explicitly saves and reloads Accès technique révisé', async ({ page }) => {
+    const payload = completeAdvisory()
+    const access = payload.provider_access[0]
+    Object.assign(access, {
+      label: 'Accès technique', provider: 'anthropic', access_type: 'manual',
+      login_url: 'https://console.anthropic.com/', status: 'unknown',
+    })
+    const state = await connect(page, payload)
+    await page.getByRole('button', { name: 'Parc IA', exact: true }).click()
+    await page.getByRole('button', { name: 'Modifier · Accès technique', exact: true }).click()
+    let editor = page.getByRole('region', { name: 'Modifier · Accès client', exact: true })
+    await expect(editor.getByLabel('Provider', { exact: true })).toHaveValue('anthropic')
+    await expect(editor.getByLabel('URL de connexion HTTPS (facultatif)', { exact: true })).toHaveValue('https://console.anthropic.com/')
+    await editor.getByLabel('Libellé', { exact: true }).fill('Accès technique révisé')
+    const expected = {
+      label: 'Accès technique révisé', provider: 'anthropic', access_type: 'manual',
+      login_url: 'https://console.anthropic.com/', status: 'unknown',
+    }
+    await saveAndReload(page, editor, 'PUT', `${advisoryBase}/provider-access/${access.access_reference_id}`, 'provider_access', expected)
+    await expect(page.getByRole('heading', { name: 'Accès technique révisé', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Accès technique', exact: true })).toHaveCount(0)
+
+    // A fresh page must read the saved record from the API again, rather than retain editor state.
+    const reloaded = page.waitForResponse(dossierResponse)
+    await page.reload()
+    await page.getByRole('button', { name: /Entreprise conseil/ }).click()
+    const response = await reloaded
+    expect(response.status()).toBe(200)
+    expect((await response.json()).provider_access).toContainEqual(expect.objectContaining(expected))
+    await page.getByRole('button', { name: 'Parc IA', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Accès technique révisé', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Modifier · Accès technique révisé', exact: true }).click()
+    editor = page.getByRole('region', { name: 'Modifier · Accès client', exact: true })
+    await expect(editor.getByLabel('Libellé', { exact: true })).toHaveValue('Accès technique révisé')
+    await expect(editor.getByLabel('Provider', { exact: true })).toHaveValue('anthropic')
+    await expect(editor.getByLabel('URL de connexion HTTPS (facultatif)', { exact: true })).toHaveValue('https://console.anthropic.com/')
+    expect(state.writes).toHaveLength(1)
+  })
 })
 
 test('API errors and expired session never substitute fixtures', async ({
