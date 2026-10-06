@@ -2,12 +2,14 @@ import { useCallback, useState } from 'react'
 import { Button, Notification, Panel } from '../components/ui'
 import { ProspectingForm } from './ProspectingForm'
 import { contactFields, emptyContact } from './formFields'
-import { changedFields } from './model'
+import { changedFields, type Contact } from './model'
+import { ContactTable } from './ProspectingTables'
 import { useProspectingResource } from './state'
 import { LoadError, Pagination, PAGE_SIZE, type ProspectingProps } from './presentation'
 
 interface Props extends ProspectingProps {
   companyId: string
+  onSaved: () => void
 }
 function ContactEditor({
   api,
@@ -16,7 +18,7 @@ function ContactEditor({
   onSessionExpired,
   onClose,
   onSaved,
-}: Props & { contactId: string; onClose: () => void; onSaved: () => void }) {
+}: Omit<Props, 'onSaved'> & { contactId: string; onClose: () => void; onSaved: (contact: Contact) => void }) {
   const load = useCallback(
     (signal: AbortSignal) => api.getContact(contactId, companyId, signal),
     [api, contactId, companyId],
@@ -48,10 +50,10 @@ function ContactEditor({
     />
   )
 }
-export function Contacts({ api, companyId, onSessionExpired }: Props) {
+export function Contacts({ api, companyId, onSessionExpired, onSaved }: Props) {
   const [offset, setOffset] = useState(0)
   const [selection, setSelection] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved] = useState<Contact | null>(null)
   const load = useCallback(
     (signal: AbortSignal) => api.listContacts(companyId, PAGE_SIZE, offset, signal),
     [api, companyId, offset],
@@ -61,15 +63,26 @@ export function Contacts({ api, companyId, onSessionExpired }: Props) {
     setSelection(null)
     reload()
   }
+  const save = (contact: Contact) => {
+    setSaved(contact)
+    setOffset(0)
+    close()
+    onSaved()
+  }
+  // Keep the confirmed record visible even if pagination or a refresh failure omits it.
+  const contacts = state.status === 'loaded' ? state.value : []
+  const visibleContacts = saved
+    ? [saved, ...contacts.filter((contact) => contact.id !== saved.id)]
+    : contacts
   return (
     <Panel className="cp-panel">
       {selection === null ? (
         <>
           <div className="cp-panel-heading">
-            <h2>Contacts de l’entreprise</h2>
             <Button
+              variant="primary"
               onClick={() => {
-                setSaved(false)
+                setSaved(null)
                 setSelection('new')
               }}
             >
@@ -81,41 +94,29 @@ export function Contacts({ api, companyId, onSessionExpired }: Props) {
             <p role="status">Chargement des contacts…</p>
           ) : state.status !== 'loaded' ? (
             <LoadError status={state.status} retry={reload} />
-          ) : (
+          ) : null}
+          {visibleContacts.length > 0 && (
+            <ContactTable
+              contacts={visibleContacts}
+              savedId={saved?.id}
+              editContact={(id) => {
+                setSaved(null)
+                setSelection(id)
+              }}
+            />
+          )}
+          {state.status === 'loaded' && (
             <>
-              {!state.value.length ? (
+              {!visibleContacts.length ? (
                 <p className="cp-empty">Aucun contact sur cette page.</p>
-              ) : (
-                <ul className="prospecting-list">
-                  {state.value.map((contact) => (
-                    <li key={contact.id} className="prospecting-contact">
-                      <div>
-                        <h3>
-                          {contact.first_name} {contact.last_name}
-                        </h3>
-                        <p>{contact.role ?? 'Fonction non renseignée'}</p>
-                        <p>
-                          {contact.email ?? 'Email non renseigné'} ·{' '}
-                          {contact.phone ?? 'Téléphone non renseigné'}
-                        </p>
-                      </div>
-                      <Button
-                        onClick={() => {
-                          setSaved(false)
-                          setSelection(contact.id)
-                        }}
-                        aria-label={`Modifier le contact ${contact.first_name} ${contact.last_name}`}
-                      >
-                        Modifier
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              ) : null}
               <Pagination
                 offset={offset}
                 count={state.value.length}
-                setOffset={setOffset}
+                setOffset={(next) => {
+                  setSaved(null)
+                  setOffset(next)
+                }}
               />
             </>
           )}
@@ -128,11 +129,7 @@ export function Contacts({ api, companyId, onSessionExpired }: Props) {
           onSessionExpired={onSessionExpired}
           onCancel={close}
           onSave={(input, signal) => api.createContact(companyId, input, signal)}
-          onSaved={() => {
-            setSaved(true)
-            setOffset(0)
-            close()
-          }}
+          onSaved={save}
         />
       ) : (
         <ContactEditor
@@ -142,10 +139,7 @@ export function Contacts({ api, companyId, onSessionExpired }: Props) {
           contactId={selection}
           onSessionExpired={onSessionExpired}
           onClose={close}
-          onSaved={() => {
-            setSaved(true)
-            close()
-          }}
+          onSaved={save}
         />
       )}
     </Panel>

@@ -28,6 +28,7 @@ export function TenantControlPlaneSheet({
     <>
       <div className="cp-detail-toolbar">
         <button onClick={onBack}>← Parc clients</button>
+        <strong>{selected.name}</strong>
         <Status tenant={selected} />
         <button onClick={onChat}>Explorer avec le chat →</button>
       </div>

@@ -3,7 +3,13 @@
 Source fonctionnelle : [backend issue #174](https://github.com/BryanGui/syncoria-backend/issues/174).
 Architecture et contrats backend : [AI_CONTROL_PLANE_V2.md](https://github.com/BryanGui/syncoria-backend/blob/feat/174-ai-control-plane/docs/AI_CONTROL_PLANE_V2.md).
 
-Après authentification admin, Syncoria ouvre le cockpit opérateur multi-clients. Navigation : vue globale, clients, alertes/actions, historique, chat opérateur et mémoire opérationnelle. Le rôle Client AI Referent est prévu dans le contrat backend ; aucun nouvel accès client n'est accordé. Le portail client existant reste accessible.
+Après authentification admin, Syncoria ouvre le cockpit opérateur multi-clients. Navigation : vue globale, clients, prospection, alertes/actions, historique, Assistant Syncoria et mémoire opérationnelle. Le rôle Client AI Referent est prévu dans le contrat backend ; aucun nouvel accès client n'est accordé. Le portail client existant reste accessible.
+
+Chaque vue principale affiche un seul titre compact en majuscules dans la topbar,
+au niveau de **Se déconnecter** (#124). Le sélecteur réel/démo reste secondaire ;
+les données synthétiques et états non évalués sont signalés en texte concis.
+**Assistant Syncoria** est uniquement un renommage de l’interface du chat existant.
+Voir [PROSPECTING.md](PROSPECTING.md) pour les tableaux et le parcours Contacts.
 
 ## Provenance
 

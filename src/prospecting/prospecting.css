@@ -1,63 +1,77 @@
 .prospecting {
   display: grid;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
 }
 .prospecting > button {
   justify-self: start;
 }
-.prospecting .cp-provenance {
+.prospecting .cp-panel {
   margin-bottom: 0;
 }
 .prospecting .cp-panel-heading {
   flex-wrap: wrap;
   gap: 12px;
 }
-.prospecting-list {
-  list-style: none;
-  padding: 0;
-  margin: 16px 0;
-}
-.prospecting-list > li {
-  border-top: 1px solid var(--cp-line);
-  padding: 12px 0;
-}
-.prospecting-company {
-  display: grid;
-  width: 100%;
-  grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 10px;
-  text-align: left;
+.prospecting-sheet-heading,
+.prospecting-sheet-views {
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
-.prospecting-company > span:last-child {
-  grid-column: 1 / -1;
-  color: var(--cp-muted);
-  font-size: 12px;
+.prospecting-sheet-heading {
+  justify-content: space-between;
 }
-.prospecting-company strong,
-.prospecting-company span,
-.prospecting-contact {
+.prospecting-sheet-heading h2 {
+  margin: 0;
   overflow-wrap: anywhere;
   min-width: 0;
 }
-.prospecting-status {
-  border-radius: 16px;
-  background: #f0f4f8;
-  padding: 4px 10px;
+.prospecting-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.prospecting-table th,
+.prospecting-table td {
+  border-bottom: 1px solid var(--cp-line);
+  padding: 10px 8px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.prospecting-table thead th {
   font-size: 12px;
+  font-weight: 500;
+  color: var(--cp-muted);
 }
-.prospecting-contact {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 12px;
+.prospecting-table th:first-child {
+  width: 22%;
 }
-.prospecting-contact h3 {
-  margin: 0;
+.prospecting-table tbody th {
+  font-weight: 600;
 }
-.prospecting-contact p {
-  margin: 6px 0;
+.prospecting-table tbody tr:hover {
+  background: var(--color-background);
+}
+.prospecting-table .prospecting-saved {
+  background: var(--color-success-soft);
+}
+.prospecting-saved:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.prospecting-cell-label {
+  display: none;
+}
+.prospecting-status {
+  display: inline-block;
+  border-radius: var(--radius-small);
+  background: var(--color-background);
+  padding: 2px 6px;
+  font-size: 12px;
 }
 .prospecting-form fieldset {
   border: 0;
@@ -93,11 +107,47 @@
   margin-top: 20px;
 }
 @media (max-width: 760px) {
-  .prospecting-form-grid,
-  .prospecting-company {
+  .prospecting-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .prospecting-contact {
-    flex-wrap: wrap;
+  .prospecting-table,
+  .prospecting-table tbody {
+    display: block;
+  }
+  .prospecting-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .prospecting-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    border-bottom: 1px solid var(--cp-line);
+    padding: 12px 0;
+    gap: 8px;
+  }
+  .prospecting-table th,
+  .prospecting-table td {
+    width: auto;
+    padding: 0 8px;
+    border: 0;
+  }
+  .prospecting-table th:first-child {
+    width: auto;
+  }
+  .prospecting-table td {
+    display: grid;
+    grid-template-columns: minmax(100px, 0.6fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+  .prospecting-cell-label {
+    display: block;
+    color: var(--cp-muted);
+    font-size: 12px;
+  }
+  .prospecting-table td > div {
+    min-width: 0;
   }
 }

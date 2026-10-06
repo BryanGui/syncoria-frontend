@@ -36,7 +36,7 @@ const navigation: [View, string, string][] = [
   ['prospecting', 'Prospection', '⌕'],
   ['actions', 'Alertes & actions', '⚑'],
   ['history', 'Historique', '↺'],
-  ['chat', 'Chat opérateur', '◇'],
+  ['chat', 'Assistant Syncoria', '◇'],
   ['memory', 'Mémoire opérationnelle', '▤'],
 ]
 
@@ -114,10 +114,7 @@ export function OperatorCockpit({
   const visibleActions = selected
     ? selectTenantActions(actions, selected.id)
     : actions
-  const title =
-    selected && view === 'clients'
-      ? selected.name
-      : navigation.find(([key]) => key === view)?.[1]
+  const title = navigation.find(([key]) => key === view)?.[1].toLocaleUpperCase('fr-FR')
   return (
     <div className="cp-shell">
       <aside className="cp-sidebar">
@@ -153,14 +150,7 @@ export function OperatorCockpit({
       </aside>
       <main className="cp-main">
         <header className="cp-topbar">
-          <span>
-            Espace opérateur /{' '}
-            {view === 'prospecting'
-              ? 'Prospection interne'
-              : selected
-                ? selected.name
-                : 'Parc clients'}
-          </span>
+          <h1>{title}</h1>
           <button
             disabled={loggingOut}
             onClick={async () => {
@@ -173,19 +163,8 @@ export function OperatorCockpit({
           </button>
         </header>
         {logoutError && <p role="alert">Déconnexion impossible. Réessayez.</p>}
-        <section className="cp-heading">
-          <div>
-            <p className="cp-eyebrow">PILOTER · COMPRENDRE · INTERVENIR</p>
-            <h1>{title}</h1>
-            <p>
-              {view === 'prospecting'
-                ? 'Vos entreprises prospectées et leurs contacts commerciaux.'
-                : selected && view === 'clients' && mode === 'live'
-                  ? 'Contexte, besoins, décisions et prochaines étapes de votre accompagnement IA.'
-                  : 'Le parc IA de vos entreprises clientes, dans un seul cockpit.'}
-            </p>
-          </div>
-          {view !== 'prospecting' && (
+        {view !== 'prospecting' && (
+          <div className="cp-view-controls">
             <div
               className="cp-mode"
               role="group"
@@ -210,23 +189,21 @@ export function OperatorCockpit({
                 Démo synthétique
               </button>
             </div>
-          )}
-        </section>
-        {view !== 'prospecting' && (
-          <div className={`cp-provenance cp-provenance--${mode}`}>
-            <strong>
-              {mode === 'demo'
-                ? 'synthetic/demo'
-                : 'Données réelles · registre Syncoria'}
-            </strong>
-            <span>
-              {mode === 'demo'
-                ? `50 entreprises fictives · scénario au ${new Date(DEMO_OBSERVED_AT).toLocaleDateString('fr-FR')} · aucune donnée provider réelle, aucune action exécutée.`
-                : selected && view === 'clients'
-                  ? 'Dossier conseil renseigné par l’opérateur. Les signaux IA non collectés restent non évalués.'
-                  : 'Identité et statut des tenants uniquement. Coûts, adoption, alertes et santé IA non évalués.'}
-            </span>
           </div>
+        )}
+        {view !== 'prospecting' && (
+          mode === 'demo' ? (
+            <p className="cp-data-note cp-data-note--demo">
+              <strong>synthetic/demo</strong> · 50 entreprises fictives · scénario au{' '}
+              {new Date(DEMO_OBSERVED_AT).toLocaleDateString('fr-FR')} · aucune action exécutée.
+            </p>
+          ) : (view === 'overview' || view === 'clients') && (
+            <p className="cp-data-note">
+              {selected
+                ? 'Dossier conseil opérateur · signaux IA non collectés : non évalués.'
+                : 'Registre Syncoria · santé IA, coûts, adoption et alertes non évalués.'}
+            </p>
+          )
         )}
         {view === 'prospecting' ? (
           <Prospecting
@@ -257,9 +234,7 @@ export function OperatorCockpit({
             {view === 'clients' && !selected && (
               <section className="cp-panel">
                 <div className="cp-panel-heading">
-                  <h2>
-                    Parc clients <small>({tenants.length})</small>
-                  </h2>
+                  <span>{tenants.length} clients</span>
                   <div className="cp-filters">
                     <label>
                       Rechercher
@@ -324,11 +299,7 @@ export function OperatorCockpit({
             )}
             {view === 'actions' && (
               <section className="cp-panel">
-                <h2>Alertes & suivi opérationnel</h2>
-                <p>
-                  Signal → alerte → action → intervention → résolution. Les
-                  exemples ci-dessous sont en lecture seule.
-                </p>
+                {mode === 'demo' && <p className="cp-data-note">Exemples en lecture seule.</p>}
                 <Actions
                   actions={actions}
                   tenants={tenants}
@@ -338,11 +309,6 @@ export function OperatorCockpit({
             )}
             {view === 'history' && (
               <section className="cp-panel">
-                <h2>Historique du parc</h2>
-                <p>
-                  Décisions, formations et interventions ·{' '}
-                  {mode === 'demo' ? 'synthetic/demo' : 'non connecté'}
-                </p>
                 {tenants.flatMap((t) =>
                   t.history.map((h, i) => (
                     <article className="cp-history" key={`${t.id}:${i}`}>

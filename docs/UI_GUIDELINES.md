@@ -44,6 +44,18 @@ Les composants se trouvent dans `src/components/ui` :
 
 ## Règles d’utilisation
 
+### Titres du cockpit
+
+Chaque vue principale du cockpit utilise un seul `h1`, compact et en majuscules
+dans la topbar, aligné avec **Se déconnecter**. Le contenu commence avec les actions
+ou les données utiles. Ne pas répéter le titre de navigation dans un panel ni
+ajouter un sous-titre générique. Les titres de sections métier restent possibles
+pour distinguer des informations utiles.
+
+Le sélecteur réel/démo reste secondaire. Les données synthétiques, états non
+évalués, erreurs et indisponibilités gardent une indication concise et visible.
+Prospection utilise uniquement ses données réelles et n’affiche pas ce sélecteur.
+
 ### Alignement et densité des actions
 
 Une zone fonctionnelle ne doit généralement exposer qu’une seule action
