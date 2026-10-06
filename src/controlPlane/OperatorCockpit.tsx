@@ -13,8 +13,16 @@ import { Actions, Status } from './presentation'
 import { TenantControlPlaneSheet } from './TenantControlPlaneSheet'
 import { OperatorChat } from './OperatorChat'
 import { FleetOverview } from './FleetOverview'
+import { Prospecting } from '../prospecting/Prospecting'
 
-type View = 'overview' | 'clients' | 'actions' | 'history' | 'chat' | 'memory'
+type View =
+  | 'prospecting'
+  | 'overview'
+  | 'clients'
+  | 'actions'
+  | 'history'
+  | 'chat'
+  | 'memory'
 interface Props {
   apiBaseUrl: string | null
   onSessionExpired: () => void
@@ -25,6 +33,7 @@ interface Props {
 const navigation: [View, string, string][] = [
   ['overview', 'Vue globale', '◫'],
   ['clients', 'Clients', '◎'],
+  ['prospecting', 'Prospection', '⌕'],
   ['actions', 'Alertes & actions', '⚑'],
   ['history', 'Historique', '↺'],
   ['chat', 'Chat opérateur', '◇'],
@@ -145,7 +154,12 @@ export function OperatorCockpit({
       <main className="cp-main">
         <header className="cp-topbar">
           <span>
-            Espace opérateur / {selected ? selected.name : 'Parc clients'}
+            Espace opérateur /{' '}
+            {view === 'prospecting'
+              ? 'Prospection interne'
+              : selected
+                ? selected.name
+                : 'Parc clients'}
           </span>
           <button
             disabled={loggingOut}
@@ -164,47 +178,63 @@ export function OperatorCockpit({
             <p className="cp-eyebrow">PILOTER · COMPRENDRE · INTERVENIR</p>
             <h1>{title}</h1>
             <p>
-              {selected && view === 'clients' && mode === 'live'
-                ? 'Contexte, besoins, décisions et prochaines étapes de votre accompagnement IA.'
-                : 'Le parc IA de vos entreprises clientes, dans un seul cockpit.'}
+              {view === 'prospecting'
+                ? 'Vos entreprises prospectées et leurs contacts commerciaux.'
+                : selected && view === 'clients' && mode === 'live'
+                  ? 'Contexte, besoins, décisions et prochaines étapes de votre accompagnement IA.'
+                  : 'Le parc IA de vos entreprises clientes, dans un seul cockpit.'}
             </p>
           </div>
-          <div className="cp-mode" role="group" aria-label="Source des données">
-            <button
-              aria-pressed={mode === 'live'}
-              onClick={() => {
-                setMode('live')
-                setSelectedId(null)
-              }}
+          {view !== 'prospecting' && (
+            <div
+              className="cp-mode"
+              role="group"
+              aria-label="Source des données"
             >
-              Registre réel
-            </button>
-            <button
-              aria-pressed={mode === 'demo'}
-              onClick={() => {
-                setMode('demo')
-                setSelectedId(null)
-              }}
-            >
-              Démo synthétique
-            </button>
-          </div>
+              <button
+                aria-pressed={mode === 'live'}
+                onClick={() => {
+                  setMode('live')
+                  setSelectedId(null)
+                }}
+              >
+                Registre réel
+              </button>
+              <button
+                aria-pressed={mode === 'demo'}
+                onClick={() => {
+                  setMode('demo')
+                  setSelectedId(null)
+                }}
+              >
+                Démo synthétique
+              </button>
+            </div>
+          )}
         </section>
-        <div className={`cp-provenance cp-provenance--${mode}`}>
-          <strong>
-            {mode === 'demo'
-              ? 'synthetic/demo'
-              : 'Données réelles · registre Syncoria'}
-          </strong>
-          <span>
-            {mode === 'demo'
-              ? `50 entreprises fictives · scénario au ${new Date(DEMO_OBSERVED_AT).toLocaleDateString('fr-FR')} · aucune donnée provider réelle, aucune action exécutée.`
-              : selected && view === 'clients'
-                ? 'Dossier conseil renseigné par l’opérateur. Les signaux IA non collectés restent non évalués.'
-                : 'Identité et statut des tenants uniquement. Coûts, adoption, alertes et santé IA non évalués.'}
-          </span>
-        </div>
-        {mode === 'live' && loading ? (
+        {view !== 'prospecting' && (
+          <div className={`cp-provenance cp-provenance--${mode}`}>
+            <strong>
+              {mode === 'demo'
+                ? 'synthetic/demo'
+                : 'Données réelles · registre Syncoria'}
+            </strong>
+            <span>
+              {mode === 'demo'
+                ? `50 entreprises fictives · scénario au ${new Date(DEMO_OBSERVED_AT).toLocaleDateString('fr-FR')} · aucune donnée provider réelle, aucune action exécutée.`
+                : selected && view === 'clients'
+                  ? 'Dossier conseil renseigné par l’opérateur. Les signaux IA non collectés restent non évalués.'
+                  : 'Identité et statut des tenants uniquement. Coûts, adoption, alertes et santé IA non évalués.'}
+            </span>
+          </div>
+        )}
+        {view === 'prospecting' ? (
+          <Prospecting
+            key={apiBaseUrl}
+            apiBaseUrl={apiBaseUrl}
+            onSessionExpired={onSessionExpired}
+          />
+        ) : mode === 'live' && loading ? (
           <p role="status" className="cp-empty">
             Chargement du registre…
           </p>
