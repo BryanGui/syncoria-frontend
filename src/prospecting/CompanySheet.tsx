@@ -6,19 +6,22 @@ import { companyFields } from './formFields'
 import { changedFields } from './model'
 import { useProspectingResource } from './state'
 import { LoadError, type ProspectingProps } from './presentation'
+import type { AdminFollowUpApi } from '../api/adminFollowUp'
+import { FollowUpWorkspace } from '../followUp/FollowUp'
 
 export function CompanySheet({
   api,
   companyId,
   onSessionExpired,
-}: ProspectingProps & { companyId: string }) {
+  followUpApi,
+}: ProspectingProps & { companyId: string; followUpApi: AdminFollowUpApi }) {
   const load = useCallback(
     (signal: AbortSignal) => api.getCompany(companyId, signal),
     [api, companyId],
   )
   const { state, reload, setValue } = useProspectingResource(load, onSessionExpired)
   const [saved, setSaved] = useState(false)
-  const [view, setView] = useState<'contacts' | 'information'>('contacts')
+  const [view, setView] = useState<'contacts' | 'information' | 'follow-up'>('contacts')
   if (state.status === 'loading')
     return <p role="status">Chargement de l’entreprise…</p>
   if (state.status !== 'loaded')
@@ -35,8 +38,19 @@ export function CompanySheet({
           <Button variant={view === 'information' ? 'secondary' : 'ghost'} aria-pressed={view === 'information'} onClick={() => setView('information')}>
             Informations générales
           </Button>
+          <Button variant={view === 'follow-up' ? 'secondary' : 'ghost'} aria-pressed={view === 'follow-up'} onClick={() => setView('follow-up')}>
+            Suivi
+          </Button>
         </div>
       </div>
+      {view === 'follow-up' && (
+        <FollowUpWorkspace
+          api={followUpApi}
+          prospectingApi={api}
+          company={company}
+          onSessionExpired={onSessionExpired}
+        />
+      )}
       <div hidden={view !== 'contacts'}>
         <Contacts api={api} companyId={company.id} onSessionExpired={onSessionExpired} onSaved={() => setView('contacts')} />
       </div>

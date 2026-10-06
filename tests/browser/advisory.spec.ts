@@ -149,7 +149,8 @@ test('advisory overview explains the client and keeps estate secondary; launcher
   await expect(
     page.getByRole('heading', { name: 'Parc IA du tenant' }),
   ).toHaveCount(0)
-  await page.getByRole('button', { name: 'Suivi', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Dossier conseil' })
+    .getByRole('button', { name: 'Suivi', exact: true }).click()
   await expect(
     page.getByRole('heading', { name: 'Historique du conseil' }),
   ).toBeVisible()
@@ -306,7 +307,8 @@ test.describe('isolated advisory editors', () => {
   for (const scenario of editorScenarios) {
     test(`${scenario.resource}: creation saves the entered fields and reloads the dossier`, async ({ page }) => {
       const state = await connect(page)
-      await page.getByRole('button', { name: scenario.tab, exact: true }).click()
+      await page.getByRole('navigation', { name: 'Dossier conseil' })
+        .getByRole('button', { name: scenario.tab, exact: true }).click()
       await page.getByRole('button', { name: `Ajouter · ${scenario.label}`, exact: true }).click()
       const editor = page.getByRole('region', { name: `Créer · ${scenario.label}`, exact: true })
       await editor.getByLabel('Titre', { exact: true }).fill(scenario.title)
@@ -332,7 +334,8 @@ test.describe('isolated advisory editors', () => {
         event.resource === scenario.resource ? { ...event, title: scenario.title } : event,
       )
       const state = await connect(page, payload)
-      await page.getByRole('button', { name: scenario.tab, exact: true }).click()
+      await page.getByRole('navigation', { name: 'Dossier conseil' })
+        .getByRole('button', { name: scenario.tab, exact: true }).click()
       await page.getByRole('button', { name: `Modifier · ${scenario.title}`, exact: true }).click()
       const editor = page.getByRole('region', { name: `Modifier · ${scenario.label}`, exact: true })
       await expect(editor.getByLabel(scenario.descriptionLabel, { exact: true })).toHaveValue(scenario.description)
