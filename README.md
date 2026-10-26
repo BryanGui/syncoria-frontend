@@ -7,25 +7,101 @@ La session admin ouvre le nouveau AI Control Plane multi-clients. [Guide et prov
 [Suivi commercial](docs/FOLLOW_UP.md) expose les actions FollowUp dans le cockpit et les fiches entreprises, avec filtres, recherche et échéances en Europe/Paris.
 
 
-## Configuration de l'API
+## Configuration des services à l'exécution
 
-Le dashboard lit l'URL de base de FastAPI depuis la variable Vite
-`VITE_API_BASE_URL`. Cette variable est intégrée au bundle au moment du build :
+Les URLs publiques des services sont regroupées dans
+[`public/runtime-config.json`](public/runtime-config.json). La configuration
+actuelle conserve le domaine FastAPI existant :
 
-```text
-VITE_API_BASE_URL=https://api.example.com
+```json
+{
+  "apiBaseUrl": "https://api.bryanlab.ovh"
+}
 ```
 
-Copier `.env.example` vers un fichier d'environnement Vite adapté au contexte
-local ou fournir la variable lors du build. Si elle est absente, les cartes
-Backend et Base de données affichent un état indisponible sans interrompre le
-rendu du dashboard.
+Vite sert ce fichier en développement et le copie tel quel à la racine du build
+(`dist/runtime-config.json`). Il n'est pas incorporé aux fichiers JavaScript.
+`src/main.tsx` le charge avant de monter l'application, avec `cache: 'no-store'`
+et un délai maximal de 10 secondes. Son chemin respecte la base de l'application
+Vite, y compris pour une installation sous un sous-chemin.
+`src/config/runtimeConfig.ts` valide et normalise les valeurs ;
+`RuntimeConfigProvider` partage ensuite une configuration immuable avec React.
+Il n'y a aucun repli vers une URL intégrée au bundle.
 
-Le build Docker accepte la même valeur comme argument de build :
+`apiBaseUrl` est obligatoire : URL HTTP(S) absolue, éventuellement avec un
+préfixe de chemin. Les espaces autour et les slashs finaux sont supprimés ;
+les identifiants dans l'URL, paramètres et fragments sont refusés. Si le fichier
+est absent, inaccessible ou invalide, un message et un bouton `Réessayer`
+s'affichent. Aucun appel API n'est lancé tant que la configuration n'est pas
+valide. Le fichier est public : n'y placer aucun secret, mot de passe ou token.
 
-```text
-docker build --build-arg VITE_API_BASE_URL=https://api.example.com .
-```
+### Inventaire des usages
+
+L'ancienne lecture unique de `VITE_API_BASE_URL` dans `src/App.tsx` alimentait
+déjà les pages et clients API par la prop `apiBaseUrl`. Désormais, le même flux
+utilise la configuration d'exécution pour :
+
+- les sessions administrateur (`/admin/session`) et client (`/auth/session`, `/me`) ;
+- les statuts `/health` et `/health/db` ;
+- le registre clients, les tenants, sources/providers, accès, audits et PDF,
+  intégrations/DDL/modèles et ingestions via les modules de `src/api/` ;
+- le cockpit opérateur, la prospection, le suivi commercial, le conseil et
+  les assistants/chat, y compris les paramètres de l'agent.
+
+Les modules consommateurs dans `src/api/` sont :
+
+| Usage | Fichiers |
+| --- | --- |
+| Sessions et santé | `adminSession.ts`, `clientSession.ts`, `health.ts` |
+| Clients et sources | `adminTenants.ts`, `adminTenant.ts`, `adminTenantProviders.ts` |
+| Accès, audits et rapports/PDF | `adminTenantAccess.ts`, `adminTenantAudits.ts`, `adminTenantReports.ts` |
+| Intégration et ingestion | `adminIntegrations.ts`, `adminTenantIngestions.ts` |
+| Cockpit et conseil | `controlPlaneEstate.ts`, `advisory.ts` |
+| Prospection et suivi commercial | `adminProspecting.ts`, `adminFollowUp.ts` |
+| Chat et assistant interne | `operatorChat.ts`, `internalAssistant.ts` |
+
+`App.tsx` lit la configuration pour les sessions, les connexions, la santé et le
+dashboard legacy, puis conserve sa transmission aux pages `ClientsPage` et
+`AdminTenantWorkspacePage`, aux composants `AdminTenant*`, au cockpit
+`OperatorCockpit` et à ses vues `RealTenantEstate`, `RealTenantAdvisory`,
+`RealOperatorChat`/`OperatorChat`, à `Prospecting` et à `AgentSettings`.
+
+Les URLs n8n des providers sont des données tenant retournées ou enregistrées
+via FastAPI, pas des adresses appelées directement par le navigateur.
+Les liens de connexion des accès techniques (`login_url` dans
+`AdvisoryCollection.tsx`, validés dans `src/api/advisory.ts`) sont également des
+données propres au tenant : ils ouvrent le service concerné dans un nouvel
+onglet et restent gérés par le dossier backend. Ils ne constituent pas une
+configuration globale du frontend. Les liens du dossier
+`src/assets/providers/SOURCES.md` documentent les assets locaux.
+Les profils LinkedIn affichés par `ProspectingTables.tsx` sont des liens métier
+retournés par l'API pour chaque contact ; leur domaine n'est pas configuré globalement.
+Superset reste un placeholder sans URL de service. Il n'y a donc actuellement
+qu'une URL globale à configurer. Pour ajouter un service appelé par le frontend,
+ajouter sa clé et sa validation dans `RuntimeConfig`, puis utiliser le provider.
+
+### Changer une URL en production sans recompiler
+
+Après livraison de cette version, modifier uniquement la valeur `apiBaseUrl`
+dans **`runtime-config.json` à la racine des fichiers statiques réellement
+servis** (dans le montage VPS actuel :
+`/mnt/syncoria-data/syncoria-frontend-shared/dist/runtime-config.json`). Remplacer
+le fichier de façon atomique par un JSON valide pour éviter une lecture partielle.
+Recharger ensuite la page : la nouvelle configuration est relue sans utiliser
+le cache navigateur, avant tout appel API. Un onglet déjà ouvert conserve sa
+configuration jusqu'au rechargement. Aucun rebuild ni redémarrage du serveur
+statique n'est nécessaire. Vérifier dans l'onglet Réseau du navigateur la réponse
+`runtime-config.json`, puis la destination des appels API. Si un cache intermédiaire
+force la conservation de ce fichier, le purger également.
+
+En développement, modifier `public/runtime-config.json`, puis recharger la page.
+Conserver la configuration de chaque environnement dans la procédure de livraison :
+un nouveau build recopie la valeur du fichier `public/` et peut écraser une
+personnalisation faite dans `dist/`. Les anciennes valeurs `VITE_API_BASE_URL`
+des fichiers `.env*` ou de l'argument Docker ne configurent plus cette URL ;
+l'argument reste présent dans le Dockerfile existant, sans effet. Aucun changement de Docker,
+Nginx, Caddy, DNS ou backend n'est requis par cette implémentation. Les règles
+de session, de cookies et de CORS restent celles du backend.
 
 ## Session administrateur
 
@@ -171,7 +247,7 @@ Validation :
 npm ci
 npm test
 npm run lint
-VITE_API_BASE_URL=https://api.bryanlab.ovh npm run build
+npm run build
 npx playwright install chromium
 npm run test:browser
 git diff --check

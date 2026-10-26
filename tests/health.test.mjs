@@ -4,7 +4,6 @@ import test from 'node:test'
 import {
   fetchHealthStatus,
   INITIAL_HEALTH_STATUS,
-  normalizeApiBaseUrl,
 } from '../src/api/health.ts'
 
 
@@ -34,15 +33,6 @@ function createLoggerSpy() {
 
 test('starts health cards in loading state', () => {
   assert.equal(INITIAL_HEALTH_STATUS, 'loading')
-})
-
-test('normalizes the configured API base URL', () => {
-  assert.equal(
-    normalizeApiBaseUrl(' https://api.example.com/// '),
-    'https://api.example.com',
-  )
-  assert.equal(normalizeApiBaseUrl(undefined), null)
-  assert.equal(normalizeApiBaseUrl('  '), null)
 })
 
 test('returns operational for a successful health response', async () => {

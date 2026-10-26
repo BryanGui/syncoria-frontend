@@ -6,7 +6,6 @@ import { join } from 'node:path'
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const testEnvironment = {
   ...process.env,
-  VITE_API_BASE_URL: 'https://api.bryanlab.ovh',
   VITE_UI_INTERACTION_TEST: 'true',
 }
 const outputDir = mkdtempSync(join(tmpdir(), 'syncoria-browser-'))

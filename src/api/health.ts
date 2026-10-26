@@ -12,11 +12,6 @@ interface HealthResponse {
   status: string
 }
 
-export function normalizeApiBaseUrl(configuredUrl: string | undefined): string | null {
-  const apiBaseUrl = configuredUrl?.trim().replace(/\/+$/, '')
-  return apiBaseUrl || null
-}
-
 function isHealthResponse(value: unknown): value is HealthResponse {
   return (
     typeof value === 'object'

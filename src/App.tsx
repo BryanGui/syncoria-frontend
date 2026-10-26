@@ -22,7 +22,6 @@ import {
 import {
   fetchHealthStatus,
   INITIAL_HEALTH_STATUS,
-  normalizeApiBaseUrl,
   type HealthEndpoint,
   type HealthStatus,
 } from './api/health'
@@ -43,8 +42,8 @@ import { ClientWorkspacePage } from './pages/ClientWorkspacePage'
 import { ClientsPage } from './pages/ClientsPage'
 import { LandingPage } from './pages/LandingPage'
 import { ActionMenuTestHarness } from './components/ui/ActionMenuTestHarness'
+import { useRuntimeConfig } from './config/runtimeConfigContext'
 
-const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 const isUiInteractionTest = import.meta.env.VITE_UI_INTERACTION_TEST === 'true'
 
 type IconName = DashboardNavigationIcon
@@ -191,6 +190,7 @@ interface HealthStatusCardProps {
 }
 
 function useHealthStatus(endpoint: HealthEndpoint): HealthStatus {
+  const { apiBaseUrl } = useRuntimeConfig()
   const [healthStatus, setHealthStatus] = useState<HealthStatus>(
     INITIAL_HEALTH_STATUS,
   )
@@ -212,7 +212,7 @@ function useHealthStatus(endpoint: HealthEndpoint): HealthStatus {
       isActive = false
       abortController.abort()
     }
-  }, [endpoint])
+  }, [apiBaseUrl, endpoint])
 
   return healthStatus
 }
@@ -330,6 +330,7 @@ function AdminLoginPage({
   onRetrySession,
   onSelectMode,
 }: LoginPageProps) {
+  const { apiBaseUrl } = useRuntimeConfig()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -431,6 +432,7 @@ function ClientLoginPage({
   onRetrySession,
   onSelectMode,
 }: LoginPageProps) {
+  const { apiBaseUrl } = useRuntimeConfig()
   const [tenant, setTenant] = useState('')
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -546,6 +548,7 @@ interface DashboardProps {
 }
 
 function Dashboard({ onLogout, onSessionExpired, onShowPublic, onReturnCockpit }: DashboardProps) {
+  const { apiBaseUrl } = useRuntimeConfig()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
   const [tenantSidebarTarget, setTenantSidebarTarget] = useState<HTMLDivElement | null>(null)
@@ -771,6 +774,7 @@ type ApplicationSessionState =
 
 
 function App() {
+  const { apiBaseUrl } = useRuntimeConfig()
   const [sessionState, setSessionState] = useState<ApplicationSessionState>({
     status: 'loading',
   })
