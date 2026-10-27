@@ -96,3 +96,16 @@ Les tests et fixtures faisant partie du code versionné restent dans le dépôt 
 Avant toute création, vérifier qu'un chemin n'est pas déjà utilisé. En fin d'intervention, conserver les rapports utiles et nettoyer uniquement les fichiers temporaires créés pour la tâche, après vérification qu'ils ne servent plus. Ne jamais supprimer ni écraser du travail local, un worktree non intégré ou des fichiers d'une autre tâche. Manipuler les worktrees avec `git worktree` plutôt qu'avec une suppression ou un déplacement manuel. Les anciens emplacements ne doivent pas être migrés ou supprimés automatiquement.
 
 Cette organisation ne donne aucune autorisation supplémentaire de modifier, redémarrer ou déployer les services de production.
+
+## 10. Isolation des tests Docker de Codex
+
+Le moteur Docker de `scw-apps-01` héberge les services partagés. Il **n'est pas** un bac à sable de développement. Un conteneur isolé ne garantit pas un moteur Docker indépendant ; en particulier, l'accès au socket Docker du VPS donne accès à son moteur et à ses ressources.
+
+- **Par défaut, ne pas exécuter** de `docker build`, `docker compose build`, création d'images taguées `ticket-*` / `*-test`, ni lancement de conteneurs de tests sur le moteur Docker du VPS.
+- Pour les tests nécessitant Docker, utiliser un runner CI, une VM ou un sandbox **réellement séparé**, doté de son propre moteur Docker. Ne pas y monter le socket Docker du VPS.
+- Si aucun environnement isolé n'est disponible, exécuter les tests ne nécessitant pas Docker et signaler le blocage ; **ne pas** utiliser le moteur Docker de production en solution de repli.
+- Une validation nécessitant une construction d'image ou un conteneur sur le VPS demande une autorisation explicite préalable, même si le workflow habituel prévoit une validation du ticket. Les opérations de déploiement expressément autorisées restent possibles et doivent viser uniquement les services concernés.
+- Ne jamais lancer `docker system prune`, `docker image prune -a` ou une suppression globale sur le moteur partagé. Ne jamais supprimer d'image ni de conteneur non créé pour la tâche ; tout nettoyage sur le moteur du VPS requiert une vérification des usages et une autorisation explicite.
+- Les tests Python/Node ne nécessitant pas Docker utilisent les espaces temporaires dédiés décrits dans la section précédente.
+
+Ces règles ne créent pas de sandbox : elles définissent la politique à appliquer tant qu'un environnement de test isolé n'a pas été configuré.
