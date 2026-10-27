@@ -80,3 +80,19 @@ Codex ne doit interrompre le cycle normal que si :
 - des secrets ou permissions sont nécessaires ;
 - une modification Caddy/DNS/PostgreSQL non prévue est requise ;
 - la demande entre en conflit avec ces règles.
+
+## 9. Organisation des espaces de travail Codex sur le VPS
+
+Sur le VPS `scw-apps-01`, la racine `/mnt/syncoria-data` est réservée aux services et aux données persistantes. Ne jamais y créer directement de worktree, clone, environnement virtuel, cache, dossier de test ou de validation.
+
+Pour toute **nouvelle** intervention, isoler les ressources par dépôt (`syncoria-backend` ou `syncoria-frontend`) et par ticket ou sujet :
+
+- Worktrees Git : `/mnt/syncoria-data/worktrees/codex/<depot>/<ticket>/`
+- Temporaires, caches et environnements de test éphémères : `/mnt/syncoria-data/tmp/codex/<depot>/<ticket>/`
+- Rapports, captures et autres résultats de validation à conserver : `/mnt/syncoria-data/artifacts/codex/<depot>/<ticket>/`
+
+Les tests et fixtures faisant partie du code versionné restent dans le dépôt correspondant. Ne pas déplacer les sources ni les services de production pour respecter cette organisation.
+
+Avant toute création, vérifier qu'un chemin n'est pas déjà utilisé. En fin d'intervention, conserver les rapports utiles et nettoyer uniquement les fichiers temporaires créés pour la tâche, après vérification qu'ils ne servent plus. Ne jamais supprimer ni écraser du travail local, un worktree non intégré ou des fichiers d'une autre tâche. Manipuler les worktrees avec `git worktree` plutôt qu'avec une suppression ou un déplacement manuel. Les anciens emplacements ne doivent pas être migrés ou supprimés automatiquement.
+
+Cette organisation ne donne aucune autorisation supplémentaire de modifier, redémarrer ou déployer les services de production.
